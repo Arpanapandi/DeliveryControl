@@ -1,0 +1,191 @@
+@model DeliveryControl.Models.StockDashboardViewModel
+@{
+    ViewData["Title"] = "RVI Dashboard";
+}
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="mb-1"><i class="bi bi-cpu text-primary"></i> Stock Dashboard - RVI</h2>
+                <p class="text-muted">Monitoring stock flows for RVI Plant: Pooling -> Storage -> Delivery</p>
+            </div>
+            <div class="text-end">
+                <div class="d-flex gap-2">
+                    <a asp-controller="Pooling" asp-action="Index" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-plus-circle me-1"></i> New Pooling
+                    </a>
+                    <a asp-controller="PreparationWorkflow" asp-action="Index" class="btn btn-primary btn-sm">
+                        <i class="bi bi-truck me-1"></i> New Preparation
+                    </a>
+                </div>
+            </div>
+        </div>
+        <hr />
+    </div>
+</div>
+
+<div id="dashboardContent">
+    <div class="row">
+        <!-- Summary Cards -->
+        <div class="col-md-3 mb-4">
+            <div class="cyber-card p-3 text-center border-primary">
+                <small class="text-muted d-block text-uppercase">Net Stock Today</small>
+                <h2 class="fw-bold mb-0 text-primary">@Model.NetStock</h2>
+                <small class="text-white-50">In storage</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="cyber-card p-3 text-center">
+                <small class="text-muted d-block text-uppercase">Total Pooling</small>
+                <h2 class="fw-bold mb-0 text-success">@Model.TotalPoolingToday</h2>
+                <small class="text-white-50">Today's Entry</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="cyber-card p-3 text-center">
+                <small class="text-muted d-block text-uppercase">Total Prepared</small>
+                <h2 class="fw-bold mb-0 text-warning">@Model.TotalPreparationToday</h2>
+                <small class="text-white-50">Today's Pickups</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="cyber-card p-3 text-center">
+                <div class="status-indicator-live active"></div>
+                <small class="text-muted d-block text-uppercase">Real-Time Sync</small>
+                <h2 class="fw-bold mb-0 text-info fs-4">ACTIVE</h2>
+                <small class="text-white-50">Connected to StockHub</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Recent Pooling -->
+        <div class="col-md-6 mb-4">
+            <div class="cyber-card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-success"><i class="bi bi-box-arrow-in-down me-2"></i> Recent Pooling</span>
+                    <span class="badge bg-success bg-opacity-10 text-success">Incoming</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Location</th>
+                                <th>Tag/Label</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var record in Model.RecentPooling)
+                            {
+                                <tr>
+                                    <td>@record.CreatedDate.ToString("HH:mm")</td>
+                                    <td><span class="badge bg-dark border border-primary">@record.Rack-@record.Column</span></td>
+                                    <td>
+                                        <div class="small">@record.Tag</div>
+                                        <div class="text-muted smaller">@record.Label</div>
+                                    </td>
+                                </tr>
+                            }
+                            @if (!Model.RecentPooling.Any())
+                            {
+                                <tr><td colspan="3" class="text-center py-4 text-muted small">No recent pooling entries.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Preparation -->
+        <div class="col-md-6 mb-4">
+            <div class="cyber-card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-warning"><i class="bi bi-truck me-2"></i> Recent Preparation</span>
+                    <span class="badge bg-warning bg-opacity-10 text-warning">Outgoing</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Tag/Kanban</th>
+                                <th>Operator</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var record in Model.RecentPreparation)
+                            {
+                                <tr>
+                                    <td>@record.CreatedDate.ToString("HH:mm")</td>
+                                    <td>
+                                        <div class="small">@record.Tag</div>
+                                        <div class="text-muted smaller">@record.Kanban</div>
+                                    </td>
+                                    <td>@record.CreatedBy</td>
+                                </tr>
+                            }
+                            @if (!Model.RecentPreparation.Any())
+                            {
+                                <tr><td colspan="3" class="text-center py-4 text-muted small">No recent preparations.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/stockHub")
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on("UpdateStock", function () {
+                refreshDashboard();
+            });
+
+            connection.start().catch(err => console.error(err.toString()));
+
+            function refreshDashboard() {
+                $.ajax({
+                    url: window.location.href,
+                    type: 'GET',
+                    success: function (html) {
+                        const newContent = $(html).find('#dashboardContent').html();
+                        $('#dashboardContent').fadeOut(200, function() {
+                            $(this).html(newContent).fadeIn(200);
+                        });
+                    }
+                });
+            }
+        });
+    </script>
+}
+
+<style>
+    .smaller { font-size: 0.75rem; }
+    .status-indicator-live {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #94a3b8;
+        display: inline-block;
+        margin-bottom: 5px;
+    }
+    .status-indicator-live.active {
+        background: #10b981;
+        box-shadow: 0 0 10px #10b981;
+        animation: pulse-live 2s infinite;
+    }
+    @@keyframes pulse-live {
+        0% { opacity: 1; }
+        50% { opacity: 0.4; }
+        100% { opacity: 1; }
+    }
+</style>

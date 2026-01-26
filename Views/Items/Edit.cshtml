@@ -1,0 +1,130 @@
+@model DeliveryControl.Models.Item
+
+@{
+    ViewData["Title"] = "Edit Item";
+}
+
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="bi bi-pencil-square"></i> Edit Item</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a asp-action="Index">Item</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Edit</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Form Edit Item</h5>
+            </div>
+            <div class="card-body">
+                <form asp-action="Edit" method="post">
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+                    
+                    <input type="hidden" asp-for="ItemId" />
+                    <input type="hidden" asp-for="CreatedDate" />
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label asp-for="ItemCode" class="form-label"></label>
+                            <input asp-for="ItemCode" class="form-control" />
+                            <span asp-validation-for="ItemCode" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="ItemName" class="form-label"></label>
+                            <input asp-for="ItemName" class="form-control" />
+                            <span asp-validation-for="ItemName" class="text-danger"></span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Description" class="form-label"></label>
+                        <textarea asp-for="Description" class="form-control" rows="3"></textarea>
+                        <span asp-validation-for="Description" class="text-danger"></span>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label asp-for="Unit" class="form-label"></label>
+                            <input asp-for="Unit" class="form-control" />
+                            <span asp-validation-for="Unit" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="Category" class="form-label"></label>
+                            <input asp-for="Category" class="form-control" />
+                            <span asp-validation-for="Category" class="text-danger"></span>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label asp-for="Weight" class="form-label"></label>
+                            <div class="input-group">
+                                <input asp-for="Weight" class="form-control" type="number" step="0.01" />
+                                <span class="input-group-text">KG</span>
+                            </div>
+                            <span asp-validation-for="Weight" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="Volume" class="form-label"></label>
+                            <div class="input-group">
+                                <input asp-for="Volume" class="form-control" type="number" step="0.01" />
+                                <span class="input-group-text">M³</span>
+                            </div>
+                            <span asp-validation-for="Volume" class="text-danger"></span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input asp-for="IsActive" class="form-check-input" type="checkbox" />
+                            <label asp-for="IsActive" class="form-check-label">
+                                Status Aktif
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 justify-content-end mt-4">
+                        <a asp-action="Index" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Batal
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Update
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-clock-history"></i> Informasi</h6>
+            </div>
+            <div class="card-body">
+                <p class="small">
+                    <strong>Dibuat:</strong><br />
+                    @Model.CreatedDate.ToString("dd MMM yyyy HH:mm")
+                </p>
+                @if (Model.UpdatedDate.HasValue)
+                {
+                    <p class="small">
+                        <strong>Terakhir Diupdate:</strong><br />
+                        @Model.UpdatedDate.Value.ToString("dd MMM yyyy HH:mm")
+                    </p>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}
+

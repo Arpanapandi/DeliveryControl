@@ -1,0 +1,166 @@
+@model IEnumerable<DeliveryControl.Models.Item>
+
+@{
+    ViewData["Title"] = "Master Item";
+}
+
+<div class="row mb-3">
+    <div class="col-md-6">
+        <h2><i class="bi bi-box"></i> Master Item</h2>
+    </div>
+    <div class="col-md-6 text-end">
+        <a asp-action="DownloadTemplate" class="btn btn-success me-2">
+            <i class="bi bi-download"></i> Template Excel
+        </a>
+        <button type="button" class="btn btn-info me-2" data-bs-toggle="modal" data-bs-target="#importModal">
+            <i class="bi bi-upload"></i> Import Excel
+        </button>
+        <a asp-action="Create" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Tambah Item
+        </a>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <form asp-action="Index" method="get" class="row g-3">
+            <div class="col-md-5">
+                <input type="text" class="form-control" name="searchString" value="@ViewData["CurrentFilter"]" 
+                       placeholder="Cari kode atau nama item..." />
+            </div>
+            <div class="col-md-5">
+                <select class="form-select" name="category">
+                    <option value="">-- Semua Kategori --</option>
+                    @foreach (var cat in (IEnumerable<string>)ViewData["Categories"]!)
+                    {
+                        <option value="@cat" selected="@(cat == ViewData["CurrentCategory"]?.ToString())">@cat</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i> Cari
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        @if (Model.Any())
+        {
+            <div class="master-table-wrapper">
+                <table class="table table-hover mb-0" id="itemsTable">
+                    <thead>
+                        <tr>
+                            <th>Kode</th>
+                            <th>Nama</th>
+                            <th>Deskripsi</th>
+                            <th>Unit</th>
+                            <th>Kategori</th>
+                            <th>Berat (KG)</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            <tr>
+                                <td>@item.ItemCode</td>
+                                <td>@item.ItemName</td>
+                                <td>@(item.Description ?? "-")</td>
+                                <td>@(item.Unit ?? "-")</td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(item.Category))
+                                    {
+                                        <span class="badge bg-info">@item.Category</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>@(item.Weight?.ToString("N2") ?? "-")</td>
+                                <td>
+                                    @if (item.IsActive)
+                                    {
+                                        <span class="badge bg-success">Aktif</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">Tidak Aktif</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a asp-action="Details" asp-route-id="@item.ItemId" class="btn btn-sm btn-info" title="Detail">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        <a asp-action="Edit" asp-route-id="@item.ItemId" class="btn btn-sm btn-warning" title="Edit">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <a asp-action="Delete" asp-route-id="@item.ItemId" class="btn btn-sm btn-danger" title="Hapus">
+                                            <i class="bi bi-trash"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> Tidak ada data item yang ditemukan.
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Modal Import Excel -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="ImportExcel" method="post" enctype="multipart/form-data">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="importModalLabel">
+                        <i class="bi bi-upload"></i> Import Data Item dari Excel
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        <strong>Panduan Import:</strong>
+                        <ol class="mb-0 mt-2">
+                            <li>Download template Excel terlebih dahulu</li>
+                            <li>Isi data sesuai format template</li>
+                            <li>Kode Item harus unique (tidak boleh sama)</li>
+                            <li>Nama Item wajib diisi</li>
+                            <li>Gunakan titik (.) untuk angka desimal</li>
+                            <li>Upload file yang sudah diisi</li>
+                        </ol>
+                    </div>
+                    <div class="mb-3">
+                        <label for="file" class="form-label">Pilih File Excel</label>
+                        <input type="file" class="form-control" id="file" name="file" accept=".xlsx,.xls" required>
+                        <div class="form-text">Format file: .xlsx atau .xls</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle"></i> Batal
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-upload"></i> Upload & Import
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+

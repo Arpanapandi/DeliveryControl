@@ -1,0 +1,192 @@
+@model DeliveryControl.Models.DeliverySchedule
+
+@{
+    ViewData["Title"] = "Edit Schedule";
+}
+
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="bi bi-pencil-square"></i> Edit Delivery Schedule</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a asp-action="Index">Delivery Schedule</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Edit</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Form Edit Schedule</h5>
+            </div>
+            <div class="card-body">
+                <form asp-action="Edit" method="post">
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+                    
+                    <input type="hidden" asp-for="ScheduleId" />
+                    <input type="hidden" asp-for="CreatedDate" />
+                    <input type="hidden" asp-for="CreatedBy" />
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label asp-for="ScheduleNumber" class="form-label"></label>
+                            <input asp-for="ScheduleNumber" class="form-control" />
+                            <span asp-validation-for="ScheduleNumber" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="ScheduledDate" class="form-label"></label>
+                            <input asp-for="ScheduledDate" class="form-control" type="date" />
+                            <span asp-validation-for="ScheduledDate" class="text-danger"></span>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label asp-for="CustomerId" class="form-label">Customer</label>
+                            <select asp-for="CustomerId" class="form-select" asp-items="ViewBag.CustomerId">
+                                <option value="">-- Pilih Customer --</option>
+                            </select>
+                            <span asp-validation-for="CustomerId" class="text-danger"></span>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label asp-for="Route" class="form-label"></label>
+                            <input asp-for="Route" class="form-control" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="Cycle" class="form-label"></label>
+                            <input asp-for="Cycle" class="form-control" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="SKID" class="form-label"></label>
+                            <input asp-for="SKID" class="form-control" type="number" />
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label asp-for="EnterDockTime" class="form-label"></label>
+                            <input asp-for="EnterDockTime" class="form-control" type="datetime-local" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="PickupTime" class="form-label"></label>
+                            <input asp-for="PickupTime" class="form-control" type="datetime-local" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="ETD" class="form-label"></label>
+                            <input asp-for="ETD" class="form-control" type="datetime-local" />
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label asp-for="ActualEnterDockTime" class="form-label"></label>
+                            <input asp-for="ActualEnterDockTime" class="form-control" type="datetime-local" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="ActualStartTime" class="form-label"></label>
+                            <input asp-for="ActualStartTime" class="form-control" type="datetime-local" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="ActualEndTime" class="form-label"></label>
+                            <input asp-for="ActualEndTime" class="form-control" type="datetime-local" />
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label asp-for="Status" class="form-label"></label>
+                            <select asp-for="Status" class="form-select">
+                                <option value="Scheduled">Scheduled</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Cancelled">Cancelled</option>
+                                <option value="Delayed">Delayed</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="Range" class="form-label"></label>
+                            <input asp-for="Range" class="form-control" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Area" class="form-label"></label>
+                        <input asp-for="Area" class="form-control" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Notes" class="form-label"></label>
+                        <textarea asp-for="Notes" class="form-control" rows="3"></textarea>
+                    </div>
+
+                    <div class="d-flex gap-2 justify-content-end mt-4">
+                        <a asp-action="Index" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Batal
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Update
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-clock-history"></i> Informasi</h6>
+            </div>
+            <div class="card-body">
+                <p class="small">
+                    <strong>Dibuat:</strong><br />
+                    @Model.CreatedDate.ToString("dd MMM yyyy HH:mm")<br />
+                    <span class="text-muted">oleh @(Model.CreatedBy ?? "System")</span>
+                </p>
+                @if (Model.UpdatedDate.HasValue)
+                {
+                    <p class="small">
+                        <strong>Terakhir Diupdate:</strong><br />
+                        @Model.UpdatedDate.Value.ToString("dd MMM yyyy HH:mm")<br />
+                        <span class="text-muted">oleh @(Model.UpdatedBy ?? "System")</span>
+                    </p>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        // Dynamic Dock loading based on Customer
+    </script>
+    <style>
+        /* Pastikan semua form control memiliki styling dark mode */
+        .form-control, .form-select {
+            background: rgba(30, 41, 59, 0.6) !important;
+            border: 1px solid var(--border-color) !important;
+            color: var(--text-primary) !important;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            background: rgba(30, 41, 59, 0.8) !important;
+            border-color: var(--primary-blue) !important;
+            color: var(--text-primary) !important;
+        }
+        
+        .form-control[type="date"],
+        .form-control[type="datetime-local"],
+        .form-control[type="time"] {
+            background: rgba(30, 41, 59, 0.6) !important;
+            color: var(--text-primary) !important;
+        }
+    </style>
+}
+

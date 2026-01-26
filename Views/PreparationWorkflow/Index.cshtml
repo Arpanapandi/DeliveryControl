@@ -1,0 +1,342 @@
+@{
+    ViewData["Title"] = "Preparation Gallery Checking";
+}
+
+<div class="row mb-4">
+    <div class="col-12 text-center">
+        <h2 class="mb-1"><i class="bi bi-truck text-primary"></i> Preparation Delivery Checking</h2>
+        <p class="text-muted">Pengecekan barang di rak Finish Good sebelum dikirim ke Customer.</p>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <!-- Single Full-Width Card -->
+    <div class="col-12">
+        <div class="cyber-card p-4">
+            <h5 class="mb-4 fw-bold border-bottom pb-2"><i class="bi bi-shield-check me-2"></i> Form Input Preparation</h5>
+            
+            <div class="mx-auto" style="max-width: 800px;">
+                <!-- 1. Pilih Plant -->
+                <div class="mb-4">
+                    <label class="form-label d-block fw-bold text-primary"><i class="bi bi-building me-2"></i> 1. Pilih Plant</label>
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="plant" id="plantMolded" value="Molded" checked>
+                        <label class="btn btn-outline-primary py-3" for="plantMolded">MOLDED</label>
+
+                        <input type="radio" class="btn-check" name="plant" id="plantHose" value="Hose">
+                        <label class="btn btn-outline-primary py-3" for="plantHose">HOSE</label>
+
+                        <input type="radio" class="btn-check" name="plant" id="plantRVI" value="RVI">
+                        <label class="btn btn-outline-primary py-3" for="plantRVI">RVI</label>
+                    </div>
+                </div>
+
+                <hr class="border-secondary opacity-25 my-4">
+
+                <!-- 2. Identifikasi Produk (Tag, Label, Kanban) -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold text-primary mb-3"><i class="bi bi-qr-code-scan me-2"></i> 2. Identifikasi Produk</label>
+                    
+                    <!-- Tag Input Group -->
+                    <div class="mb-4">
+                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input Tag <span class="text-danger">*</span></label>
+                        <div class="custom-cyber-input-group">
+                            <div class="input-icon-left">
+                                <i class="bi bi-pencil"></i>
+                            </div>
+                            <input type="text" class="form-control cyber-field" id="tagInput" placeholder="Ketik manual atau scan...">
+                            <button type="button" class="btn-scan-trigger" data-target="tagInput" title="Start Scanning">
+                                <i class="bi bi-qr-code-scan"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Label Input Group -->
+                    <div class="mb-4">
+                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input Label <span class="text-danger">*</span></label>
+                        <div class="custom-cyber-input-group">
+                            <div class="input-icon-left">
+                                <i class="bi bi-pencil"></i>
+                            </div>
+                            <input type="text" class="form-control cyber-field" id="labelInput" placeholder="Ketik manual atau scan...">
+                            <button type="button" class="btn-scan-trigger" data-target="labelInput" title="Start Scanning">
+                                <i class="bi bi-qr-code-scan"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Kanban Input Group -->
+                    <div class="mb-4">
+                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input Kanban <span class="text-danger">*</span></label>
+                        <div class="custom-cyber-input-group">
+                            <div class="input-icon-left">
+                                <i class="bi bi-pencil"></i>
+                            </div>
+                            <input type="text" class="form-control cyber-field" id="kanbanInput" placeholder="Ketik manual atau scan...">
+                            <button type="button" class="btn-scan-trigger" data-target="kanbanInput" title="Start Scanning">
+                                <i class="bi bi-qr-code-scan"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Scanner Viewport (Hidden by default) -->
+                    <div class="cyber-card p-0 mb-4 overflow-hidden" id="scannerContainer" style="display: none; min-height: 350px; position: relative; border: 2px solid var(--primary-blue);">
+                        <div class="scanner-header p-2 bg-primary d-flex justify-content-between align-items-center">
+                            <small id="currentScanningField" class="fw-bold text-white"><i class="bi bi-camera me-2"></i>Camera Active...</small>
+                            <button type="button" class="btn btn-light btn-sm py-0" id="btnStopScanner">STOP</button>
+                        </div>
+                        <div id="interactive" class="viewport" style="position: relative;">
+                            <div class="scanner-overlay"><div class="bounding-box"></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-5">
+                    <button type="button" class="btn btn-neon-success w-100 py-4 shadow-lg fs-5" id="btnSavePreparation">
+                        <i class="bi bi-shield-check-fill me-2"></i> SIMPAN DATA PREPARATION
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            let activeInputId = null;
+
+            // Scan Trigger Buttons
+            $('.btn-scan-trigger').click(function() {
+                const target = $(this).data('target');
+                const $btn = $(this);
+                
+                if ($btn.hasClass('active-scanning')) {
+                    stopScanner();
+                } else {
+                    $('.btn-scan-trigger').removeClass('active-scanning');
+                    $btn.addClass('active-scanning');
+                    activeInputId = target;
+                    startScanner(target);
+                }
+            });
+
+            $('#btnStopScanner').click(stopScanner);
+
+            function startScanner(target) {
+                $('#scannerContainer').fadeIn();
+                $('#currentScanningField').html("<i class='bi bi-camera me-2'></i>Scanning " + target.replace('Input', '').toUpperCase());
+                
+                Quagga.init({
+                    inputStream: {
+                        name: "Live",
+                        type: "InputStream",
+                        target: document.querySelector('#interactive'),
+                        constraints: { facingMode: "environment" },
+                    },
+                    decoder: {
+                        readers: ["code_128_reader", "ean_reader", "code_39_reader"]
+                    },
+                    locate: true
+                }, function (err) {
+                    if (err) { alert("Camera Access Error: " + err); return; }
+                    Quagga.start();
+                });
+
+                Quagga.onDetected(function (result) {
+                    const code = result.codeResult.code;
+                    $(`#${activeInputId}`).val(code).addClass('active-scan');
+                    setTimeout(() => $(`#${activeInputId}`).removeClass('active-scan'), 500);
+                    stopScanner();
+                });
+            }
+
+            function stopScanner() {
+                if(Quagga) Quagga.stop();
+                $('#scannerContainer').hide();
+                $('.btn-scan-trigger').removeClass('active-scanning');
+                activeInputId = null;
+            }
+
+            // Save Data (AJAX)
+            $('#btnSavePreparation').click(function () {
+                const plant = $('input[name="plant"]:checked').val();
+                const tag = $('#tagInput').val();
+                const label = $('#labelInput').val();
+                const kanban = $('#kanbanInput').val();
+
+                if (!tag || !label || !kanban) {
+                    alert('Lengkapi semua data yang WAJIB (Tag, Label, Kanban)!');
+                    return;
+                }
+
+                const data = {
+                    Plant: plant,
+                    Tag: tag,
+                    Label: label,
+                    Kanban: kanban
+                };
+
+                $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Menyimpan...');
+
+                $.ajax({
+                    url: '/PreparationWorkflow/Save',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(data),
+                    success: function (response) {
+                        if (response.success) {
+                            alert('SUKSES: ' + response.message);
+                            // Reset location elements but NOT plant
+                            $('#tagInput, #labelInput, #kanbanInput').val('');
+                        } else {
+                            alert('GAGAL: ' + response.message);
+                        }
+                    },
+                    error: function () {
+                        alert('Terjadi kesalahan koneksi ke server.');
+                    },
+                    complete: function() {
+                        $('#btnSavePreparation').prop('disabled', false).html('<i class="bi bi-shield-check-fill me-2"></i> SIMPAN DATA PREPARATION');
+                    }
+                });
+            });
+        });
+    </script>
+}
+
+<style>
+    /* CUSTOM INPUT GROUP DESIGN (MATCHING POOLING STYLE) */
+    .custom-cyber-input-group {
+        display: flex;
+        align-items: stretch;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .custom-cyber-input-group:focus-within {
+        border-color: var(--primary-blue);
+        box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
+        background: rgba(30, 41, 59, 0.6);
+    }
+
+    .input-icon-left {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 15px;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 1.2rem;
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .cyber-field {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: white !important;
+        padding: 14px 18px !important;
+        font-size: 1rem;
+        flex-grow: 1;
+    }
+
+    .cyber-field::placeholder {
+        color: rgba(255, 255, 255, 0.4);
+    }
+
+    .btn-scan-trigger {
+        background: transparent;
+        border: none;
+        border-left: 1px solid rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.7);
+        padding: 0 18px;
+        font-size: 1.4rem;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+
+    .btn-scan-trigger:hover {
+        background: rgba(59, 130, 246, 0.1);
+        color: var(--primary-blue);
+    }
+
+    .btn-scan-trigger.active-scanning {
+        background: var(--primary-blue);
+        color: white;
+        animation: pulse-scanner 1.5s infinite;
+    }
+
+    @@keyframes pulse-scanner {
+        0% { opacity: 1; }
+        50% { opacity: 0.6; }
+        100% { opacity: 1; }
+    }
+
+    .btn-neon-success {
+        background: #10b981;
+        color: white;
+        font-weight: 700;
+        border: none;
+        box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-neon-success:hover {
+        background: #059669;
+        transform: translateY(-2px);
+        box-shadow: 0 0 25px rgba(16, 185, 129, 0.5);
+        color: white;
+    }
+
+    .scanner-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+    }
+
+    .bounding-box {
+        width: 80%;
+        height: 120px;
+        border: 2px solid #3b82f6;
+        box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.6);
+        position: relative;
+    }
+
+    .bounding-box::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 3px;
+        background: #ef4444;
+        box-shadow: 0 0 15px #ef4444;
+        animation: scan-line 2.5s linear infinite;
+    }
+
+    @@keyframes scan-line {
+        0% { top: 0; }
+        100% { top: 100%; }
+    }
+
+    #interactive video {
+        width: 100%;
+        height: auto;
+        max-height: 400px;
+        object-fit: cover;
+    }
+
+    .active-scan {
+        background: rgba(16, 185, 129, 0.2) !important;
+        border-color: #10b981 !important;
+    }
+</style>

@@ -1,0 +1,292 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
+using DeliveryControl.Data;
+using DeliveryControl.Models;
+using DeliveryControl.Hubs;
+using DeliveryControl.Services;
+using System.Globalization;
+using DeliveryControl.Filters;
+
+namespace DeliveryControl.Controllers
+{
+    /// <summary>
+    /// Controller khusus untuk Portal Preparation - konfirmasi masuk dock
+    /// </summary>
+    [Authorize]
+    public class PreparationController : Controller
+    {
+        private readonly ApplicationDbContext _context;
+        private readonly IHubContext<DeliveryHub> _hubContext;
+        private readonly ActivityLogService _logService;
+
+        public PreparationController(ApplicationDbContext context, IHubContext<DeliveryHub> hubContext, ActivityLogService logService)
+        {
+            _context = context;
+            _hubContext = hubContext;
+            _logService = logService;
+        }
+
+        // GET: Preparation - Daftar schedule hari ini untuk preparation
+        public async Task<IActionResult> Index(DateTime? selectedDate, int? customerId, string? status, string? cycle)
+        {
+            var enterDockDate = selectedDate ?? DateTime.Today;
+            var tomorrow = enterDockDate.AddDays(1);
+            
+            // Normalize status & cycle - trim dan pastikan tidak null
+            var normalizedStatus = string.IsNullOrWhiteSpace(status) ? string.Empty : status.Trim();
+            var normalizedCycle = string.IsNullOrWhiteSpace(cycle) ? string.Empty : cycle!.Trim();
+            
+            ViewData["SelectedDate"] = enterDockDate.ToString("yyyy-MM-dd");
+            ViewData["SelectedCustomerId"] = customerId;
+            ViewData["SelectedStatus"] = normalizedStatus;
+            ViewData["DayName"] = enterDockDate.ToString("dddd, dd MMMM yyyy", new CultureInfo("id-ID"));
+            ViewData["SelectedCycle"] = normalizedCycle;
+
+            // LOGIKA: Ambil schedule berdasarkan TANGGAL ENTER DOCK
+            // Schedule bisa dibuat untuk besok (H) tapi enter dock-nya hari ini (H-1)
+            var allSchedules = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .Where(s => s.EnterDockTime.HasValue)
+                .Where(s => s.Status != "Cancelled")
+                .ToListAsync();
+            
+            // Filter berdasarkan tanggal Enter Dock (bukan ScheduledDate)
+            var schedulesForToday = allSchedules
+                .Where(s => s.EnterDockTime!.Value.Date == enterDockDate.Date)
+                .ToList();
+            
+            // Filter by customer jika ada
+            if (customerId.HasValue && customerId.Value > 0)
+            {
+                schedulesForToday = schedulesForToday
+                    .Where(s => s.CustomerId == customerId.Value)
+                    .ToList();
+            }
+
+            // Filter by status jika ada
+            if (!string.IsNullOrWhiteSpace(normalizedStatus))
+            {
+                schedulesForToday = schedulesForToday
+                    .Where(s => (s.PreparationStatus ?? s.Status) == normalizedStatus)
+                    .ToList();
+            }
+
+            // Filter by cycle jika ada
+            if (!string.IsNullOrWhiteSpace(normalizedCycle))
+            {
+                schedulesForToday = schedulesForToday
+                    .Where(s => string.Equals(s.Cycle, normalizedCycle, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            // Data customer untuk dropdown: SEMUA CUSTOMER AKTIF
+            var customers = await _context.Customers
+                .Where(c => c.IsActive)
+                .OrderBy(c => c.CustomerName)
+                .ToListAsync();
+            
+            ViewBag.Customers = customers;
+
+            // Data cycle untuk dropdown filter cycle (berdasarkan tanggal enter dock terpilih)
+            var availableCycles = allSchedules
+                .Where(s => s.EnterDockTime!.Value.Date == enterDockDate.Date)
+                .Select(s => s.Cycle)
+                .Where(cy => !string.IsNullOrWhiteSpace(cy))
+                .Distinct()
+                .OrderBy(cy => cy)
+                .ToList();
+
+            ViewBag.Cycles = availableCycles;
+
+            // Kelompokkan menjadi:
+            // 1. BUTUH AKSI PREPARATION (BELUM MASUK DOCK)
+            // 2. SUDAH MASUK DOCK / TIDAK PERLU AKSI
+            var needAction = schedulesForToday
+                .Where(s => !s.ActualEnterDockTime.HasValue)
+                .OrderBy(s => s.EnterDockTime ?? DateTime.MaxValue)
+                .ToList();
+
+            var completed = schedulesForToday
+                .Where(s => s.ActualEnterDockTime.HasValue)
+                .OrderBy(s => s.ActualEnterDockTime)
+                .ToList();
+
+            var schedules = needAction
+                .Concat(completed)
+                .ToList();
+            
+            // Statistics untuk tampilan
+            ViewBag.TotalSchedules = schedules.Count;
+            ViewBag.NotEnteredYet = needAction.Count;
+            ViewBag.AlreadyEntered = completed.Count;
+
+            ViewBag.NeedActionSchedules = needAction;
+            ViewBag.CompletedSchedules = completed;
+            
+            return View(schedules);
+        }
+
+        // GET: Preparation/EnterDock/5 - Halaman konfirmasi masuk dock
+        public async Task<IActionResult> EnterDock(int? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var schedule = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .FirstOrDefaultAsync(s => s.ScheduleId == id);
+
+            if (schedule == null)
+            {
+                return NotFound();
+            }
+
+            // Cek apakah sudah ada enter dock time
+            if (schedule.ActualEnterDockTime.HasValue)
+            {
+                TempData["WarningMessage"] = $"Schedule ini sudah dikonfirmasi masuk dock pada {schedule.ActualEnterDockTime.Value:dd/MM/yyyy HH:mm}";
+            }
+
+            return View(schedule);
+        }
+
+        // POST: Preparation/EnterDock/5 - Konfirmasi masuk dock
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EnterDock(int id, DateTime enterDockTime, string? notes)
+        {
+            var schedule = await _context.DeliverySchedules.FindAsync(id);
+
+            if (schedule == null)
+            {
+                return NotFound();
+            }
+
+            try
+            {
+                schedule.ActualEnterDockTime = enterDockTime;
+                schedule.PreparationStatus = "Completed";
+                schedule.UpdatedDate = DateTime.Now;
+                schedule.UpdatedBy = User.Identity?.Name ?? "Preparation";
+                
+                // Tambahkan notes jika ada
+                if (!string.IsNullOrWhiteSpace(notes))
+                {
+                    schedule.Notes = string.IsNullOrWhiteSpace(schedule.Notes) 
+                        ? $"[Enter Dock] {notes}" 
+                        : schedule.Notes + $"\n[Enter Dock] {notes}";
+                }
+
+                await _context.SaveChangesAsync();
+
+                // Log activity
+                await _logService.LogConfirm(
+                    "Preparation",
+                    schedule.ScheduleNumber,
+                    schedule.ScheduleId,
+                    $"Konfirmasi masuk dock untuk {schedule.Customer?.CustomerName} pada {enterDockTime:HH:mm}",
+                    User.Identity?.Name ?? "Preparation"
+                );
+
+                // Broadcast update via SignalR
+                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                {
+                    ScheduleNumber = schedule.ScheduleNumber,
+                    Action = "enterDock",
+                    Message = $"Truk telah masuk dock untuk {schedule.Customer?.CustomerName} pada {enterDockTime:HH:mm}",
+                    Timestamp = DateTime.Now
+                });
+
+                TempData["SuccessMessage"] = $"✅ Masuk dock berhasil dikonfirmasi pada {enterDockTime:HH:mm}!";
+                // Redirect ke tanggal enter dock (bukan scheduled date)
+                var redirectDate = schedule.EnterDockTime?.Date ?? schedule.ScheduledDate;
+                return RedirectToAction(nameof(Index), new { selectedDate = redirectDate });
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = $"❌ Error: {ex.Message}";
+                return RedirectToAction(nameof(EnterDock), new { id });
+            }
+        }
+
+        // GET: Preparation/Details/5 - Detail schedule untuk preparation
+        public async Task<IActionResult> Details(int? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var schedule = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .Include(s => s.DeliveryItems)
+                    .ThenInclude(di => di.Item)
+                .FirstOrDefaultAsync(s => s.ScheduleId == id);
+
+            if (schedule == null)
+            {
+                return NotFound();
+            }
+
+            return View(schedule);
+        }
+
+        // POST: Preparation/QuickEnterDock/5 - Quick action untuk konfirmasi masuk dock (now)
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> QuickEnterDock(int id)
+        {
+            var schedule = await _context.DeliverySchedules.FindAsync(id);
+
+            if (schedule == null)
+            {
+                return NotFound();
+            }
+
+            // Determine redirect date (enter dock date, not scheduled date)
+            var redirectDate = schedule.EnterDockTime?.Date ?? schedule.ScheduledDate;
+
+            if (schedule.ActualEnterDockTime.HasValue)
+            {
+                TempData["ErrorMessage"] = "Schedule ini sudah dikonfirmasi masuk dock!";
+                return RedirectToAction(nameof(Index), new { selectedDate = redirectDate });
+            }
+
+            var enterDockTime = DateTime.Now;
+            schedule.ActualEnterDockTime = enterDockTime;
+            schedule.PreparationStatus = "Completed";
+            schedule.UpdatedDate = enterDockTime;
+            schedule.UpdatedBy = User.Identity?.Name ?? "Preparation";
+
+            await _context.SaveChangesAsync();
+
+            // Load customer data untuk SignalR message
+            await _context.Entry(schedule).Reference(s => s.Customer).LoadAsync();
+
+            // Log activity
+            await _logService.LogConfirm(
+                "Preparation",
+                schedule.ScheduleNumber,
+                schedule.ScheduleId,
+                $"Quick konfirmasi masuk dock untuk {schedule.Customer?.CustomerName} pada {enterDockTime:HH:mm}",
+                User.Identity?.Name ?? "Preparation"
+            );
+
+            // Broadcast update via SignalR
+            await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+            {
+                ScheduleNumber = schedule.ScheduleNumber,
+                Action = "enterDock",
+                Message = $"Truk telah masuk dock untuk {schedule.Customer?.CustomerName} pada {enterDockTime:HH:mm}",
+                Timestamp = enterDockTime
+            });
+
+            TempData["SuccessMessage"] = $"✅ Masuk dock dikonfirmasi pada {enterDockTime:HH:mm}!";
+            return RedirectToAction(nameof(Index), new { selectedDate = redirectDate });
+        }
+    }
+}
+
