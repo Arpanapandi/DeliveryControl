@@ -27,6 +27,15 @@ namespace DeliveryControl.Controllers
         {
             if (ModelState.IsValid)
             {
+                // Auto-map ItemId based on Tag or Label matching ItemCode
+                var item = await _context.Items
+                    .FirstOrDefaultAsync(i => i.ItemCode == record.Tag || i.ItemCode == record.Label);
+                
+                if (item != null)
+                {
+                    record.ItemId = item.ItemId;
+                }
+
                 record.CreatedDate = DateTime.Now;
                 record.CreatedBy = HttpContext.Session.GetString("FullName") ?? "Operator";
                 

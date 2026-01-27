@@ -167,7 +167,7 @@
 
                 <div class="alert alert-warning">
                     <p class="mb-2"><strong>Sistem akan menghapus:</strong></p>
-                    <ul class="mb-0">
+                    <ul class="mb-0" id="warningList">
                         <li>Customer ini</li>
                         <li><strong>SEMUA</strong> Delivery Schedule terkait (jika ada)</li>
                         <li><strong>SEMUA</strong> Delivery Items dalam schedule (jika ada)</li>
@@ -207,6 +207,12 @@
                 var forceDeleteModal = new bootstrap.Modal(document.getElementById('forceDeleteModal'));
                 forceDeleteModal.show();
                 </text>
+            }
+
+            // Fix Modal Stacking Context - Move modal to body
+            var modalElement = document.getElementById('forceDeleteModal');
+            if (modalElement) {
+                document.body.appendChild(modalElement);
             }
             
             // Select All functionality
@@ -261,17 +267,22 @@
             document.getElementById('deleteCustomerName').textContent = customerName;
             
             // Update warning message based on schedule count
-            var warningList = document.querySelector('#forceDeleteModal .alert-warning ul');
-            if (scheduleCount > 0) {
-                warningList.innerHTML = `
-                    <li>Customer ini</li>
-                    <li><strong>${scheduleCount}</strong> Delivery Schedule terkait</li>
-                    <li><strong>SEMUA</strong> Delivery Items dalam schedule tersebut</li>
-                `;
+            // We use getElementById for maximum robustness
+            var warningList = document.getElementById('warningList');
+            if (warningList) {
+                if (scheduleCount > 0) {
+                    warningList.innerHTML = `
+                        <li>Customer ini</li>
+                        <li><strong>${scheduleCount}</strong> Delivery Schedule terkait</li>
+                        <li><strong>SEMUA</strong> Delivery Items dalam schedule tersebut</li>
+                    `;
+                } else {
+                    warningList.innerHTML = `
+                        <li>Customer ini (tidak ada schedule terkait)</li>
+                    `;
+                }
             } else {
-                warningList.innerHTML = `
-                    <li>Customer ini (tidak ada schedule terkait)</li>
-                `;
+                console.error('Element #warningList tidak ditemukan!');
             }
             
             // Show modal

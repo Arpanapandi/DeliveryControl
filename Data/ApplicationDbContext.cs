@@ -28,6 +28,8 @@ namespace DeliveryControl.Data
         {
             base.OnModelCreating(modelBuilder);
 
+
+
             // Configure Customer
             modelBuilder.Entity<Customer>(entity =>
             {

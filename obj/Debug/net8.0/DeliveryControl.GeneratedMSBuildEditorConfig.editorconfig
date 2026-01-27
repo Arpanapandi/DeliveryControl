@@ -1,5 +1,7 @@
 is_global = true
 build_property.TargetFramework = net8.0
+build_property.TargetFrameworkIdentifier = .NETCoreApp
+build_property.TargetFrameworkVersion = v8.0
 build_property.TargetPlatformMinVersion = 
 build_property.UsingMicrosoftNETSdkWeb = true
 build_property.ProjectTypeGuids = 
@@ -9,223 +11,229 @@ build_property.EnforceExtendedAnalyzerRules =
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.RootNamespace = DeliveryControl
 build_property.RootNamespace = DeliveryControl
-build_property.ProjectDir = C:\DeliveryControl\
+build_property.ProjectDir = C:\ControlDelivery\DeliveryControl\
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 
 build_property.RazorLangVersion = 8.0
 build_property.SupportLocalizedComponentNames = 
 build_property.GenerateRazorMetadataSourceChecksumAttributes = 
-build_property.MSBuildProjectDirectory = C:\DeliveryControl
+build_property.MSBuildProjectDirectory = C:\ControlDelivery\DeliveryControl
 build_property._RazorSourceGeneratorDebug = 
+build_property.EffectiveAnalysisLevelStyle = 8.0
+build_property.EnableCodeStyleSeverity = 
 
-[C:/DeliveryControl/Views/Account/Login.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Account/Login.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQWNjb3VudFxMb2dpbi5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/ActivityLogs/Details.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/ActivityLogs/Details.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQWN0aXZpdHlMb2dzXERldGFpbHMuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/ActivityLogs/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/ActivityLogs/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQWN0aXZpdHlMb2dzXEluZGV4LmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/ActivityLogs/_ActivityLogsTablePartial.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/ActivityLogs/_ActivityLogsTablePartial.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQWN0aXZpdHlMb2dzXF9BY3Rpdml0eUxvZ3NUYWJsZVBhcnRpYWwuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Customers/Create.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Customers/Create.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQ3VzdG9tZXJzXENyZWF0ZS5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Customers/Delete.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Customers/Delete.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQ3VzdG9tZXJzXERlbGV0ZS5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Customers/Edit.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Customers/Edit.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQ3VzdG9tZXJzXEVkaXQuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Customers/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Customers/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQ3VzdG9tZXJzXEluZGV4LmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/DeliverySchedules/BulkCreate.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/DeliverySchedules/BulkCreate.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRGVsaXZlcnlTY2hlZHVsZXNcQnVsa0NyZWF0ZS5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/DeliverySchedules/Create.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/DeliverySchedules/Create.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRGVsaXZlcnlTY2hlZHVsZXNcQ3JlYXRlLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/DeliverySchedules/DelayChart.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/DeliverySchedules/DelayChart.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRGVsaXZlcnlTY2hlZHVsZXNcRGVsYXlDaGFydC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/DeliverySchedules/DelayPickupTrend.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/DeliverySchedules/DelayPickupTrend.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRGVsaXZlcnlTY2hlZHVsZXNcRGVsYXlQaWNrdXBUcmVuZC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/DeliverySchedules/Delete.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/DeliverySchedules/Delete.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRGVsaXZlcnlTY2hlZHVsZXNcRGVsZXRlLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/DeliverySchedules/Details.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/DeliverySchedules/Details.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRGVsaXZlcnlTY2hlZHVsZXNcRGV0YWlscy5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/DeliverySchedules/Edit.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/DeliverySchedules/Edit.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRGVsaXZlcnlTY2hlZHVsZXNcRWRpdC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/DeliverySchedules/GanttChart.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/DeliverySchedules/GanttChart.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRGVsaXZlcnlTY2hlZHVsZXNcR2FudHRDaGFydC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/DeliverySchedules/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/DeliverySchedules/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRGVsaXZlcnlTY2hlZHVsZXNcSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Docks/Create.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Docks/Create.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRG9ja3NcQ3JlYXRlLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Docks/Delete.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Docks/Delete.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRG9ja3NcRGVsZXRlLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Docks/Details.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Docks/Details.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRG9ja3NcRGV0YWlscy5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Docks/Edit.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Docks/Edit.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRG9ja3NcRWRpdC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Docks/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Docks/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRG9ja3NcSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Driver/Arrival.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Driver/Arrival.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRHJpdmVyXEFycml2YWwuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Driver/Departure.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Driver/Departure.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRHJpdmVyXERlcGFydHVyZS5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Driver/Details.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Driver/Details.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRHJpdmVyXERldGFpbHMuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Driver/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Driver/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRHJpdmVyXEluZGV4LmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Home/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Home/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSG9tZVxJbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Home/Privacy.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Home/Privacy.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSG9tZVxQcml2YWN5LmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Home/_ScheduleTablePartial.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Home/_ScheduleTablePartial.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSG9tZVxfU2NoZWR1bGVUYWJsZVBhcnRpYWwuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Items/Create.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Items/Create.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSXRlbXNcQ3JlYXRlLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Items/Delete.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Items/Delete.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSXRlbXNcRGVsZXRlLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Items/Details.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Items/Details.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSXRlbXNcRGV0YWlscy5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Items/Edit.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Items/Edit.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSXRlbXNcRWRpdC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Items/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Items/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSXRlbXNcSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Pooling/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Pooling/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUG9vbGluZ1xJbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/PreparationWorkflow/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/PreparationWorkflow/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJlcGFyYXRpb25Xb3JrZmxvd1xJbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Preparation/Details.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Preparation/Details.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJlcGFyYXRpb25cRGV0YWlscy5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Preparation/EnterDock.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Preparation/EnterDock.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJlcGFyYXRpb25cRW50ZXJEb2NrLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Preparation/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Preparation/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJlcGFyYXRpb25cSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Settings/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Settings/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU2V0dGluZ3NcSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Shared/Error.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Shared/Error.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU2hhcmVkXEVycm9yLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Shared/_ValidationScriptsPartial.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Shared/_ValidationScriptsPartial.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU2hhcmVkXF9WYWxpZGF0aW9uU2NyaXB0c1BhcnRpYWwuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Stock/Hose.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Stock/Hose.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcSG9zZS5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Stock/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Stock/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Stock/Molded.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Stock/Molded.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcTW9sZGVkLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Stock/RVI.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Stock/RVI.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcUlZJLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Users/Create.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Stock/Targets.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcVGFyZ2V0cy5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/ControlDelivery/DeliveryControl/Views/Users/Create.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcVXNlcnNcQ3JlYXRlLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Users/Delete.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Users/Delete.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcVXNlcnNcRGVsZXRlLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Users/Edit.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Users/Edit.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcVXNlcnNcRWRpdC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Users/Index.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Users/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcVXNlcnNcSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/_ViewImports.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/_ViewImports.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcX1ZpZXdJbXBvcnRzLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/_ViewStart.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/_ViewStart.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcX1ZpZXdTdGFydC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/Views/Shared/_Layout.cshtml]
+[C:/ControlDelivery/DeliveryControl/Views/Shared/_Layout.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU2hhcmVkXF9MYXlvdXQuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = b-kdodgvpzj3

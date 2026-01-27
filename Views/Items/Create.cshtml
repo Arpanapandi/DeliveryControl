@@ -56,6 +56,7 @@
                             <input asp-for="Category" class="form-control" placeholder="Kategori item" />
                             <span asp-validation-for="Category" class="text-danger"></span>
                         </div>
+
                     </div>
 
                     <div class="row mb-3">
@@ -74,6 +75,19 @@
                                 <span class="input-group-text">M³</span>
                             </div>
                             <span asp-validation-for="Volume" class="text-danger"></span>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label asp-for="MinStock" class="form-label">Min Stock (Shortage Target)</label>
+                            <input asp-for="MinStock" class="form-control" type="number" value="5" />
+                            <span asp-validation-for="MinStock" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="MaxStock" class="form-label">Max Stock (Overstock Target)</label>
+                            <input asp-for="MaxStock" class="form-control" type="number" value="20" />
+                            <span asp-validation-for="MaxStock" class="text-danger"></span>
                         </div>
                     </div>
 

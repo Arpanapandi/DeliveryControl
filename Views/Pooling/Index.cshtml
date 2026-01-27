@@ -56,6 +56,8 @@
                     </select>
                 </div>
 
+
+
                 <!-- Visual Validation (Optional Check) -->
                 <div id="visualWrapper" style="display: none;" class="mb-4">
                     <div class="p-4 bg-dark-subtle rounded border border-primary border-opacity-10">
@@ -100,16 +102,6 @@
                         </div>
                     </div>
 
-                    <!-- Scanner Viewport (Hidden by default) -->
-                    <div class="cyber-card p-0 mb-4 overflow-hidden" id="scannerContainer" style="display: none; min-height: 350px; position: relative; border: 2px solid var(--primary-blue);">
-                        <div class="scanner-header p-2 bg-primary d-flex justify-content-between align-items-center">
-                            <small id="currentScanningField" class="fw-bold text-white"><i class="bi bi-camera me-2"></i>Camera Active...</small>
-                            <button type="button" class="btn btn-light btn-sm py-0" id="btnStopScanner">STOP</button>
-                        </div>
-                        <div id="interactive" class="viewport" style="position: relative;">
-                            <div class="scanner-overlay"><div class="bounding-box"></div></div>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="mt-5">
@@ -122,8 +114,45 @@
     </div>
 </div>
 
+@section Modals {
+    <!-- Scanner Modal -->
+    <div class="modal fade" id="scannerModal" tabindex="-1" aria-labelledby="scannerModalLabel" aria-hidden="false" data-bs-backdrop="static" style="z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-darker-card border-primary border-opacity-50 shadow-lg">
+                <div class="modal-header border-bottom border-primary border-opacity-25 bg-dark">
+                    <h6 class="modal-title text-white" id="scannerModalLabel">
+                        <i class="bi bi-camera-fill me-2 text-primary"></i>
+                        <span id="currentScanningField">Scanning...</span>
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" id="btnStopScanner"></button>
+                </div>
+                <div class="modal-body p-0 position-relative overflow-hidden" style="height: 400px; background: #000;">
+                    <div id="reader" style="width: 100%; height: 100%;"></div>
+                    <div class="scanner-overlay">
+                        <div class="bounding-box">
+                            <div class="scan-line"></div>
+                            <div class="corner-tl"></div>
+                            <div class="corner-tr"></div>
+                            <div class="corner-bl"></div>
+                            <div class="corner-br"></div>
+                        </div>
+                        <div class="scanner-tip" id="scanner-status">Mencari Barcode / QR... (v7)</div>
+                        <button type="button" class="btn btn-sm btn-primary mt-3 px-3 py-1 rounded-pill" id="btnRestartCamera" style="pointer-events: auto; position: relative; z-index: 30;">
+                            <i class="bi bi-arrow-clockwise me-1"></i> RESTART KAMERA
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-primary border-opacity-25 bg-dark justify-content-center py-2">
+                    <button type="button" class="btn btn-outline-light btn-sm px-4" data-bs-dismiss="modal">BATAL</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+</div>
+
 @section Scripts {
-    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
         $(document).ready(function () {
             let activeInputId = null;
@@ -168,62 +197,109 @@
                 $('#visualGrid').html(html);
             }
 
-            // Scan Trigger Buttons
-            $('.btn-scan-trigger').click(function() {
-                const target = $(this).data('target');
-                const $btn = $(this);
-                
-                if ($btn.hasClass('active-scanning')) {
-                    stopScanner();
-                } else {
-                    $('.btn-scan-trigger').removeClass('active-scanning');
-                    $btn.addClass('active-scanning');
-                    activeInputId = target;
-                    startScanner(target);
-                }
+            // Modal handling
+            const scannerModalElement = document.getElementById('scannerModal');
+            const scannerModal = new bootstrap.Modal(scannerModalElement);
+            
+            // Scanner implementation using Html5Qrcode
+            let html5QrCode = null;
+
+            $(scannerModalElement).on('shown.bs.modal', function () {
+                console.log("Modal shown, starting Html5Qrcode...");
+                initScanner();
             });
 
-            $('#btnStopScanner').click(stopScanner);
+            $(scannerModalElement).on('hidden.bs.modal', function () {
+                console.log("Modal hidden, stopping Html5Qrcode...");
+                stopScanner();
+            });
 
-            function startScanner(target) {
-                $('#scannerContainer').fadeIn();
-                $('#currentScanningField').html("<i class='bi bi-camera me-2'></i>Scanning " + target.replace('Input', '').toUpperCase());
+            // Re-added missing click handler
+            $('.btn-scan-trigger').click(function() {
+                activeInputId = $(this).data('target');
+                const fieldName = (activeInputId || "").replace('Input', '').toUpperCase();
+                $('#currentScanningField').text("Scanning " + fieldName);
+                scannerModal.show();
+            });
+
+            $('#btnRestartCamera').click(function(e) {
+                e.preventDefault();
+                console.log("Manual restart triggered.");
+                stopScanner().then(() => initScanner());
+            });
+
+            function initScanner() {
+                // Check for Secure Context
+                if (!window.isSecureContext) {
+                    $('#scanner-status').html('<span class="text-danger">Error: HTTPS diperlukan</span><br><small style="font-size:0.6rem">Akses via IP wajib menggunakan HTTPS untuk kamera.</small>');
+                    console.error("Camera access requires a Secure Context (HTTPS or localhost).");
+                    return;
+                }
+
+                const config = { 
+                    fps: 10, 
+                    qrbox: { width: 250, height: 150 },
+                    aspectRatio: 1.0
+                };
+
+                if (!html5QrCode) {
+                    html5QrCode = new Html5Qrcode("reader");
+                }
+
+                $('#scanner-status').text("Mengakses Kamera...");
                 
-                Quagga.init({
-                    inputStream: {
-                        name: "Live",
-                        type: "InputStream",
-                        target: document.querySelector('#interactive'),
-                        constraints: { facingMode: "environment" },
+                html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config,
+                    (decodedText) => {
+                        console.log("Scan Result:", decodedText);
+                        onDetected(decodedText);
                     },
-                    decoder: {
-                        readers: ["code_128_reader", "ean_reader", "code_39_reader"]
-                    },
-                    locate: true
-                }, function (err) {
-                    if (err) { alert("Camera Access Error: " + err); return; }
-                    Quagga.start();
-                });
-
-                Quagga.onDetected(function (result) {
-                    const code = result.codeResult.code;
-                    $(`#${activeInputId}`).val(code).addClass('active-scan');
-                    setTimeout(() => $(`#${activeInputId}`).removeClass('active-scan'), 500);
-                    stopScanner();
+                    (errorMessage) => {
+                        // ignore noise
+                    }
+                ).then(() => {
+                    $('#scanner-status').text("Scanner Aktif (v8)");
+                }).catch(err => {
+                    console.error("Html5Qrcode Error:", err);
+                    $('#scanner-status').text("Gagal: " + err);
+                    
+                    // Fallback to any camera
+                    html5QrCode.start(
+                        { facingMode: "user" }, 
+                        config,
+                        (decodedText) => onDetected(decodedText)
+                    ).catch(err2 => {
+                        $('#scanner-status').text("Kamera Gagal Akses");
+                    });
                 });
             }
 
-            function stopScanner() {
-                if (Quagga) Quagga.stop();
-                $('#scannerContainer').hide();
-                $('.btn-scan-trigger').removeClass('active-scanning');
-                activeInputId = null;
+            function onDetected(code) {
+                if (activeInputId) {
+                    $(`#${activeInputId}`).val(code).addClass('active-scan');
+                    setTimeout(() => $(`#${activeInputId}`).removeClass('active-scan'), 500);
+                    scannerModal.hide();
+                }
+            }
+
+            async function stopScanner() {
+                if (html5QrCode && html5QrCode.isScanning) {
+                    try {
+                        await html5QrCode.stop();
+                        console.log("Scanner Stopped.");
+                    } catch (err) {
+                        console.warn("Stop Error:", err);
+                    }
+                }
             }
 
             // Save Data (AJAX)
+            // Save Data (AJAX)
             $('#btnSavePooling').click(function () {
                 const plant = $('input[name="plant"]:checked').val();
-                const rack = $('.rack-btn.active').data('rack');
+
+                const rack = $('.rack-segment.active').data('rack');
                 const column = $('#columnSelect').val();
                 const tag = $('#tagInput').val();
                 const label = $('#labelInput').val();
@@ -238,7 +314,8 @@
                     Rack: rack,
                     Column: parseInt(column),
                     Tag: tag,
-                    Label: label
+                    Label: label,
+                    Quantity: 1
                 };
 
                 $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Menyimpan...');
@@ -254,7 +331,7 @@
                             // Reset location elements but NOT plant
                             $('#tagInput, #labelInput').val('');
                             $('#columnSelect').val('');
-                            $('.rack-btn').removeClass('active btn-primary').addClass('btn-outline-light');
+                            $('.rack-segment').removeClass('active');
                             $('#columnSelectContainer, #visualWrapper').hide();
                         } else {
                             alert('GAGAL: ' + response.message);
@@ -355,6 +432,9 @@
         padding: 14px 18px !important;
         font-size: 1rem;
         flex-grow: 1;
+        width: 100%;
+        position: relative;
+        z-index: 5;
     }
 
     .cyber-field::placeholder {
@@ -370,6 +450,8 @@
         font-size: 1.4rem;
         transition: all 0.2s;
         cursor: pointer;
+        position: relative;
+        z-index: 5;
     }
 
     .btn-scan-trigger:hover {
@@ -422,29 +504,53 @@
         width: 100%;
         height: 100%;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
         pointer-events: none;
+        z-index: 20;
+    }
+    
+    .scanner-tip {
+        color: white;
+        font-size: 0.8rem;
+        margin-top: 15px;
+        background: rgba(0,0,0,0.5);
+        padding: 5px 15px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
 
     .bounding-box {
-        width: 80%;
-        height: 120px;
-        border: 2px solid #3b82f6;
-        box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.6);
+        width: 260px;
+        height: 160px;
         position: relative;
+        box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.4); /* Reduced opacity for better visibility */
+        border: 2px solid rgba(59, 130, 246, 0.5);
     }
+    
+    /* Corner indicators */
+    .corner-tl, .corner-tr, .corner-bl, .corner-br {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        border: 4px solid var(--primary-blue);
+    }
+    .corner-tl { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
+    .corner-tr { top: -2px; right: -2px; border-left: 0; border-bottom: 0; }
+    .corner-bl { bottom: -2px; left: -2px; border-right: 0; border-top: 0; }
+    .corner-br { bottom: -2px; right: -2px; border-left: 0; border-top: 0; }
 
-    .bounding-box::after {
-        content: '';
+    .scan-line {
         position: absolute;
         top: 0;
         left: 0;
         width: 100%;
-        height: 3px;
+        height: 2px;
         background: #ef4444;
-        box-shadow: 0 0 15px #ef4444;
-        animation: scan-line 2.5s linear infinite;
+        box-shadow: 0 0 10px #ef4444;
+        animation: scan-line 2s linear infinite;
     }
 
     @@keyframes scan-line {
@@ -452,11 +558,14 @@
         100% { top: 100%; }
     }
 
-    #interactive video {
-        width: 100%;
-        height: auto;
-        max-height: 400px;
-        object-fit: cover;
+    #reader video {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+    }
+    
+    #reader canvas {
+        display: none !important;
     }
 
     .active-scan {

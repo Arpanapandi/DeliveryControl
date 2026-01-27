@@ -73,7 +73,7 @@ namespace DeliveryControl.Controllers
         // POST: Items/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("ItemId,ItemCode,ItemName,Description,Unit,Category,Weight,Volume,IsActive")] Item item)
+        public async Task<IActionResult> Create([Bind("ItemId,ItemCode,ItemName,Description,Unit,Category,Weight,Volume,MinStock,MaxStock,IsActive")] Item item)
         {
             if (ModelState.IsValid)
             {
@@ -105,10 +105,11 @@ namespace DeliveryControl.Controllers
             return View(item);
         }
 
+
         // POST: Items/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("ItemId,ItemCode,ItemName,Description,Unit,Category,Weight,Volume,IsActive,CreatedDate")] Item item)
+        public async Task<IActionResult> Edit(int id, [Bind("ItemId,ItemCode,ItemName,Description,Unit,Category,Weight,Volume,MinStock,MaxStock,IsActive,CreatedDate")] Item item)
         {
             if (id != item.ItemId)
             {
@@ -142,6 +143,7 @@ namespace DeliveryControl.Controllers
             }
             return View(item);
         }
+
 
         // GET: Items/Delete/5
         public async Task<IActionResult> Delete(int? id)

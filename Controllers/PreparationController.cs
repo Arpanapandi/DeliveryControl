@@ -231,6 +231,27 @@ namespace DeliveryControl.Controllers
                 return NotFound();
             }
 
+            // LOGIC: Hitung Prepared Qty
+            // Ambil tanggal referensi (Enter Dock Time atau Scheduled Date)
+            var refDate = schedule.EnterDockTime?.Date ?? schedule.ScheduledDate.Date;
+
+            // Ambil preparation records pada tanggal tersebut untuk items yang ada di schedule ini
+            // Kita ambil semua record hari ini untuk efisiensi query, lalu filter di memori atau query specific tags
+            var relevantTags = schedule.DeliveryItems.Select(di => di.Item.ItemCode.ToUpper()).ToList();
+            
+            var preparationsToday = await _context.PreparationRecords
+                .Where(p => p.CreatedDate.Date == refDate)
+                .Select(p => p.Tag)
+                .ToListAsync();
+
+            // Hitung frequency per Tag (Case Insensitive)
+            var prepCounts = preparationsToday
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .GroupBy(t => t.Trim().ToUpper())
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            ViewBag.PrepCounts = prepCounts;
+
             return View(schedule);
         }
 

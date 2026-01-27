@@ -28,11 +28,16 @@ namespace DeliveryControl.Models
         [StringLength(100)]
         public string? Category { get; set; }
 
+
+
         [Column(TypeName = "decimal(18,2)")]
         public decimal? Weight { get; set; } // dalam KG
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal? Volume { get; set; } // dalam M3
+
+        public int MinStock { get; set; } = 5;
+        public int MaxStock { get; set; } = 20;
 
         public bool IsActive { get; set; } = true;
 

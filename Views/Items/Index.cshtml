@@ -5,21 +5,37 @@
 }
 
 <div class="row mb-3">
-    <div class="col-md-6">
-        <h2><i class="bi bi-box"></i> Master Item</h2>
+    <div class="col-md-5">
+        <h2 class="fw-bold"><i class="bi bi-box-seam me-2"></i>Master Item</h2>
     </div>
-    <div class="col-md-6 text-end">
-        <a asp-action="DownloadTemplate" class="btn btn-success me-2">
-            <i class="bi bi-download"></i> Template Excel
-        </a>
-        <button type="button" class="btn btn-info me-2" data-bs-toggle="modal" data-bs-target="#importModal">
-            <i class="bi bi-upload"></i> Import Excel
-        </button>
-        <a asp-action="Create" class="btn btn-primary">
-            <i class="bi bi-plus-circle"></i> Tambah Item
-        </a>
+    <div class="col-md-7 text-end">
+        <div class="btn-group gap-2">
+            <a asp-action="DownloadTemplate" class="btn btn-success">
+                <i class="bi bi-file-earmark-spreadsheet-fill"></i> Template Excel
+            </a>
+            <button type="button" class="btn btn-info text-white" data-bs-toggle="modal" data-bs-target="#importModal">
+                <i class="bi bi-box-arrow-in-down"></i> Import Excel
+            </button>
+            <a asp-action="Create" class="btn btn-primary">
+                <i class="bi bi-plus-circle-fill"></i> Tambah Item
+            </a>
+            <a asp-controller="Stock" asp-action="Targets" class="btn btn-dark-blue">
+                <i class="bi bi-bullseye"></i> Stock Targets
+            </a>
+        </div>
     </div>
 </div>
+
+<style>
+    .btn-dark-blue {
+        background-color: #3f51b5;
+        color: white;
+    }
+    .btn-dark-blue:hover {
+        background-color: #303f9f;
+        color: white;
+    }
+</style>
 
 <div class="card mb-3">
     <div class="card-body">
@@ -37,6 +53,7 @@
                     }
                 </select>
             </div>
+
             <div class="col-md-2">
                 <button type="submit" class="btn btn-primary w-100">
                     <i class="bi bi-search"></i> Cari
@@ -82,6 +99,7 @@
                                         <span class="text-muted">-</span>
                                     }
                                 </td>
+
                                 <td>@(item.Weight?.ToString("N2") ?? "-")</td>
                                 <td>
                                     @if (item.IsActive)
