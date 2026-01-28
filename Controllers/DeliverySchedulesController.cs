@@ -475,7 +475,15 @@ namespace DeliveryControl.Controllers
         // GET: DeliverySchedules
         public async Task<IActionResult> Index(DateTime? startDate, DateTime? endDate, int? customerId, string status)
         {
-            ViewData["Customers"] = new SelectList(_context.Customers.Where(c => c.IsActive), "CustomerId", "CustomerName");
+            var customerList = await _context.Customers
+                .Where(c => c.IsActive)
+                .Select(c => new { 
+                    c.CustomerId, 
+                    DisplayName = $"{c.CustomerCode} - {c.CustomerName}" 
+                })
+                .ToListAsync();
+
+            ViewData["Customers"] = new SelectList(customerList, "CustomerId", "DisplayName");
             ViewData["Statuses"] = new List<string> { "Scheduled", "In Progress", "Completed", "Cancelled", "Delayed" };
             
             ViewData["StartDate"] = startDate?.ToString("yyyy-MM-dd");
@@ -659,27 +667,12 @@ namespace DeliveryControl.Controllers
                         .ToListAsync();
                 }
                 
-                // Get starting schedule number
-                var today = model.ScheduledDate;
-                var prefix = $"SCH-{today:yyyyMMdd}";
-                
-                var lastSchedule = await _context.DeliverySchedules
-                    .Where(s => s.ScheduleNumber.StartsWith(prefix))
-                    .OrderByDescending(s => s.ScheduleNumber)
-                    .FirstOrDefaultAsync();
-                
-                int sequenceNumber = 1;
-                if (lastSchedule != null)
-                {
-                    var lastSequence = lastSchedule.ScheduleNumber.Substring(prefix.Length);
-                    if (int.TryParse(lastSequence, out int lastNum))
-                    {
-                        sequenceNumber = lastNum + 1;
-                    }
-                }
+                // Get starting sequence
+                int sequenceNumber = await GetNextSequenceInternal(model.ScheduledDate);
                 
                 foreach (var customer in customers)
                 {
+                    var prefix = $"SCH-{model.ScheduledDate:yyyyMMdd}";
                     var scheduleNumber = $"{prefix}{sequenceNumber:D3}";
                     sequenceNumber++;
 
@@ -726,8 +719,16 @@ namespace DeliveryControl.Controllers
                     _context.DeliverySchedules.AddRange(schedules);
                     await _context.SaveChangesAsync();
                     
+                    // Notify Dashboard via SignalR
+                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    {
+                        Action = "bulk_create",
+                        Message = $"Berhasil membuat {schedules.Count} schedule delivery untuk tanggal {model.ScheduledDate:dd/MM/yyyy}",
+                        Timestamp = DateTime.Now
+                    });
+
                     TempData["SuccessMessage"] = $"✅ Berhasil membuat {schedules.Count} schedule delivery untuk tanggal {model.ScheduledDate:dd/MM/yyyy}!";
-                    return RedirectToAction(nameof(Index), new { startDate = model.ScheduledDate, endDate = model.ScheduledDate });
+                    return RedirectToAction(nameof(Index), new { startDate = model.ScheduledDate.ToString("yyyy-MM-dd"), endDate = model.ScheduledDate.ToString("yyyy-MM-dd") });
                 }
             }
             catch (Exception ex)
@@ -918,6 +919,14 @@ namespace DeliveryControl.Controllers
             _context.DeliverySchedules.AddRange(schedules);
             await _context.SaveChangesAsync();
 
+            // Notify Dashboard via SignalR
+            await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+            {
+                Action = "auto_generate",
+                Message = $"AutoScheduler: Berhasil membuat {schedules.Count} schedule untuk {date:dd/MM/yyyy}",
+                Timestamp = DateTime.Now
+            });
+
             return Ok($"Berhasil membuat {schedules.Count} schedule otomatis untuk tanggal {date:dd/MM/yyyy}.");
         }
         
@@ -935,26 +944,27 @@ namespace DeliveryControl.Controllers
             return null;
         }
         
-        // Helper: Parse SKID string to int
-        private int? ParseSKID(string? skidString)
+        // Helper: Get SKID string
+        private string? ParseSKID(string? skidString)
         {
             if (string.IsNullOrWhiteSpace(skidString))
                 return null;
                 
-            // Extract angka dari string seperti "10 SKID" -> 10
-            var numbers = new string(skidString.Where(char.IsDigit).ToArray());
-            if (int.TryParse(numbers, out int skid))
-            {
-                return skid;
-            }
-            
-            return null;
+            return skidString.Trim();
         }
 
         // GET: DeliverySchedules/Create
         public IActionResult Create()
         {
-            ViewData["CustomerId"] = new SelectList(_context.Customers.Where(c => c.IsActive), "CustomerId", "CustomerName");
+            var customerList = _context.Customers
+                .Where(c => c.IsActive)
+                .Select(c => new { 
+                    c.CustomerId, 
+                    DisplayName = $"{c.CustomerCode} - {c.CustomerName}" 
+                })
+                .ToList();
+
+            ViewData["CustomerId"] = new SelectList(customerList, "CustomerId", "DisplayName");
             
             // Generate Schedule Number
             var scheduleNumber = GenerateScheduleNumber();
@@ -1017,10 +1027,28 @@ namespace DeliveryControl.Controllers
             return Json(customer);
         }
 
+        private async Task<int> GetNextSequenceInternal(DateTime date)
+        {
+            var prefix = $"SCH-{date:yyyyMMdd}";
+            var lastSchedule = await _context.DeliverySchedules
+                .Where(s => s.ScheduleNumber.StartsWith(prefix))
+                .OrderByDescending(s => s.ScheduleNumber)
+                .FirstOrDefaultAsync();
+
+            if (lastSchedule == null) return 1;
+
+            var lastSequence = lastSchedule.ScheduleNumber.Substring(prefix.Length);
+            if (int.TryParse(lastSequence, out int lastNum))
+            {
+                return lastNum + 1;
+            }
+            return 1;
+        }
+
         // POST: DeliverySchedules/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("ScheduleId,ScheduleNumber,CustomerId,ScheduledDate,Route,Cycle,EnterDockTime,ActualEnterDockTime,PickupTime,ETD,Range,SKID,Area,VehicleNumber,DriverName,DriverPhone,Notes,Status")] DeliverySchedule schedule)
+        public async Task<IActionResult> Create([Bind("ScheduleId,ScheduleNumber,CustomerId,ScheduledDate,Route,Cycle,EnterDockTime,ActualEnterDockTime,PickupTime,ETD,Range,SKID,Area,VehicleNumber,DriverName,DriverPhone,Notes,Status,TotalTargetQuantity,TotalActualQuantity")] DeliverySchedule schedule)
         {
             // Remove validation for optional fields
             ModelState.Remove("Route");
@@ -1039,15 +1067,32 @@ namespace DeliveryControl.Controllers
             ModelState.Remove("Customer");
             ModelState.Remove("Dock");
             ModelState.Remove("DeliveryItems");
-
+            
             if (ModelState.IsValid)
             {
+                // Generate Schedule Number if not provided
+                if (string.IsNullOrEmpty(schedule.ScheduleNumber) || schedule.ScheduleNumber == "SCH-001")
+                {
+                    var sequence = await GetNextSequenceInternal(schedule.ScheduledDate);
+                    schedule.ScheduleNumber = $"SCH-{schedule.ScheduledDate:yyyyMMdd}{sequence:D3}";
+                }
+
                 schedule.CreatedDate = DateTime.Now;
                 schedule.CreatedBy = User.Identity?.Name ?? "System";
                 _context.Add(schedule);
                 await _context.SaveChangesAsync();
+                
+                // Notify Dashboard via SignalR
+                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                {
+                    ScheduleNumber = schedule.ScheduleNumber,
+                    Action = "create",
+                    Message = $"Schedule baru {schedule.ScheduleNumber} telah dibuat",
+                    Timestamp = DateTime.Now
+                });
+
                 TempData["SuccessMessage"] = "Schedule berhasil ditambahkan!";
-                return RedirectToAction(nameof(Index));
+                return RedirectToAction(nameof(Index), new { startDate = schedule.ScheduledDate.ToString("yyyy-MM-dd"), endDate = schedule.ScheduledDate.ToString("yyyy-MM-dd") });
             }
             
             // Log errors for debugging
@@ -1057,7 +1102,15 @@ namespace DeliveryControl.Controllers
                 TempData["ErrorMessage"] = $"Validasi gagal: {string.Join(", ", errors)}";
             }
             
-            ViewData["CustomerId"] = new SelectList(_context.Customers.Where(c => c.IsActive), "CustomerId", "CustomerName", schedule.CustomerId);
+            var customerList = _context.Customers
+                .Where(c => c.IsActive)
+                .Select(c => new { 
+                    c.CustomerId, 
+                    DisplayName = $"{c.CustomerCode} - {c.CustomerName}" 
+                })
+                .ToList();
+
+            ViewData["CustomerId"] = new SelectList(customerList, "CustomerId", "DisplayName", schedule.CustomerId);
             return View(schedule);
         }
 
@@ -1077,14 +1130,22 @@ namespace DeliveryControl.Controllers
             {
                 return NotFound();
             }
-            ViewData["CustomerId"] = new SelectList(_context.Customers.Where(c => c.IsActive), "CustomerId", "CustomerName", schedule.CustomerId);
+            var customerList = _context.Customers
+                .Where(c => c.IsActive)
+                .Select(c => new { 
+                    c.CustomerId, 
+                    DisplayName = $"{c.CustomerCode} - {c.CustomerName}" 
+                })
+                .ToList();
+
+            ViewData["CustomerId"] = new SelectList(customerList, "CustomerId", "DisplayName", schedule.CustomerId);
             return View(schedule);
         }
 
         // POST: DeliverySchedules/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("ScheduleId,ScheduleNumber,CustomerId,ScheduledDate,Route,Cycle,EnterDockTime,ActualEnterDockTime,PickupTime,ETD,Range,SKID,Area,ActualStartTime,ActualEndTime,VehicleNumber,DriverName,DriverPhone,Notes,Status,CreatedDate,CreatedBy")] DeliverySchedule schedule)
+        public async Task<IActionResult> Edit(int id, [Bind("ScheduleId,ScheduleNumber,CustomerId,ScheduledDate,Route,Cycle,EnterDockTime,ActualEnterDockTime,PickupTime,ETD,Range,SKID,Area,ActualStartTime,ActualEndTime,ActualPickupTime,VehicleNumber,DriverName,DriverPhone,Notes,Status,CreatedDate,CreatedBy,TotalTargetQuantity,TotalActualQuantity")] DeliverySchedule schedule)
         {
             if (id != schedule.ScheduleId)
             {
@@ -1135,7 +1196,15 @@ namespace DeliveryControl.Controllers
                 }
                 return RedirectToAction(nameof(Index));
             }
-            ViewData["CustomerId"] = new SelectList(_context.Customers.Where(c => c.IsActive), "CustomerId", "CustomerName", schedule.CustomerId);
+            var customerList = _context.Customers
+                .Where(c => c.IsActive)
+                .Select(c => new { 
+                    c.CustomerId, 
+                    DisplayName = $"{c.CustomerCode} - {c.CustomerName}" 
+                })
+                .ToList();
+
+            ViewData["CustomerId"] = new SelectList(customerList, "CustomerId", "DisplayName", schedule.CustomerId);
             return View(schedule);
         }
 
@@ -1253,15 +1322,38 @@ namespace DeliveryControl.Controllers
         {
             var schedule = await _context.DeliverySchedules
                 .Include(s => s.DeliveryItems)
+                .Include(s => s.PreparationRecords)
                 .FirstOrDefaultAsync(s => s.ScheduleId == id);
 
             if (schedule != null)
             {
                 try
                 {
-                    // DeliveryItems akan otomatis terhapus karena OnDelete(DeleteBehavior.Cascade)
+                    // 1. Hapus delivery items (manual backup jika cascade terhambat)
+                    if (schedule.DeliveryItems != null && schedule.DeliveryItems.Any())
+                    {
+                        _context.DeliveryItems.RemoveRange(schedule.DeliveryItems);
+                    }
+
+                    // 2. Hapus preparation records
+                    if (schedule.PreparationRecords != null && schedule.PreparationRecords.Any())
+                    {
+                        _context.PreparationRecords.RemoveRange(schedule.PreparationRecords);
+                    }
+
+                    // 3. Hapus schedule utama
                     _context.DeliverySchedules.Remove(schedule);
                     await _context.SaveChangesAsync();
+
+                    // Notify Dashboard via SignalR
+                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    {
+                        ScheduleNumber = schedule.ScheduleNumber,
+                        Action = "delete",
+                        Message = $"Schedule {schedule.ScheduleNumber} telah dihapus",
+                        Timestamp = DateTime.Now
+                    });
+
                     TempData["SuccessMessage"] = "Schedule berhasil dihapus!";
                 }
                 catch (DbUpdateException ex)
@@ -1307,35 +1399,56 @@ namespace DeliveryControl.Controllers
                     return RedirectToAction(nameof(Index));
                 }
 
-                // Load schedules dengan delivery items
-                var schedulesToDelete = await _context.DeliverySchedules
-                    .Include(s => s.DeliveryItems)
-                    .Where(s => ids.Contains(s.ScheduleId))
-                    .ToListAsync();
+                // Load schedules dengan dependent items
+        var schedulesToDelete = await _context.DeliverySchedules
+            .Include(s => s.DeliveryItems)
+            .Include(s => s.PreparationRecords)
+            .Where(s => ids.Contains(s.ScheduleId))
+            .ToListAsync();
 
-                if (!schedulesToDelete.Any())
+        if (!schedulesToDelete.Any())
+        {
+            TempData["ErrorMessage"] = "Schedule tidak ditemukan!";
+            return RedirectToAction(nameof(Index));
+        }
+
+        int totalItems = schedulesToDelete.Sum(s => s.DeliveryItems?.Count ?? 0);
+        int totalPrepRecords = schedulesToDelete.Sum(s => s.PreparationRecords?.Count ?? 0);
+        int deletedSchedules = schedulesToDelete.Count;
+
+        // 1. Hapus delivery items terlebih dahulu
+        var allDeliveryItems = schedulesToDelete
+            .Where(s => s.DeliveryItems != null && s.DeliveryItems.Any())
+            .SelectMany(s => s.DeliveryItems)
+            .ToList();
+
+        if (allDeliveryItems.Any())
+        {
+            _context.DeliveryItems.RemoveRange(allDeliveryItems);
+        }
+
+        // 2. Hapus preparation records
+        var allPrepRecords = schedulesToDelete
+            .Where(s => s.PreparationRecords != null && s.PreparationRecords.Any())
+            .SelectMany(s => s.PreparationRecords)
+            .ToList();
+
+        if (allPrepRecords.Any())
+        {
+            _context.PreparationRecords.RemoveRange(allPrepRecords);
+        }
+
+        // 3. Hapus schedules
+        _context.DeliverySchedules.RemoveRange(schedulesToDelete);
+        await _context.SaveChangesAsync();
+
+                // Notify Dashboard via SignalR
+                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
                 {
-                    TempData["ErrorMessage"] = "Schedule tidak ditemukan!";
-                    return RedirectToAction(nameof(Index));
-                }
-
-                int totalItems = schedulesToDelete.Sum(s => s.DeliveryItems?.Count ?? 0);
-                int deletedSchedules = schedulesToDelete.Count;
-
-                // Hapus delivery items terlebih dahulu (jika ada)
-                var allDeliveryItems = schedulesToDelete
-                    .Where(s => s.DeliveryItems != null && s.DeliveryItems.Any())
-                    .SelectMany(s => s.DeliveryItems)
-                    .ToList();
-
-                if (allDeliveryItems.Any())
-                {
-                    _context.DeliveryItems.RemoveRange(allDeliveryItems);
-                }
-
-                // Hapus schedules
-                _context.DeliverySchedules.RemoveRange(schedulesToDelete);
-                await _context.SaveChangesAsync();
+                    Action = "bulk_delete",
+                    Message = $"Berhasil menghapus {deletedSchedules} schedule dan {totalItems} item",
+                    Timestamp = DateTime.Now
+                });
 
                 TempData["SuccessMessage"] = $"✅ Berhasil menghapus {deletedSchedules} schedule{(deletedSchedules > 1 ? "" : "")} dan {totalItems} delivery item{(totalItems != 1 ? "s" : "")}!";
             }
@@ -1367,9 +1480,10 @@ namespace DeliveryControl.Controllers
             worksheet.Cell(1, 7).Value = "Range";
             worksheet.Cell(1, 8).Value = "SKID";
             worksheet.Cell(1, 9).Value = "AREA";
+            worksheet.Cell(1, 10).Value = "QTY TARGET";
 
             // Style header
-            var headerRange = worksheet.Range(1, 1, 1, 9);
+            var headerRange = worksheet.Range(1, 1, 1, 10);
             headerRange.Style.Font.Bold = true;
             headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
             headerRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
@@ -1384,6 +1498,7 @@ namespace DeliveryControl.Controllers
             worksheet.Cell(2, 7).Value = "10-15 KM";
             worksheet.Cell(2, 8).Value = 10;
             worksheet.Cell(2, 9).Value = "Area 1";
+            worksheet.Cell(2, 10).Value = 100;
 
             // Auto fit columns
             worksheet.Columns().AdjustToContents();
@@ -1416,6 +1531,7 @@ namespace DeliveryControl.Controllers
             {
                 var schedules = new List<DeliverySchedule>();
                 var errors = new List<string>();
+                var batchSequences = new Dictionary<string, int>();
                 var customers = await _context.Customers.ToDictionaryAsync(c => c.CustomerCode, c => c.CustomerId);
 
                 using var stream = new MemoryStream();
@@ -1440,6 +1556,7 @@ namespace DeliveryControl.Controllers
                         var range = row.Cell(7).GetString().Trim();
                         var skidStr = row.Cell(8).GetString().Trim();
                         var area = row.Cell(9).GetString().Trim();
+                        var targetQtyStr = row.Cell(10).GetString().Trim();
 
                         // Validasi customer
                         if (!customers.ContainsKey(custCode))
@@ -1470,15 +1587,29 @@ namespace DeliveryControl.Controllers
                             etd = etdParsed;
                         }
 
-                        // Parse SKID
-                        int? skid = null;
-                        if (!string.IsNullOrEmpty(skidStr) && int.TryParse(skidStr, out var skidParsed))
+                        // Get SKID
+                        string? skid = string.IsNullOrWhiteSpace(skidStr) ? null : skidStr;
+
+                        // Parse Target Qty
+                        decimal targetQty = 0;
+                        if (!string.IsNullOrEmpty(targetQtyStr) && decimal.TryParse(targetQtyStr, out var targetParsed))
                         {
-                            skid = skidParsed;
+                            targetQty = targetParsed;
                         }
 
                         // Generate schedule number
-                        var scheduleNumber = $"SCH-{DateTime.Now:yyyyMMdd}-{rowNumber:000}";
+                        var scheduledDate = etd?.Date ?? DateTime.Today;
+                        var prefix = $"SCH-{scheduledDate:yyyyMMdd}";
+                        
+                        // We use a local sequence counter for the batch to avoid duplicate IDs 
+                        // before they are committed to the DB
+                        if (!batchSequences.ContainsKey(prefix))
+                        {
+                            batchSequences[prefix] = await GetNextSequenceInternal(scheduledDate);
+                        }
+                        
+                        var sequence = batchSequences[prefix]++;
+                        var scheduleNumber = $"{prefix}{sequence:D3}";
 
                         var schedule = new DeliverySchedule
                         {
@@ -1492,6 +1623,7 @@ namespace DeliveryControl.Controllers
                             Range = range,
                             SKID = skid,
                             Area = area,
+                            TotalTargetQuantity = targetQty,
                             ScheduledDate = etd?.Date ?? DateTime.Today,
                             Status = "Scheduled",
                             CreatedDate = DateTime.Now,
@@ -1516,6 +1648,15 @@ namespace DeliveryControl.Controllers
                 {
                     _context.DeliverySchedules.AddRange(schedules);
                     await _context.SaveChangesAsync();
+
+                    // Notify Dashboard via SignalR
+                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    {
+                        Action = "import",
+                        Message = $"Berhasil import {schedules.Count} schedule dari Excel",
+                        Timestamp = DateTime.Now
+                    });
+
                     TempData["SuccessMessage"] = $"Berhasil import {schedules.Count} schedule dari Excel!";
                 }
                 else
@@ -1529,6 +1670,102 @@ namespace DeliveryControl.Controllers
             }
 
             return RedirectToAction(nameof(Index));
+        }
+        // GET: DeliverySchedules/ExportExcel
+        public async Task<IActionResult> ExportExcel(DateTime? startDate, DateTime? endDate, int? customerId, string status)
+        {
+            var schedules = _context.DeliverySchedules
+                .Include(d => d.Customer)
+                .AsNoTracking()
+                .AsQueryable();
+
+            if (startDate.HasValue) schedules = schedules.Where(s => s.ScheduledDate >= startDate.Value);
+            if (endDate.HasValue) schedules = schedules.Where(s => s.ScheduledDate <= endDate.Value);
+            if (customerId.HasValue) schedules = schedules.Where(s => s.CustomerId == customerId.Value);
+            if (!string.IsNullOrEmpty(status)) schedules = schedules.Where(s => s.Status == status);
+
+            var data = await schedules.OrderBy(s => s.ScheduledDate).ThenBy(s => s.ETD).ToListAsync();
+
+            using var workbook = new ClosedXML.Excel.XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Delivery Schedules");
+
+            // Headers
+            string[] headers = { "SCH NO", "DATE", "CUSTOMER", "ROUTE", "CYCLE", "DOCK IN", "PICKUP", "ETD", "QTY TARGET", "QTY ACTUAL", "STATUS" };
+            for (int i = 0; i < headers.Length; i++)
+            {
+                var cell = worksheet.Cell(1, i + 1);
+                cell.Value = headers[i];
+                cell.Style.Font.Bold = true;
+                cell.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
+            }
+
+            // Data
+            int row = 2;
+            foreach (var item in data)
+            {
+                worksheet.Cell(row, 1).Value = item.ScheduleNumber;
+                worksheet.Cell(row, 2).Value = item.ScheduledDate.ToString("yyyy-MM-dd");
+                worksheet.Cell(row, 3).Value = item.Customer?.CustomerName ?? "-";
+                worksheet.Cell(row, 4).Value = item.Route;
+                worksheet.Cell(row, 5).Value = item.Cycle;
+                worksheet.Cell(row, 6).Value = item.EnterDockTime?.ToString("HH:mm") ?? "-";
+                worksheet.Cell(row, 7).Value = item.PickupTime?.ToString("HH:mm") ?? "-";
+                worksheet.Cell(row, 8).Value = item.ETD?.ToString("HH:mm") ?? "-";
+                worksheet.Cell(row, 9).Value = (double)item.TotalTargetQuantity;
+                worksheet.Cell(row, 10).Value = (double)item.TotalActualQuantity;
+                worksheet.Cell(row, 11).Value = item.Status;
+                row++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"DeliverySchedules_{DateTime.Now:yyyyMMdd}.xlsx");
+        }
+        /// <summary>
+        /// API endpoint untuk mendapatkan data tabel history schedule terbaru via AJAX.
+        /// Mendukung filter yang sama dengan Index.
+        /// </summary>
+        [HttpGet]
+        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+        public async Task<IActionResult> GetHistoryScheduleTableData(DateTime? startDate, DateTime? endDate, int? customerId, string? status)
+        {
+            // Default filter - tampilkan schedule hari ini jika tidak ada filter (konsisten dengan Index)
+            if (!startDate.HasValue && !endDate.HasValue)
+            {
+                startDate = DateTime.Today;
+                endDate = DateTime.Today.AddDays(7);
+            }
+
+            var query = _context.DeliverySchedules
+                .AsNoTracking()
+                .Include(d => d.Customer)
+                .AsQueryable();
+
+            if (startDate.HasValue)
+            {
+                query = query.Where(d => d.ScheduledDate.Date >= startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                query = query.Where(d => d.ScheduledDate.Date <= endDate.Value.Date);
+            }
+            if (customerId.HasValue)
+            {
+                query = query.Where(d => d.CustomerId == customerId.Value);
+            }
+            if (!string.IsNullOrEmpty(status))
+            {
+                query = query.Where(d => d.Status == status);
+            }
+
+            var schedules = await query
+                .OrderBy(s => s.ScheduledDate)
+                .ThenBy(s => s.ETD ?? s.PickupTime ?? s.EnterDockTime ?? DateTime.MaxValue)
+                .ToListAsync();
+
+            return PartialView("_HistoryScheduleTablePartial", schedules);
         }
     }
 }

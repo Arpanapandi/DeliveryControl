@@ -23,10 +23,21 @@ namespace DeliveryControl.Data
         public DbSet<ActivityLog> ActivityLogs { get; set; }
         public DbSet<PoolingRecord> PoolingRecords { get; set; }
         public DbSet<PreparationRecord> PreparationRecords { get; set; }
+        public DbSet<FgMapping> FgMappings { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // Configure FgMapping
+            modelBuilder.Entity<FgMapping>(entity =>
+            {
+                entity.HasIndex(e => e.ItemId).IsUnique();
+                entity.HasOne(e => e.Item)
+                    .WithOne()
+                    .HasForeignKey<FgMapping>(e => e.ItemId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 
 
 
@@ -76,6 +87,15 @@ namespace DeliveryControl.Data
                     .OnDelete(DeleteBehavior.Restrict);
 
                 entity.HasIndex(e => new { e.ScheduleId, e.ItemId });
+            });
+
+            // Configure PreparationRecord
+            modelBuilder.Entity<PreparationRecord>(entity =>
+            {
+                entity.HasOne(pr => pr.DeliverySchedule)
+                    .WithMany(ds => ds.PreparationRecords)
+                    .HasForeignKey(pr => pr.ScheduleId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // Configure User

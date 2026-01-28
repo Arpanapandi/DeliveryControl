@@ -8,15 +8,12 @@ namespace DeliveryControl.Models
         [Key]
         public int PoolingId { get; set; }
 
-        [Required]
         [StringLength(20)]
         public string Plant { get; set; } = string.Empty; // Molded, Hose, RVI
 
-        [Required]
         [StringLength(5)]
         public string Rack { get; set; } = string.Empty; // A - K
 
-        [Required]
         public int Column { get; set; } // 1 - 20
 
         [Required(ErrorMessage = "Tag wajib diisi")]

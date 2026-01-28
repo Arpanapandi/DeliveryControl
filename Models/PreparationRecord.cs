@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DeliveryControl.Models
 {
@@ -22,6 +23,11 @@ namespace DeliveryControl.Models
         [Required(ErrorMessage = "Kanban wajib diisi")]
         [StringLength(100)]
         public string Kanban { get; set; } = string.Empty;
+
+        public int? ScheduleId { get; set; }
+
+        [ForeignKey("ScheduleId")]
+        public virtual DeliverySchedule? DeliverySchedule { get; set; }
 
         public DateTime CreatedDate { get; set; } = DateTime.Now;
 

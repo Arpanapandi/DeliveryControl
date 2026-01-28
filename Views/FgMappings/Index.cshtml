@@ -1,0 +1,90 @@
+@model IEnumerable<DeliveryControl.Models.FgMapping>
+
+@{
+    ViewData["Title"] = "Mapping FG";
+}
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h2 class="fw-bold"><i class="bi bi-geo-alt-fill text-primary"></i> Mapping FG</h2>
+        <p class="text-muted">Kelola pemetaan rak dan target stok barang.</p>
+    </div>
+    <div class="col-md-6 text-end">
+        <a asp-action="Create" class="btn btn-primary px-4 py-2 shadow-sm rounded-pill">
+            <i class="bi bi-plus-circle me-1"></i> Tambah Mapping
+        </a>
+    </div>
+</div>
+
+<div class="cyber-card shadow-lg p-0">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 custom-master-table">
+            <thead class="bg-dark text-white">
+                <tr>
+                    <th class="ps-4">Part Number</th>
+                    <th>Item Name</th>
+                    <th>Location (Plant/Rak/No)</th>
+                    <th class="text-center">Lot Size</th>
+                    <th class="text-center">Min Stock</th>
+                    <th class="text-center">Max Stock</th>
+                    <th class="text-end pe-4">Aksi</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model) {
+                    <tr>
+                        <td class="ps-4">
+                            <span class="fw-bold text-primary">@item.Item?.ItemCode</span>
+                        </td>
+                        <td>@item.Item?.ItemName</td>
+                        <td>
+                            <span class="badge bg-secondary-subtle text-secondary me-1">@item.Plant</span>
+                            <span class="badge bg-primary-subtle text-primary me-1">Rak @item.Rack</span>
+                            <span class="badge bg-info-subtle text-info">No @item.NoRack</span>
+                        </td>
+                        <td class="text-center fw-bold text-info">@item.QtyLot</td>
+                        <td class="text-center">
+                            <span class="badge bg-danger">@item.MinStock</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-success">@item.MaxStock</span>
+                        </td>
+                        <td class="text-end pe-4">
+                            <div class="btn-group">
+                                <a asp-action="Edit" asp-route-id="@item.FgMappingId" class="btn btn-sm btn-outline-warning rounded-0 border-0" title="Edit">
+                                    <i class="bi bi-pencil-fill"></i>
+                                </a>
+                                <a asp-action="Delete" asp-route-id="@item.FgMappingId" class="btn btn-sm btn-outline-danger rounded-0 border-0" title="Hapus">
+                                    <i class="bi bi-trash-fill"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    .custom-master-table thead th {
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 1px;
+        padding: 15px 12px;
+        border-bottom: 2px solid rgba(255,255,255,0.1);
+    }
+    .custom-master-table tbody td {
+        padding: 18px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .custom-master-table tbody tr:hover {
+        background-color: rgba(59, 130, 246, 0.03);
+    }
+    .badge {
+        font-size: 0.8rem;
+        padding: 6px 12px;
+        border-radius: 6px;
+    }
+</style>

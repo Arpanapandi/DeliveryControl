@@ -3,6 +3,7 @@ using System;
 using DeliveryControl.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DeliveryControl.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260128070228_ChangeSkidToString")]
+    partial class ChangeSkidToString
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.0");
@@ -146,7 +149,7 @@ namespace DeliveryControl.Migrations
                         new
                         {
                             CustomerId = 1,
-                            CreatedDate = new DateTime(2026, 1, 28, 16, 30, 58, 775, DateTimeKind.Local).AddTicks(4569),
+                            CreatedDate = new DateTime(2026, 1, 28, 14, 2, 28, 437, DateTimeKind.Local).AddTicks(1310),
                             CustomerCode = "CUST001",
                             CustomerName = "PT ABC Manufacturing",
                             IsActive = true,
@@ -156,7 +159,7 @@ namespace DeliveryControl.Migrations
                         new
                         {
                             CustomerId = 2,
-                            CreatedDate = new DateTime(2026, 1, 28, 16, 30, 58, 775, DateTimeKind.Local).AddTicks(4572),
+                            CreatedDate = new DateTime(2026, 1, 28, 14, 2, 28, 437, DateTimeKind.Local).AddTicks(1312),
                             CustomerCode = "CUST002",
                             CustomerName = "PT XYZ Industries",
                             IsActive = true,
@@ -333,57 +336,6 @@ namespace DeliveryControl.Migrations
                     b.ToTable("DeliverySchedules");
                 });
 
-            modelBuilder.Entity("DeliveryControl.Models.FgMapping", b =>
-                {
-                    b.Property<int>("FgMappingId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedDate")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("ItemId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("MaxStock")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("MinStock")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("NoRack")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Plant")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("QtyLot")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Rack")
-                        .IsRequired()
-                        .HasMaxLength(5)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("UpdatedDate")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("FgMappingId");
-
-                    b.HasIndex("ItemId")
-                        .IsUnique();
-
-                    b.ToTable("FgMappings");
-                });
-
             modelBuilder.Entity("DeliveryControl.Models.Item", b =>
                 {
                     b.Property<int>("ItemId")
@@ -445,7 +397,7 @@ namespace DeliveryControl.Migrations
                         {
                             ItemId = 1,
                             Category = "Raw Material",
-                            CreatedDate = new DateTime(2026, 1, 28, 16, 30, 58, 775, DateTimeKind.Local).AddTicks(4679),
+                            CreatedDate = new DateTime(2026, 1, 28, 14, 2, 28, 437, DateTimeKind.Local).AddTicks(1422),
                             Description = "Raw material untuk produksi",
                             IsActive = true,
                             ItemCode = "ITM001",
@@ -459,7 +411,7 @@ namespace DeliveryControl.Migrations
                         {
                             ItemId = 2,
                             Category = "Finished Goods",
-                            CreatedDate = new DateTime(2026, 1, 28, 16, 30, 58, 775, DateTimeKind.Local).AddTicks(4682),
+                            CreatedDate = new DateTime(2026, 1, 28, 14, 2, 28, 437, DateTimeKind.Local).AddTicks(1425),
                             Description = "Produk jadi siap kirim",
                             IsActive = true,
                             ItemCode = "ITM002",
@@ -473,7 +425,7 @@ namespace DeliveryControl.Migrations
                         {
                             ItemId = 3,
                             Category = "Packaging",
-                            CreatedDate = new DateTime(2026, 1, 28, 16, 30, 58, 775, DateTimeKind.Local).AddTicks(4684),
+                            CreatedDate = new DateTime(2026, 1, 28, 14, 2, 28, 437, DateTimeKind.Local).AddTicks(1428),
                             Description = "Material packaging",
                             IsActive = true,
                             ItemCode = "ITM003",
@@ -682,17 +634,6 @@ namespace DeliveryControl.Migrations
                     b.Navigation("Customer");
                 });
 
-            modelBuilder.Entity("DeliveryControl.Models.FgMapping", b =>
-                {
-                    b.HasOne("DeliveryControl.Models.Item", "Item")
-                        .WithOne()
-                        .HasForeignKey("DeliveryControl.Models.FgMapping", "ItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Item");
-                });
-
             modelBuilder.Entity("DeliveryControl.Models.PoolingRecord", b =>
                 {
                     b.HasOne("DeliveryControl.Models.Item", "Item")
@@ -705,9 +646,8 @@ namespace DeliveryControl.Migrations
             modelBuilder.Entity("DeliveryControl.Models.PreparationRecord", b =>
                 {
                     b.HasOne("DeliveryControl.Models.DeliverySchedule", "DeliverySchedule")
-                        .WithMany("PreparationRecords")
-                        .HasForeignKey("ScheduleId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .WithMany()
+                        .HasForeignKey("ScheduleId");
 
                     b.Navigation("DeliverySchedule");
                 });
@@ -720,8 +660,6 @@ namespace DeliveryControl.Migrations
             modelBuilder.Entity("DeliveryControl.Models.DeliverySchedule", b =>
                 {
                     b.Navigation("DeliveryItems");
-
-                    b.Navigation("PreparationRecords");
                 });
 
             modelBuilder.Entity("DeliveryControl.Models.Item", b =>

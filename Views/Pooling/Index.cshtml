@@ -16,64 +16,14 @@
             <h5 class="mb-4 fw-bold border-bottom pb-2"><i class="bi bi-pencil-square me-2"></i> Form Input Pooling</h5>
             
             <div class="mx-auto" style="max-width: 800px;">
-                <!-- 1. Pilih Plant -->
+                <!-- 1. Identifikasi Produk (Tag & Label) -->
                 <div class="mb-4">
-                    <label class="form-label d-block fw-bold text-primary"><i class="bi bi-building me-2"></i> 1. Pilih Plant</label>
-                    <div class="btn-group w-100" role="group">
-                        <input type="radio" class="btn-check" name="plant" id="plantMolded" value="Molded" checked>
-                        <label class="btn btn-outline-primary py-3" for="plantMolded">MOLDED</label>
-
-                        <input type="radio" class="btn-check" name="plant" id="plantHose" value="Hose">
-                        <label class="btn btn-outline-primary py-3" for="plantHose">HOSE</label>
-
-                        <input type="radio" class="btn-check" name="plant" id="plantRVI" value="RVI">
-                        <label class="btn btn-outline-primary py-3" for="plantRVI">RVI</label>
-                    </div>
-                </div>
-
-                <hr class="border-secondary opacity-25 my-4">
-
-                <!-- 2. Pilih Rak (A-K) -->
-                <div class="mb-4">
-                    <label class="form-label fw-bold text-primary"><i class="bi bi-grid-3x3 me-2"></i> 2. Pilih Rak (A-K)</label>
-                    <div class="rack-segmented-bar d-flex mb-3">
-                        @foreach (var letter in "ABCDEFGHIJK")
-                        {
-                            <div class="rack-segment" data-rack="@letter">@letter</div>
-                        }
-                    </div>
-                </div>
-
-                <!-- 3. Pilih Kolom (Dropdown) -->
-                <div class="mb-4" id="columnSelectContainer" style="display: none;">
-                    <label class="form-label fw-bold text-primary"><i class="bi bi-list-ol me-2"></i> 3. Pilih Kolom</label>
-                    <select class="form-select py-3 bg-dark text-white border-primary border-opacity-25" id="columnSelect">
-                        <option value="">-- Click to Select Column --</option>
-                        @for (int i = 1; i <= 20; i++)
-                        {
-                            <option value="@i">Lokasi Kolom @i</option>
-                        }
-                    </select>
-                </div>
-
-
-
-                <!-- Visual Validation (Optional Check) -->
-                <div id="visualWrapper" style="display: none;" class="mb-4">
-                    <div class="p-4 bg-dark-subtle rounded border border-primary border-opacity-10">
-                        <small class="text-muted d-block mb-3 text-center text-uppercase fw-bold">Visual Mapping Confirmation</small>
-                        <div id="visualGrid" class="row g-2 justify-content-center">
-                            <!-- Generated via JS -->
-                        </div>
-                    </div>
-                </div>
-
-                <hr class="border-secondary opacity-25 my-4">
-
-                <!-- 4. Identifikasi Produk (Tag & Label) -->
-                <div class="mb-4">
-                    <label class="form-label fw-bold text-primary mb-3"><i class="bi bi-qr-code-scan me-2"></i> 4. Identifikasi Produk</label>
+                    <label class="form-label fw-bold text-primary mb-3 text-center d-block fs-4"><i class="bi bi-qr-code-scan me-2"></i> Identifikasi Produk</label>
                     
+                    <div class="alert alert-info border-0 bg-primary bg-opacity-10 text-center mb-4">
+                        <small><i class="bi bi-info-circle me-1"></i> Lokasi rak akan ditentukan otomatis berdasarkan pemetaan <strong>Mapping FG</strong>.</small>
+                    </div>
+
                     <!-- Tag Input Group -->
                     <div class="mb-4">
                         <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input Tag <span class="text-danger">*</span></label>
@@ -156,46 +106,6 @@
     <script>
         $(document).ready(function () {
             let activeInputId = null;
-            let currentRack = null;
-
-            // Rack Selection -> Show Column Dropdown
-            $('.rack-segment').click(function() {
-                $('.rack-segment').removeClass('active');
-                $(this).addClass('active');
-                
-                currentRack = $(this).data('rack');
-                $('#columnSelectContainer').fadeIn();
-                $('#columnSelect').val(''); // Reset column selection
-                $('#visualWrapper').fadeOut();
-            });
-
-            // Column Selection -> Show Visual Mapping (Optional)
-            $('#columnSelect').change(function() {
-                const column = $(this).val();
-                if(!column) {
-                    $('#visualWrapper').fadeOut();
-                    return;
-                }
-                
-                $('#visualWrapper').fadeIn();
-                generateVisualGrid(currentRack, column);
-            });
-
-            function generateVisualGrid(rack, selectedColumn) {
-                let html = '';
-                for(let i=1; i<=20; i++) {
-                    const activeClass = (i == selectedColumn) ? 'bg-primary text-white border-primary' : 'bg-dark text-muted opacity-50';
-                    const glowClass = (i == selectedColumn) ? 'selected-glow' : '';
-                    html += `
-                        <div class="col-auto">
-                            <div class="visual-col-box ${activeClass} ${glowClass}">
-                                ${i}
-                            </div>
-                        </div>
-                    `;
-                }
-                $('#visualGrid').html(html);
-            }
 
             // Modal handling
             const scannerModalElement = document.getElementById('scannerModal');
@@ -205,16 +115,13 @@
             let html5QrCode = null;
 
             $(scannerModalElement).on('shown.bs.modal', function () {
-                console.log("Modal shown, starting Html5Qrcode...");
                 initScanner();
             });
 
             $(scannerModalElement).on('hidden.bs.modal', function () {
-                console.log("Modal hidden, stopping Html5Qrcode...");
                 stopScanner();
             });
 
-            // Re-added missing click handler
             $('.btn-scan-trigger').click(function() {
                 activeInputId = $(this).data('target');
                 const fieldName = (activeInputId || "").replace('Input', '').toUpperCase();
@@ -224,15 +131,12 @@
 
             $('#btnRestartCamera').click(function(e) {
                 e.preventDefault();
-                console.log("Manual restart triggered.");
                 stopScanner().then(() => initScanner());
             });
 
             function initScanner() {
-                // Check for Secure Context
                 if (!window.isSecureContext) {
-                    $('#scanner-status').html('<span class="text-danger">Error: HTTPS diperlukan</span><br><small style="font-size:0.6rem">Akses via IP wajib menggunakan HTTPS untuk kamera.</small>');
-                    console.error("Camera access requires a Secure Context (HTTPS or localhost).");
+                    $('#scanner-status').html('<span class="text-danger">Error: HTTPS diperlukan</span>');
                     return;
                 }
 
@@ -251,27 +155,12 @@
                 html5QrCode.start(
                     { facingMode: "environment" }, 
                     config,
-                    (decodedText) => {
-                        console.log("Scan Result:", decodedText);
-                        onDetected(decodedText);
-                    },
-                    (errorMessage) => {
-                        // ignore noise
-                    }
+                    (decodedText) => onDetected(decodedText),
+                    (errorMessage) => {}
                 ).then(() => {
-                    $('#scanner-status').text("Scanner Aktif (v8)");
+                    $('#scanner-status').text("Scanner Aktif");
                 }).catch(err => {
-                    console.error("Html5Qrcode Error:", err);
                     $('#scanner-status').text("Gagal: " + err);
-                    
-                    // Fallback to any camera
-                    html5QrCode.start(
-                        { facingMode: "user" }, 
-                        config,
-                        (decodedText) => onDetected(decodedText)
-                    ).catch(err2 => {
-                        $('#scanner-status').text("Kamera Gagal Akses");
-                    });
                 });
             }
 
@@ -287,7 +176,6 @@
                 if (html5QrCode && html5QrCode.isScanning) {
                     try {
                         await html5QrCode.stop();
-                        console.log("Scanner Stopped.");
                     } catch (err) {
                         console.warn("Stop Error:", err);
                     }
@@ -295,30 +183,23 @@
             }
 
             // Save Data (AJAX)
-            // Save Data (AJAX)
             $('#btnSavePooling').click(function () {
-                const plant = $('input[name="plant"]:checked').val();
-
-                const rack = $('.rack-segment.active').data('rack');
-                const column = $('#columnSelect').val();
                 const tag = $('#tagInput').val();
                 const label = $('#labelInput').val();
 
-                if (!rack || !column || !tag || !label) {
-                    alert('Lengkapi semua data yang WAJIB (Rack, Column, Tag, Label)!');
+                if (!tag || !label) {
+                    alert('Lengkapi data Tag dan Label!');
                     return;
                 }
 
                 const data = {
-                    Plant: plant,
-                    Rack: rack,
-                    Column: parseInt(column),
-                    Tag: tag,
-                    Label: label,
+                    Tag: tag.trim(),
+                    Label: label.trim(),
                     Quantity: 1
                 };
 
-                $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Menyimpan...');
+                const $btn = $(this);
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Menyimpan...');
 
                 $.ajax({
                     url: '/Pooling/Save',
@@ -328,11 +209,7 @@
                     success: function (response) {
                         if (response.success) {
                             alert('SUKSES: ' + response.message);
-                            // Reset location elements but NOT plant
                             $('#tagInput, #labelInput').val('');
-                            $('#columnSelect').val('');
-                            $('.rack-segment').removeClass('active');
-                            $('#columnSelectContainer, #visualWrapper').hide();
                         } else {
                             alert('GAGAL: ' + response.message);
                         }
@@ -341,7 +218,7 @@
                         alert('Terjadi kesalahan koneksi ke server.');
                     },
                     complete: function() {
-                        $('#btnSavePooling').prop('disabled', false).html('<i class="bi bi-cloud-arrow-up-fill me-2"></i> SIMPAN DATA POOLING');
+                        $btn.prop('disabled', false).html('<i class="bi bi-cloud-arrow-up-fill me-2"></i> SIMPAN DATA POOLING');
                     }
                 });
             });

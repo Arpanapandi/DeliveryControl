@@ -255,7 +255,6 @@ namespace DeliveryControl.Controllers
             return View(schedule);
         }
 
-        // POST: Preparation/QuickEnterDock/5 - Quick action untuk konfirmasi masuk dock (now)
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> QuickEnterDock(int id)
@@ -306,6 +305,70 @@ namespace DeliveryControl.Controllers
             });
 
             TempData["SuccessMessage"] = $"✅ Masuk dock dikonfirmasi pada {enterDockTime:HH:mm}!";
+            return RedirectToAction(nameof(Index), new { selectedDate = redirectDate });
+        }
+
+        // POST: Preparation/ConfirmPickup/5 - Quick action untuk konfirmasi keberangkatan truk (Pickup)
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ConfirmPickup(int id)
+        {
+            var schedule = await _context.DeliverySchedules.FindAsync(id);
+
+            if (schedule == null)
+            {
+                return NotFound();
+            }
+
+            if (schedule.ActualPickupTime.HasValue)
+            {
+                TempData["ErrorMessage"] = "Schedule ini sudah dikonfirmasi Pickup!";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var pickupTime = DateTime.Now;
+            schedule.ActualPickupTime = pickupTime;
+            schedule.Status = "In Progress"; // Jika belum In Progress
+            schedule.UpdatedDate = pickupTime;
+            schedule.UpdatedBy = User.Identity?.Name ?? "Preparation";
+
+            await _context.SaveChangesAsync();
+
+            // Load customer data untuk SignalR message
+            await _context.Entry(schedule).Reference(s => s.Customer).LoadAsync();
+
+            // Log activity
+            await _logService.LogConfirm(
+                "Preparation",
+                schedule.ScheduleNumber,
+                schedule.ScheduleId,
+                $"Konfirmasi Pickup (Truk Berangkat) untuk {schedule.Customer?.CustomerName} pada {pickupTime:HH:mm}",
+                User.Identity?.Name ?? "Preparation"
+            );
+
+            // Broadcast update via SignalR
+            await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+            {
+                ScheduleNumber = schedule.ScheduleNumber,
+                Action = "pickup",
+                Message = $"Truk telah berangkat (Pickup) untuk {schedule.Customer?.CustomerName} pada {pickupTime:HH:mm}",
+                Timestamp = pickupTime
+            });
+
+            TempData["SuccessMessage"] = $"✅ Pickup berhasil dikonfirmasi pada {pickupTime:HH:mm}!";
+            return RedirectToActionResultOrCurrent(schedule);
+        }
+
+        private IActionResult RedirectToActionResultOrCurrent(DeliverySchedule schedule)
+        {
+            // Jika request datang dari referer dashboard, balik ke dashboard
+            var referer = Request.Headers["Referer"].ToString();
+            if (!string.IsNullOrEmpty(referer) && (referer.Contains("/Home") || referer.Contains("/DeliverySchedules")))
+            {
+                return Redirect(referer);
+            }
+            
+            var redirectDate = schedule.EnterDockTime?.Date ?? schedule.ScheduledDate;
             return RedirectToAction(nameof(Index), new { selectedDate = redirectDate });
         }
     }

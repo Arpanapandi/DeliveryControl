@@ -50,12 +50,22 @@ namespace DeliveryControl.Models
 
         // SKID - Jumlah SKID/Pallet
         [Display(Name = "SKID")]
-        public int? SKID { get; set; }
+        public string? SKID { get; set; }
 
         // AREA - Area tujuan atau area pengiriman
         [StringLength(100)]
         [Display(Name = "Area")]
         public string? Area { get; set; }
+
+        // Fields untuk integrasi Preparation
+        [Display(Name = "Total Target Quantity")]
+        public decimal TotalTargetQuantity { get; set; }
+
+        [Display(Name = "Total Actual Quantity")]
+        public decimal TotalActualQuantity { get; set; }
+
+        [Display(Name = "Actual Pickup Time")]
+        public DateTime? ActualPickupTime { get; set; }
 
         // Fields tambahan untuk tracking
         [Required(ErrorMessage = "Tanggal schedule wajib diisi")]
@@ -141,6 +151,8 @@ namespace DeliveryControl.Models
         public virtual Customer Customer { get; set; } = null!;
 
         public virtual ICollection<DeliveryItem> DeliveryItems { get; set; } = new List<DeliveryItem>();
+
+        public virtual ICollection<PreparationRecord> PreparationRecords { get; set; } = new List<PreparationRecord>();
     }
 }
 

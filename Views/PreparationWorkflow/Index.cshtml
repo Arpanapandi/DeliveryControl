@@ -1,3 +1,4 @@
+@model IEnumerable<DeliveryControl.Models.DeliverySchedule>
 @{
     ViewData["Title"] = "Preparation Gallery Checking";
 }
@@ -16,6 +17,29 @@
             <h5 class="mb-4 fw-bold border-bottom pb-2"><i class="bi bi-shield-check me-2"></i> Form Input Preparation</h5>
             
             <div class="mx-auto" style="max-width: 800px;">
+                <!-- 0. Pilih Schedule -->
+                <div class="mb-4">
+                    <label class="form-label d-block fw-bold text-primary"><i class="bi bi-calendar-check me-2"></i> 0. Pilih No. Schedule</label>
+                    <div class="custom-cyber-input-group mb-2">
+                        <div class="input-icon-left">
+                            <i class="bi bi-list-task"></i>
+                        </div>
+                        <select class="form-select cyber-field" id="scheduleSelect">
+                            <option value="">-- PILIH SCHEDULE DULU --</option>
+                            @foreach (var schedule in Model)
+                            {
+                                <option value="@schedule.ScheduleId">
+                                    @schedule.ScheduleNumber - @(schedule.Customer?.CustomerCode ?? "???") [@(schedule.Customer?.CustomerName ?? "No Name")] - DOCK: @(schedule.Customer?.Docking ?? "-") (@schedule.ScheduledDate.ToString("dd/MM"))
+                                </option>
+                            }
+                        </select>
+                        <button type="button" class="btn-scan-trigger" id="btnScanSchedule" title="Scan No. Schedule">
+                            <i class="bi bi-qr-code-scan"></i>
+                        </button>
+                    </div>
+                    <small class="text-info"><i class="bi bi-info-circle"></i> Pilih jadwal pengiriman sebelum mulai scan item.</small>
+                </div>
+
                 <!-- 1. Pilih Plant -->
                 <div class="mb-4">
                     <label class="form-label d-block fw-bold text-primary"><i class="bi bi-building me-2"></i> 1. Pilih Plant</label>
@@ -81,12 +105,15 @@
 
                 </div>
 
-                <div class="mt-5">
+                <div class="mt-5 pb-5"> <!-- Added pb-5 for extra space -->
                     <button type="button" class="btn btn-neon-success w-100 py-4 shadow-lg fs-5" id="btnSavePreparation">
                         <i class="bi bi-shield-check-fill me-2"></i> SIMPAN DATA PREPARATION
                     </button>
                 </div>
             </div>
+            
+            @* Extra spacer to help browser open dropdown downwards *@
+            <div style="height: 150px;"></div>
         </div>
     </div>
 </div>
@@ -152,10 +179,17 @@
             });
 
             // Re-added missing click handler
-            $('.btn-scan-trigger').click(function() {
+            $('.btn-scan-trigger').not('#btnScanSchedule').click(function() {
                 activeInputId = $(this).data('target');
                 const fieldName = (activeInputId || "").replace('Input', '').toUpperCase();
                 $('#currentScanningField').text("Scanning " + fieldName);
+                scannerModal.show();
+            });
+
+            // Special handler for Schedule Scanning
+            $('#btnScanSchedule').click(function() {
+                activeInputId = "scheduleSelect";
+                $('#currentScanningField').text("Scanning SCHEDULE NUMBER");
                 scannerModal.show();
             });
 
@@ -213,7 +247,25 @@
             }
 
             function onDetected(code) {
-                if (activeInputId) {
+                if (activeInputId === "scheduleSelect") {
+                    // Try to match scanned text with option values or text
+                    let found = false;
+                    $('#scheduleSelect option').each(function() {
+                        if ($(this).text().startsWith(code) || $(this).val() == code) {
+                            $('#scheduleSelect').val($(this).val());
+                            found = true;
+                            return false;
+                        }
+                    });
+                    
+                    if (!found) {
+                        alert("Schedule Number '" + code + "' tidak ditemukan di daftar aktif.");
+                    } else {
+                        $('#scheduleSelect').addClass('active-scan');
+                        setTimeout(() => $('#scheduleSelect').removeClass('active-scan'), 500);
+                    }
+                    scannerModal.hide();
+                } else if (activeInputId) {
                     $(`#${activeInputId}`).val(code).addClass('active-scan');
                     setTimeout(() => $(`#${activeInputId}`).removeClass('active-scan'), 500);
                     scannerModal.hide();
@@ -237,6 +289,13 @@
                 const tag = $('#tagInput').val();
                 const label = $('#labelInput').val();
                 const kanban = $('#kanbanInput').val();
+                const scheduleId = $('#scheduleSelect').val();
+                const scheduleText = $('#scheduleSelect option:selected').text();
+
+                if (!scheduleId) {
+                    alert('SILAKAN PILIH NO. SCHEDULE TERLEBIH DAHULU!');
+                    return;
+                }
 
                 if (!tag || !label || !kanban) {
                     alert('Lengkapi semua data yang WAJIB (Tag, Label, Kanban)!');
@@ -247,7 +306,8 @@
                     Plant: plant,
                     Tag: tag,
                     Label: label,
-                    Kanban: kanban
+                    Kanban: kanban,
+                    ScheduleId: parseInt(scheduleId)
                 };
 
                 $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Menyimpan...');
@@ -292,8 +352,8 @@
 
     .custom-cyber-input-group:focus-within {
         border-color: var(--primary-blue);
-        box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
-        background: rgba(30, 41, 59, 0.6);
+        box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+        background: rgba(30, 41, 59, 0.9);
     }
 
     .input-icon-left {
@@ -307,7 +367,7 @@
     }
 
     .cyber-field {
-        background: transparent !important;
+        background: rgba(15, 23, 42, 0.8) !important;
         border: none !important;
         box-shadow: none !important;
         color: white !important;
@@ -317,6 +377,17 @@
         width: 100%;
         position: relative;
         z-index: 5;
+    }
+
+    /* Fixed dropdown options for dark mode visibility */
+    .cyber-field option {
+        background-color: #1e293b !important; /* solid dark blue-gray */
+        color: #f1f5f9 !important; /* light text */
+    }
+
+    .cyber-field:focus {
+        background: rgba(30, 41, 59, 0.9) !important;
+        outline: none !important;
     }
 
     .cyber-field::placeholder {

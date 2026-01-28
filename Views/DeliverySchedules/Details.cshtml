@@ -62,7 +62,7 @@
                     <div class="col-md-8">@Model.ScheduledDate.ToString("dddd, dd MMMM yyyy")</div>
                 </div>
                 <div class="row mb-2">
-                    <div class="col-md-4"><strong>Pickup Time:</strong></div>
+                    <div class="col-md-4"><strong>Pickup Time (Std):</strong></div>
                     <div class="col-md-8">
                         @if (Model.PickupTime.HasValue)
                         {
@@ -71,6 +71,19 @@
                         else
                         {
                             <span class="text-muted">-</span>
+                        }
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Actual Pickup:</strong></div>
+                    <div class="col-md-8">
+                        @if (Model.ActualPickupTime.HasValue)
+                        {
+                            <span class="text-success fw-bold">@Model.ActualPickupTime.Value.ToString("HH:mm")</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">Truk belum pickup / berangkat</span>
                         }
                     </div>
                 </div>
@@ -102,6 +115,23 @@
                 <div class="row mb-2">
                     <div class="col-md-4"><strong>SKID:</strong></div>
                     <div class="col-md-8">@(Model.SKID?.ToString() ?? "-")</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Target Qty (Box):</strong></div>
+                    <div class="col-md-8">@Model.TotalTargetQuantity.ToString("N0")</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Actual Qty (Box):</strong></div>
+                    <div class="col-md-8">
+                        <span class="@(Model.TotalActualQuantity >= Model.TotalTargetQuantity && Model.TotalTargetQuantity > 0 ? "text-success" : (Model.TotalActualQuantity > 0 ? "text-warning" : "")) fw-bold">
+                            @Model.TotalActualQuantity.ToString("N0")
+                        </span>
+                        @if (Model.TotalTargetQuantity > 0)
+                        {
+                            var pct = (double)Model.TotalActualQuantity * 100 / (double)Model.TotalTargetQuantity;
+                            <small class="text-muted ms-2">(@pct.ToString("F1")%)</small>
+                        }
+                    </div>
                 </div>
                 <div class="row mb-2">
                     <div class="col-md-4"><strong>Area:</strong></div>

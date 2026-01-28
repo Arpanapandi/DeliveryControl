@@ -46,7 +46,7 @@
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label asp-for="CustomerId" class="form-label">Customer</label>
-                            <select asp-for="CustomerId" class="form-select" asp-items="ViewBag.CustomerId">
+                            <select asp-for="CustomerId" class="form-select" asp-items="ViewBag.CustomerId" id="customerId">
                                 <option value="">-- Pilih Customer --</option>
                             </select>
                             <span asp-validation-for="CustomerId" class="text-danger"></span>
@@ -56,15 +56,15 @@
                     <div class="row mb-3">
                         <div class="col-md-4">
                             <label asp-for="Route" class="form-label"></label>
-                            <input asp-for="Route" class="form-control" />
+                            <input asp-for="Route" class="form-control" id="routeInput" />
                         </div>
                         <div class="col-md-4">
                             <label asp-for="Cycle" class="form-label"></label>
-                            <input asp-for="Cycle" class="form-control" />
+                            <input asp-for="Cycle" class="form-control" id="cycleInput" />
                         </div>
                         <div class="col-md-4">
                             <label asp-for="SKID" class="form-label"></label>
-                            <input asp-for="SKID" class="form-control" type="number" />
+                            <input asp-for="SKID" class="form-control" id="skidInput" type="text" />
                         </div>
                     </div>
 
@@ -89,12 +89,27 @@
                             <input asp-for="ActualEnterDockTime" class="form-control" type="datetime-local" />
                         </div>
                         <div class="col-md-4">
-                            <label asp-for="ActualStartTime" class="form-label"></label>
-                            <input asp-for="ActualStartTime" class="form-control" type="datetime-local" />
+                            <label asp-for="ActualPickupTime" class="form-label">Actual Pickup Time</label>
+                            <input asp-for="ActualPickupTime" class="form-control" type="datetime-local" />
                         </div>
                         <div class="col-md-4">
-                            <label asp-for="ActualEndTime" class="form-label"></label>
+                            <label asp-for="ActualStartTime" class="form-label">Actual Arrival Time (Customer)</label>
+                            <input asp-for="ActualStartTime" class="form-control" type="datetime-local" />
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label asp-for="ActualEndTime" class="form-label">Actual Departure Time (Customer)</label>
                             <input asp-for="ActualEndTime" class="form-control" type="datetime-local" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="TotalTargetQuantity" class="form-label">Target Qty (Box)</label>
+                            <input asp-for="TotalTargetQuantity" class="form-control" type="number" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="TotalActualQuantity" class="form-label">Actual Qty (Box)</label>
+                            <input asp-for="TotalActualQuantity" class="form-control" type="number" />
                         </div>
                     </div>
 
@@ -111,13 +126,13 @@
                         </div>
                         <div class="col-md-6">
                             <label asp-for="Range" class="form-label"></label>
-                            <input asp-for="Range" class="form-control" />
+                            <input asp-for="Range" class="form-control" id="rangeInput" />
                         </div>
                     </div>
 
                     <div class="mb-3">
                         <label asp-for="Area" class="form-label"></label>
-                        <input asp-for="Area" class="form-control" />
+                        <input asp-for="Area" class="form-control" id="areaInput" />
                     </div>
 
                     <div class="mb-3">
@@ -165,7 +180,58 @@
 @section Scripts {
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
     <script>
-        // Dynamic Dock loading based on Customer
+        $(document).ready(function() {
+            // Auto-fill customer details when customer is selected
+            $('#customerId').change(function() {
+                var customerId = $(this).val();
+                if (customerId) {
+                    $.get('/DeliverySchedules/GetCustomerDetails', { customerId: customerId }, function(data) {
+                        $('#routeInput').val(data.route);
+                        $('#cycleInput').val(data.cycle);
+                        $('#skidInput').val(data.skid);
+                        $('#areaInput').val(data.area);
+                    }).fail(function() {
+                        alert('Gagal memuat data customer');
+                    });
+                }
+            });
+
+            // Auto-calculate Range when PickupTime or ETD changes
+            function calculateRange() {
+                var pickupTime = $('input[name="PickupTime"]').val();
+                var etd = $('input[name="ETD"]').val();
+                
+                if (pickupTime && etd) {
+                    var pickup = new Date(pickupTime);
+                    var etdDate = new Date(etd);
+                    
+                    var diffMs = etdDate - pickup;
+                    var diffMins = Math.round(diffMs / 60000);
+                    
+                    if (diffMins >= 0) {
+                        var hours = Math.floor(diffMins / 60);
+                        var minutes = diffMins % 60;
+                        
+                        var rangeText = '';
+                        if (hours > 0) {
+                            rangeText = hours + ' jam';
+                            if (minutes > 0) {
+                                rangeText += ' ' + minutes + ' menit';
+                            }
+                        } else {
+                            rangeText = minutes + ' menit';
+                        }
+                        
+                        $('#rangeInput').val(rangeText);
+                    } else {
+                        $('#rangeInput').val('Invalid (ETD < Pickup)');
+                    }
+                }
+            }
+            
+            $('input[name="PickupTime"]').change(calculateRange);
+            $('input[name="ETD"]').change(calculateRange);
+        });
     </script>
     <style>
         /* Pastikan semua form control memiliki styling dark mode */

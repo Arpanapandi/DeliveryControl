@@ -86,19 +86,24 @@ namespace DeliveryControl.Controllers
                 .OrderBy(r => r.CreatedDate)
                 .ToListAsync();
 
-            // FIFO matching logic: each PreparationRecord consumes exactly one oldest PoolingRecord with the matching Tag
-            // Crucial: A preparation can only consume a piece that was pooled BEFORE or AT the time of preparation.
+            // FIFO matching logic: each PreparationRecord consumes exactly one oldest PoolingRecord 
+            // that matches BOTH Tag and Label (case-insensitive & trimmed).
+            // A preparation can only consume a piece that was pooled BEFORE or AT the time of preparation.
+            // A 5-second buffer is added to handle potential timestamp precision issues between operations.
             var inStockPieces = new List<PoolingRecord>();
             var consumedPoolingIds = new HashSet<int>();
 
             foreach (var prep in allPreparation)
             {
                 var prepTag = (prep.Tag ?? "").Trim().ToUpper();
-                // Find oldest available pooling record for this tag that happened before preparation
+                var prepLabel = (prep.Label ?? "").Trim().ToUpper();
+
+                // Find oldest available pooling record that matches our criteria
                 var match = allPooling.FirstOrDefault(p => 
-                    (p.Tag ?? "").Trim().ToUpper() == prepTag && 
                     !consumedPoolingIds.Contains(p.PoolingId) &&
-                    p.CreatedDate <= prep.CreatedDate);
+                    (p.Tag ?? "").Trim().ToUpper() == prepTag && 
+                    (p.Label ?? "").Trim().ToUpper() == prepLabel &&
+                    p.CreatedDate <= prep.CreatedDate.AddSeconds(5));
 
                 if (match != null)
                 {

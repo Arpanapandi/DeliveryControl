@@ -46,14 +46,14 @@
 
 @* VERSION: 2.0 - Delay Pickup dipindah ke kolom WAKTU ACTUAL *@
 <script>
-    // Debug ViewBag values - tampilkan di console
-    console.warn("=== DASHBOARD v2.0 - DELAY PICKUP IN WAKTU ACTUAL COLUMN ===");
-    console.warn("📅 Total Schedules Today:", @(ViewBag.TodaySchedules ?? 0));
-    console.warn("✅ Completed:", @(ViewBag.CompletedCount ?? 0));
-    console.warn("🚛 In Progress:", @(ViewBag.InProgressCount ?? 0));
-    console.warn("⚠️ DELAY PICKUP:", @(ViewBag.DelayPickupCount ?? 0));
-    console.warn("⏳ DELAY DOCK IN:", @(ViewBag.NotArrivedCount ?? 0));
-    console.warn("================================");
+    // Debug information - tampilkan di console secara clean
+    console.group("🚀 DASHBOARD v2.0 - MONITORING STARTED");
+    console.log("📅 Total Schedules Today:", @(ViewBag.TodaySchedules ?? 0));
+    console.log("✅ Completed:", @(ViewBag.CompletedCount ?? 0));
+    console.log("🚛 In Progress:", @(ViewBag.InProgressCount ?? 0));
+    console.log("⚠️ DELAY PICKUP:", @(ViewBag.DelayPickupCount ?? 0));
+    console.log("⏳ DELAY DOCK IN:", @(ViewBag.NotArrivedCount ?? 0));
+    console.groupEnd();
 </script>
 
 <!-- Page Header -->
@@ -273,14 +273,16 @@
                             <table class="table table-hover table-bordered mb-0 align-middle">
                             <thead class="table-dark" style="position: sticky; top: 0; z-index: 100; background-color: #212529;">
                                 <tr style="font-size: 0.9rem;">
-                                    <th style="width: 20%; background-color: #212529;"><i class="bi bi-building"></i> CUSTOMER</th>
-                                    <th class="text-center" style="width: 8%; background-color: #212529;"><i class="bi bi-arrow-repeat"></i> CYCLE</th>
-                                    <th class="text-center" style="width: 12%; background-color: #212529;"><i class="bi bi-door-open"></i> STD DOCK IN</th>
-                                    <th class="text-center" style="width: 12%; background-color: #212529;"><i class="bi bi-door-open-fill"></i> ACT DOCK IN</th>
-                                    <th class="text-center" style="width: 14%; background-color: #212529;"><i class="bi bi-calendar-event"></i> STD PICKUP&DELV</th>
-                                    <th class="text-center" style="width: 14%; background-color: #212529;"><i class="bi bi-clock-history"></i> ACT PICKUP&DELV</th>
-                                    <th class="text-center" style="width: 10%; background-color: #212529;"><i class="bi bi-check-circle"></i> STS SHIPPING</th>
-                                    <th class="text-center" style="width: 10%; background-color: #212529;"><i class="bi bi-gear"></i> ACTION</th>
+                                    <th style="width: 16%; background-color: #212529;"><i class="bi bi-building"></i> CUSTOMER</th>
+                                    <th class="text-center" style="width: 6%; background-color: #212529;"><i class="bi bi-arrow-repeat"></i> CYCLE</th>
+                                    <th class="text-center" style="width: 10%; background-color: #212529;"><i class="bi bi-box-seam"></i> QTY PREP</th>
+                                    <th class="text-center" style="width: 10%; background-color: #212529;"><i class="bi bi-door-open"></i> STD DOCK IN</th>
+                                    <th class="text-center" style="width: 10%; background-color: #212529;"><i class="bi bi-door-open-fill"></i> ACT DOCK IN</th>
+                                    <th class="text-center" style="width: 10%; background-color: #212529;"><i class="bi bi-clock"></i> STD PICKUP</th>
+                                    <th class="text-center" style="width: 10%; background-color: #212529;"><i class="bi bi-truck"></i> ACT PICKUP</th>
+                                    <th class="text-center" style="width: 10%; background-color: #212529;"><i class="bi bi-geo-alt-fill"></i> ACT DELIVERY</th>
+                                    <th class="text-center" style="width: 10%; background-color: #212529;"><i class="bi bi-check-circle"></i> STATUS</th>
+                                    <th class="text-center" style="width: 8%; background-color: #212529;"><i class="bi bi-gear"></i> ACTION</th>
                                 </tr>
                             </thead>
                             <tbody style="font-size: 0.85rem;">
@@ -339,10 +341,7 @@
                         <div class="empty-state">
                             <i class="bi bi-calendar-x" style="font-size: 4rem; color: var(--primary-blue); opacity: 0.5;"></i>
                             <h4 class="mt-3 mb-2">Tidak Ada Jadwal Hari Ini</h4>
-                            <p class="text-muted mb-4">Belum ada jadwal delivery yang terdaftar untuk hari ini.</p>
-                            <a asp-controller="DeliverySchedules" asp-action="Create" class="btn btn-primary">
-                                <i class="bi bi-plus-circle"></i> Buat Schedule Baru
-                            </a>
+                            <p class="text-muted mb-0">Belum ada jadwal delivery yang terdaftar untuk hari ini.</p>
                         </div>
                     </div>
                 }
@@ -1041,9 +1040,9 @@
     const maxStatisticsRetries = 3;
     
     function updateStatistics() {
-        // Add cache busting to ensure fresh data
         var timestamp = new Date().getTime();
-        $.ajax({
+        // Return promise for coordination
+        return $.ajax({
             url: '@Url.Action("GetDashboardStatistics", "Home")',
             type: 'GET',
             cache: false,
@@ -1059,22 +1058,11 @@
                     completedDisplay = data.completedCount + ' / ' + data.shouldBeDeliveredCount;
                 }
 
-                // Update card values dengan animasi, hanya angka (span) supaya label ORDER tetap
-                $('#totalTodayStatValue').fadeOut(200, function() {
-                    $(this).text(data.todaySchedules).fadeIn(200);
-                });
-
-                $('#completedStatValue').fadeOut(200, function() {
-                    $(this).text(completedDisplay).fadeIn(200);
-                });
-
-                $('#delayPickupStatValue').fadeOut(200, function() {
-                    $(this).text(data.delayPickupCount).fadeIn(200);
-                });
-
-                $('#delayPrepareStatValue').fadeOut(200, function() {
-                    $(this).text(data.notArrivedCount).fadeIn(200);
-                });
+                // Update card values immediately for speed
+                $('#totalTodayStatValue').text(data.todaySchedules);
+                $('#completedStatValue').text(completedDisplay);
+                $('#delayPickupStatValue').text(data.delayPickupCount);
+                $('#delayPrepareStatValue').text(data.notArrivedCount);
             },
             error: function(err) {
                 console.error("❌ Failed to update statistics:", err);
@@ -1098,28 +1086,20 @@
     const maxTableRetries = 3;
     
     function updateTableData() {
-        // Add cache busting to ensure fresh data
         var timestamp = new Date().getTime();
-        console.log("🔄 Fetching fresh table data (timestamp: " + timestamp + ")...");
-        $.ajax({
+        // Return promise for coordination
+        return $.ajax({
             url: '@Url.Action("GetScheduleTableData", "Home")',
             type: 'GET',
             cache: false,
             timeout: 15000, // 15 second timeout (lebih lama karena data lebih besar)
             data: { _: timestamp },
             success: function(html) {
-                console.log("✅ Table data received, length: " + html.length + " characters");
-                tableRetryCount = 0; // Reset retry count on success
-                
-                // Update tbody with fade effect
-                $('#table-container tbody').fadeOut(200, function() {
-                    $(this).html(html).fadeIn(200);
-                    
-                    // Re-apply current filter after update
-                    console.log("🔄 Re-applying filter: " + currentFilter);
-                    filterSchedules(currentFilter);
-                    console.log("✅ Table update complete");
-                });
+                // Update tbody immediately for speed
+                $('#table-container tbody').html(html);
+                // Re-apply current filter after update
+                filterSchedules(currentFilter);
+                console.log("✅ Table update complete");
             },
             error: function(err) {
                 console.error("❌ Failed to update table:", err);
@@ -1157,23 +1137,29 @@
         updateStatusBadge('live', 'Live');
     });
 
+    // Listen for Stock updates (often related to preparation)
+    connection.on("UpdateStock", function() {
+        console.log("📦 Stock update received! Refreshing dashboard...");
+        Promise.all([updateStatistics(), updateTableData()]);
+    });
+
     connection.on("DeliveryUpdated", function(data) {
-        console.log("🔔 Delivery Update Received:", data);
-        console.log("📊 Triggering dashboard update...");
+        const timestamp = new Date().toLocaleTimeString();
+        console.log(`🔔 [${timestamp}] Delivery Update Received:`, data);
+        
+        // Update connection indicator to show work in progress
+        updateStatusBadge('reconnecting', 'Updating...');
         
         // Show notification
         const icon = data.Action === 'arrival' ? '🚚' : (data.Action === 'departure' ? '✅' : '🔄');
         showToast(`${icon} ${data.Message}`, 'success');
         
-        // Update dashboard data immediately
-        console.log("📈 Updating statistics...");
-        updateStatistics();
-        
-        console.log("📋 Updating table data...");
-        updateTableData();
-        
-        // Play notification sound (optional)
-        // new Audio('/sounds/notification.mp3').play();
+        // Update dashboard data in parallel
+        Promise.all([updateStatistics(), updateTableData()]).finally(() => {
+            if (isConnected) {
+                updateStatusBadge('live', 'Live');
+            }
+        });
     });
 
     // Connection lifecycle events
@@ -1557,14 +1543,28 @@
     // Restart auto-scroll setelah update tabel (untuk SignalR update)
     const originalUpdateTableData = updateTableData;
     updateTableData = function() {
-        originalUpdateTableData();
-        // Restart auto-scroll setelah tabel di-update
-        safeSetTimeout(function() {
-            stopAutoScroll();
-            if (isAutoScrollEnabled) {
-                startAutoScroll();
-            }
-        }, 500);
+        const promise = originalUpdateTableData();
+        
+        // Restart auto-scroll setelah tabel di-update (dengan delay kecil agar DOM render selesai)
+        if (promise && typeof promise.then === 'function') {
+            promise.then(() => {
+                safeSetTimeout(function() {
+                    stopAutoScroll();
+                    if (isAutoScrollEnabled) {
+                        startAutoScroll();
+                    }
+                }, 500);
+            });
+        } else {
+            safeSetTimeout(function() {
+                stopAutoScroll();
+                if (isAutoScrollEnabled) {
+                    startAutoScroll();
+                }
+            }, 500);
+        }
+        
+        return promise;
     };
 </script>
 }

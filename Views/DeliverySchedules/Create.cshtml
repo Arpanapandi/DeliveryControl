@@ -110,7 +110,7 @@
                                         </div>
                                         <div class="col-md-4">
                                             <label asp-for="SKID" class="form-label"></label>
-                                            <input asp-for="SKID" class="form-control" id="skidInput" type="number" placeholder="Jumlah SKID" readonly style="background-color: rgba(30, 41, 59, 0.6); color: var(--text-primary);" />
+                                            <input asp-for="SKID" class="form-control" id="skidInput" type="text" placeholder="Jumlah SKID" readonly style="background-color: rgba(30, 41, 59, 0.6); color: var(--text-primary);" />
                                             <span asp-validation-for="SKID" class="text-danger"></span>
                                             <small class="text-muted">Auto-filled from customer</small>
                                         </div>
@@ -119,6 +119,14 @@
                                             <input asp-for="Area" class="form-control" id="areaInput" placeholder="Area" readonly style="background-color: rgba(30, 41, 59, 0.6); color: var(--text-primary);" />
                                             <span asp-validation-for="Area" class="text-danger"></span>
                                             <small class="text-muted">Auto-filled from customer</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-md-12">
+                                            <label asp-for="TotalTargetQuantity" class="form-label">Total Target Quantity (Box)</label>
+                                            <input asp-for="TotalTargetQuantity" class="form-control" type="number" placeholder="0" />
+                                            <span asp-validation-for="TotalTargetQuantity" class="text-danger"></span>
                                         </div>
                                     </div>
 
@@ -248,6 +256,7 @@
                                         <tr><td>7</td><td>Range</td></tr>
                                         <tr><td>8</td><td>SKID</td></tr>
                                         <tr><td>9</td><td>AREA</td></tr>
+                                        <tr><td>10</td><td>QTY TARGET</td></tr>
                                     </tbody>
                                 </table>
                                 <p class="small text-info mt-2">

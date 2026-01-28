@@ -25,6 +25,9 @@
             <button type="button" class="btn btn-danger me-2" id="bulkDeleteBtn" style="display:none;" onclick="confirmBulkDelete()">
                 <i class="bi bi-trash"></i> Hapus Terpilih (<span id="selectedCount">0</span>)
             </button>
+            <a asp-action="ExportExcel" asp-route-startDate="@ViewData["StartDate"]" asp-route-endDate="@ViewData["EndDate"]" asp-route-customerId="@ViewData["CustomerId"]" asp-route-status="@ViewData["Status"]" class="btn btn-outline-success me-2">
+                <i class="bi bi-file-earmark-excel"></i> Export Excel
+            </a>
             <a asp-action="BulkCreate" class="btn btn-success me-2">
                 <i class="bi bi-calendar-check"></i> Buat Schedule (Bulk)
             </a>
@@ -92,287 +95,25 @@
                                 </th>
                             }
                             <th class="text-center align-middle" style="width: 10%; background-color: #212529;">No Schedule</th>
-                            <th class="text-center align-middle" style="width: 13%; background-color: #212529;">CUST</th>
-                            <th class="text-center align-middle" style="width: 7%; background-color: #212529;">ROUTE</th>
-                            <th class="text-center align-middle" style="width: 6%; background-color: #212529;">CYCLE</th>
+                            <th class="text-center align-middle" style="width: 12%; background-color: #212529;">CUST</th>
+                            <th class="text-center align-middle" style="width: 6%; background-color: #212529;">ROUTE</th>
+                            <th class="text-center align-middle" style="width: 5%; background-color: #212529;">CYCLE</th>
+                            <th class="text-center align-middle" style="width: 6%; background-color: #212529;">QTY</th>
                             <th class="text-center align-middle" style="width: 6%; background-color: #212529;">ENTER DOCK</th>
-                            <th class="text-center align-middle" style="width: 9%; background-color: #212529;">EST SELESAI</th>
-                            <th class="text-center align-middle" style="width: 10%; background-color: #212529;">ACT ENTER DOCK</th>
-                            <th class="text-center align-middle" style="width: 9%; background-color: #212529;">EST ACT SELESAI</th>
+                            <th class="text-center align-middle" style="width: 8%; background-color: #212529;">EST SELESAI</th>
+                            <th class="text-center align-middle" style="width: 9%; background-color: #212529;">ACT ENTER DOCK</th>
+                            <th class="text-center align-middle" style="width: 8%; background-color: #212529;">EST ACT SELESAI</th>
                             <th class="text-center align-middle" style="width: 6%; background-color: #212529;">PICKUP</th>
-                            <th class="text-center align-middle" style="width: 12%; background-color: #212529;">ACT PICKUP</th>
+                            <th class="text-center align-middle" style="width: 11%; background-color: #212529;">ACT PICKUP</th>
                             <th class="text-center align-middle" style="width: 6%; background-color: #212529;">ETD</th>
-                            <th class="text-center align-middle" style="width: 12%; background-color: #212529;">ACT DELIVERY</th>
-                            <th class="text-center align-middle" style="width: 7%; background-color: #212529;">RANGE</th>
-                            <th class="text-center align-middle" style="width: 9%; background-color: #212529;">RANGE ACT</th>
-                            <th class="text-center align-middle" style="width: 9%; background-color: #212529;">ACTION</th>
+                            <th class="text-center align-middle" style="width: 11%; background-color: #212529;">ACT DELIVERY</th>
+                            <th class="text-center align-middle" style="width: 5%; background-color: #212529;">RANGE</th>
+                            <th class="text-center align-middle" style="width: 7%; background-color: #212529;">ACT RANGE</th>
+                            <th class="text-center align-middle" style="width: 8%; background-color: #212529;">ACTION</th>
                         </tr>
                     </thead>
-                    <tbody style="font-size: 0.85rem;">
-                        @foreach (var item in Model)
-                        {
-                            // Calculate actual range
-                            var actualRange = "";
-                            if (item.ActualStartTime.HasValue && item.ActualEndTime.HasValue)
-                            {
-                                var duration = item.ActualEndTime.Value - item.ActualStartTime.Value;
-                                actualRange = duration.TotalHours >= 1 
-                                    ? $"{(int)duration.TotalHours}j {duration.Minutes}m"
-                                    : $"{(int)duration.TotalMinutes}m";
-                            }
-
-                            // Check if late for enter dock
-                            var isEnterDockLate = false;
-                            var enterDockDelayMinutes = 0;
-                            var isEnterDockEarly = false;
-                            var enterDockEarlyMinutes = 0;
-                            var estimatedDockTime = item.EnterDockTime?.AddMinutes(15);
-                            var actualEstimatedDockTime = item.ActualEnterDockTime?.AddMinutes(15);
-                            if (item.ActualEnterDockTime.HasValue && item.EnterDockTime.HasValue)
-                            {
-                                var delay = item.ActualEnterDockTime.Value - item.EnterDockTime.Value;
-                                if (delay.TotalMinutes > 0)
-                                {
-                                    isEnterDockLate = true;
-                                    enterDockDelayMinutes = (int)delay.TotalMinutes;
-                                }
-                                else if (delay.TotalMinutes < 0)
-                                {
-                                    isEnterDockEarly = true;
-                                    enterDockEarlyMinutes = (int)Math.Abs(delay.TotalMinutes);
-                                }
-                            }
-
-                            // Check if late for pickup
-                            var isPickupLate = false;
-                            var pickupDelayMinutes = 0;
-                            if (item.ActualStartTime.HasValue && item.PickupTime.HasValue)
-                            {
-                                var delay = item.ActualStartTime.Value - item.PickupTime.Value;
-                                if (delay.TotalMinutes > 0)
-                                {
-                                    isPickupLate = true;
-                                    pickupDelayMinutes = (int)delay.TotalMinutes;
-                                }
-                            }
-
-                            // Check if late for delivery (ETD)
-                            var isDeliveryLate = false;
-                            var deliveryDelayMinutes = 0;
-                            if (item.ActualEndTime.HasValue && item.ETD.HasValue)
-                            {
-                                var delay = item.ActualEndTime.Value - item.ETD.Value;
-                                if (delay.TotalMinutes > 0)
-                                {
-                                    isDeliveryLate = true;
-                                    deliveryDelayMinutes = (int)delay.TotalMinutes;
-                                }
-                            }
-
-                            <tr>
-                                @if (Context.Session.GetString("Role") == "Admin")
-                                {
-                                    <td class="text-center align-middle">
-                                        <input type="checkbox" class="form-check-input row-checkbox" value="@item.ScheduleId">
-                                    </td>
-                                }
-                                <td class="text-center align-middle">
-                                    <small><strong>@item.ScheduleNumber</strong></small>
-                                </td>
-                                <td class="align-middle">
-                                    <div><strong>@item.Customer.CustomerCode</strong></div>
-                                    <small class="text-muted">@item.Customer.CustomerName</small>
-                                </td>
-                                <td class="text-center align-middle">
-                                    <small>@(item.Route ?? "-")</small>
-                                </td>
-                                <td class="text-center align-middle">
-                                    <small>@(item.Cycle ?? "-")</small>
-                                </td>
-                                <td class="text-center align-middle">
-                                    @if (item.EnterDockTime.HasValue)
-                                    {
-                                        <strong>@item.EnterDockTime.Value.ToString("HH:mm")</strong>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td class="text-center align-middle">
-                                    @if (estimatedDockTime.HasValue)
-                                    {
-                                        <strong>@estimatedDockTime.Value.ToString("HH:mm")</strong>
-                                        <div class="text-muted" style="font-size: 0.75rem;">(+15m)</div>
-                                    }
-                                    else if (item.EnterDockTime.HasValue)
-                                    {
-                                        <div>
-                                            <strong>@item.EnterDockTime.Value.AddMinutes(15).ToString("HH:mm")</strong>
-                                        </div>
-                                        <div class="text-muted" style="font-size: 0.75rem;">(+15m)</div>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td class="text-center align-middle">
-                                    @if (item.ActualEnterDockTime.HasValue)
-                                    {
-                                        <div>
-                                            <strong class="@(isEnterDockLate ? "text-danger" : (isEnterDockEarly ? "text-success" : "text-success"))">
-                                                @item.ActualEnterDockTime.Value.ToString("HH:mm")
-                                            </strong>
-                                        </div>
-                                        @if (isEnterDockLate)
-                                        {
-                                            <small class="text-danger d-block">
-                                                <i class="bi bi-exclamation-triangle-fill"></i>
-                                                <strong>Terlambat +@enterDockDelayMinutes m</strong>
-                                            </small>
-                                        }
-                                        else if (isEnterDockEarly)
-                                        {
-                                            <small class="text-success d-block">
-                                                <i class="bi bi-check-circle-fill"></i> On Time -@enterDockEarlyMinutes m
-                                            </small>
-                                        }
-                                        else
-                                        {
-                                            <small class="text-success d-block">
-                                                <i class="bi bi-check-circle-fill"></i> On Time
-                                            </small>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td class="text-center align-middle">
-                                    @if (actualEstimatedDockTime.HasValue)
-                                    {
-                                        <strong>@actualEstimatedDockTime.Value.ToString("HH:mm")</strong>
-                                        <div class="text-muted" style="font-size: 0.75rem;">(+15m)</div>
-                                    }
-                                    else if (item.ActualEnterDockTime.HasValue)
-                                    {
-                                        <div>
-                                            <strong>@item.ActualEnterDockTime.Value.AddMinutes(15).ToString("HH:mm")</strong>
-                                        </div>
-                                        <div class="text-muted" style="font-size: 0.75rem;">(+15m)</div>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td class="text-center align-middle">
-                                    @if (item.PickupTime.HasValue)
-                                    {
-                                        <strong>@item.PickupTime.Value.ToString("HH:mm")</strong>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td class="text-center align-middle">
-                                    @if (item.ActualStartTime.HasValue)
-                                    {
-                                        <div>
-                                            <strong class="@(isPickupLate ? "text-danger" : "text-success")">
-                                                @item.ActualStartTime.Value.ToString("HH:mm")
-                                            </strong>
-                                        </div>
-                                        @if (isPickupLate)
-                                        {
-                                            <small class="text-danger d-block">
-                                                <i class="bi bi-exclamation-triangle-fill"></i>
-                                                <strong>Terlambat +@pickupDelayMinutes m</strong>
-                                            </small>
-                                        }
-                                        else
-                                        {
-                                            <small class="text-success d-block">
-                                                <i class="bi bi-check-circle-fill"></i> On Time
-                                            </small>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td class="text-center align-middle">
-                                    @if (item.ETD.HasValue)
-                                    {
-                                        <strong>@item.ETD.Value.ToString("HH:mm")</strong>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td class="text-center align-middle">
-                                    @if (item.ActualEndTime.HasValue)
-                                    {
-                                        <div>
-                                            <strong class="@(isDeliveryLate ? "text-danger" : "text-success")">
-                                                @item.ActualEndTime.Value.ToString("HH:mm")
-                                            </strong>
-                                        </div>
-                                        @if (isDeliveryLate)
-                                        {
-                                            <small class="text-danger d-block">
-                                                <i class="bi bi-exclamation-triangle-fill"></i>
-                                                <strong>Terlambat +@deliveryDelayMinutes m</strong>
-                                            </small>
-                                        }
-                                        else
-                                        {
-                                            <small class="text-success d-block">
-                                                <i class="bi bi-check-circle-fill"></i> On Time
-                                            </small>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td class="text-center align-middle">
-                                    <small>@(item.Range ?? "-")</small>
-                                </td>
-                                <td class="text-center align-middle">
-                                    @if (!string.IsNullOrWhiteSpace(actualRange))
-                                    {
-                                        <strong class="text-primary">@actualRange</strong>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td class="text-center align-middle">
-                                    <div class="btn-group-vertical btn-group-sm" role="group">
-                                        <a asp-action="Details" asp-route-id="@item.ScheduleId" class="btn btn-info btn-sm px-2 py-1" title="Detail" style="font-size: 0.75rem;">
-                                            <i class="bi bi-eye"></i>
-                                        </a>
-                                        @if (Context.Session.GetString("Role") == "Admin")
-                                        {
-                                            <a asp-action="Edit" asp-route-id="@item.ScheduleId" class="btn btn-warning btn-sm px-2 py-1" title="Edit" style="font-size: 0.75rem;">
-                                                <i class="bi bi-pencil"></i>
-                                            </a>
-                                            <a asp-action="Delete" asp-route-id="@item.ScheduleId" class="btn btn-danger btn-sm px-2 py-1" title="Hapus" style="font-size: 0.75rem;">
-                                                <i class="bi bi-trash"></i>
-                                            </a>
-                                        }
-                                    </div>
-                                </td>
-                            </tr>
-                        }
+                    <tbody id="historyTableBody" style="font-size: 0.85rem;">
+                        @await Html.PartialAsync("_HistoryScheduleTablePartial", Model)
                     </tbody>
                 </table>
             </div>
@@ -387,6 +128,7 @@
 </div>
 
 @section Scripts {
+    <script src="~/lib/microsoft/signalr/dist/browser/signalr.js"></script>
     <script>
         $(document).ready(function() {
             // Select All functionality
@@ -395,8 +137,8 @@
                 updateBulkDeleteButton();
             });
 
-            // Row checkbox functionality
-            $('.row-checkbox').change(function() {
+            // Row checkbox functionality - use delegation for AJAX content
+            $(document).on('change', '.row-checkbox', function() {
                 updateBulkDeleteButton();
                 $('#selectAll').prop('checked', $('.row-checkbox:checked').length === $('.row-checkbox').length);
             });
@@ -410,6 +152,67 @@
                     $('#bulkDeleteBtn').hide();
                 }
             }
+
+            // ============================================
+            // SIGNALR REAL-TIME UPDATE
+            // ============================================
+            
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/deliveryHub")
+                .withAutomaticReconnect()
+                .build();
+
+            function updateTableData() {
+                // Get current filters from URL/Form
+                const urlParams = new URLSearchParams(window.location.search);
+                const startDate = urlParams.get('startDate') || '';
+                const endDate = urlParams.get('endDate') || '';
+                const customerId = urlParams.get('customerId') || '';
+                const status = urlParams.get('status') || '';
+
+                $.ajax({
+                    url: '@Url.Action("GetHistoryScheduleTableData", "DeliverySchedules")',
+                    type: 'GET',
+                    data: { 
+                        startDate: startDate, 
+                        endDate: endDate, 
+                        customerId: customerId, 
+                        status: status,
+                        _: new Date().getTime() 
+                    },
+                    success: function(html) {
+                        $('#historyTableBody').html(html);
+                        console.log("✅ History table updated via SignalR");
+                        // Reset select all if it was checked
+                        $('#selectAll').prop('checked', false);
+                        updateBulkDeleteButton();
+                    },
+                    error: function(err) {
+                        console.error("❌ Failed to update history table:", err);
+                    }
+                });
+            }
+
+            connection.on("Connected", function(id) {
+                console.log("✅ SignalR Connected for History!");
+            });
+
+            connection.on("DeliveryUpdated", function(data) {
+                console.log("🔔 Delivery update received on History page:", data);
+                updateTableData();
+            });
+
+            async function startConnection() {
+                try {
+                    await connection.start();
+                    console.log("🚀 SignalR Started for History");
+                } catch (err) {
+                    console.error("❌ SignalR Start failed:", err);
+                    setTimeout(startConnection, 5000);
+                }
+            }
+
+            startConnection();
         });
 
         function confirmBulkDelete() {
