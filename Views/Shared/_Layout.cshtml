@@ -168,13 +168,18 @@
                 <div class="d-flex align-items-center justify-content-between w-100">
                     <span class="d-flex align-items-center gap-2">
                         <i class="bi bi-box-seam"></i>
-                        <span>Stock Dashboard</span>
+                        <span>Stock</span>
                     </span>
                     <i class="bi bi-chevron-down small"></i>
                 </div>
                 <div class="link-glow"></div>
             </button>
             <div class="collapse" id="menuStock">
+                <a asp-controller="Stock" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                    <i class="bi bi-columns-gap"></i>
+                    <span>Dashboard FG</span>
+                    <div class="link-glow"></div>
+                </a>
                 <a asp-controller="Stock" asp-action="Trend" class="sidebar-link sidebar-link-sub">
                     <i class="bi bi-graph-up"></i>
                     <span>Grafik Trend</span>

@@ -1,141 +1,112 @@
 @model DeliveryControl.Models.StockDashboardViewModel
 @{
-    ViewData["Title"] = "Hose Dashboard";
+    ViewData["Title"] = Model.PlantName + " Transactions";
+    var selectedDate = ViewBag.SelectedDate as string;
 }
 
 <div class="row mb-4">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center">
             <div>
-                <h2 class="mb-1"><i class="bi bi-layers text-primary"></i> Stock Dashboard - Hose</h2>
-                <p class="text-muted">Monitoring stock flows for Hose Plant: Pooling -> Storage -> Delivery</p>
+                <h2 class="mb-1"><i class="bi bi-clock-history text-primary"></i> @Model.PlantName - Transaction Logs</h2>
+                <p class="text-muted">History of Pooling (IN) and Preparation (OUT)</p>
             </div>
             <div class="text-end">
-                <div class="d-flex gap-2">
-                    <a asp-controller="Pooling" asp-action="Index" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-plus-circle me-1"></i> New Pooling
-                    </a>
-                    <a asp-controller="PreparationWorkflow" asp-action="Index" class="btn btn-primary btn-sm">
-                        <i class="bi bi-truck me-1"></i> New Preparation
-                    </a>
+                <div class="d-flex gap-3 align-items-center">
+                    <div class="input-group input-group-sm" style="max-width: 250px;">
+                        <span class="input-group-text bg-dark border-primary text-primary"><i class="bi bi-search"></i></span>
+                        <input type="text" id="logSearch" class="form-control bg-dark text-white border-primary" placeholder="Cari Tag atau Kanban...">
+                    </div>
+                    <form method="get" class="d-flex gap-2 align-items-center">
+                        <label class="small text-muted text-nowrap">Tanggal:</label>
+                        <input type="date" name="date" class="form-control form-control-sm bg-dark text-white border-primary" value="@selectedDate" />
+                        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+                        <a asp-action="@Model.PlantName" class="btn btn-outline-secondary btn-sm">Reset</a>
+                    </form>
                 </div>
-
             </div>
         </div>
         <hr />
     </div>
 </div>
 
-<div id="dashboardContent">
-    <div class="row">
-        <!-- Status Indicator Cards -->
-        <div class="col-md-3 mb-4">
-            <div class="cyber-card p-3 text-center border-danger indicator-card clickable" data-filter="Shortage" style="cursor: pointer;">
-                <small class="text-muted d-block text-uppercase">Shortage</small>
-                <h2 class="fw-bold mb-0 text-danger">@Model.ShortageCount</h2>
-                <small class="text-white-50">Low Stock Items</small>
+<div class="row">
+    <!-- Pooling History (IN) -->
+    <div class="col-md-6 mb-4">
+        <div class="cyber-card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 text-primary"><i class="bi bi-arrow-down-circle me-2"></i> Pooling (IN)</h5>
+                <span class="badge bg-primary">@Model.RecentPooling.Count Records</span>
             </div>
-        </div>
-        <div class="col-md-3 mb-4">
-            <div class="cyber-card p-3 text-center border-success indicator-card clickable" data-filter="Normal" style="cursor: pointer;">
-                <small class="text-muted d-block text-uppercase">Normal</small>
-                <h2 class="fw-bold mb-0 text-success">@Model.NormalCount</h2>
-                <small class="text-white-50">Safe Stock Items</small>
-            </div>
-        </div>
-        <div class="col-md-3 mb-4">
-            <div class="cyber-card p-3 text-center border-info indicator-card clickable" data-filter="Over" style="cursor: pointer;">
-                <small class="text-muted d-block text-uppercase">Over</small>
-                <h2 class="fw-bold mb-0 text-info">@Model.OverCount</h2>
-                <small class="text-white-50">Excessive Stock</small>
-            </div>
-        </div>
-        <div class="col-md-3 mb-4">
-            <div class="cyber-card p-3 text-center">
-                <div class="status-indicator-live active"></div>
-                <small class="text-muted d-block text-uppercase">Stock Level</small>
-                <h2 class="fw-bold mb-0 text-white fs-4">@Model.NetStock Total</h2>
-                <small class="text-white-50">Box in Storage</small>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Stok</th>
+                            <th>Tag</th>
+                            <th>Label</th>
+                            <th>Item Name</th>
+                            <th>Operator</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var record in Model.RecentPooling)
+                        {
+                            <tr>
+                                <td class="small">@record.CreatedDate.ToString("HH:mm:ss")</td>
+                                <td><span class="badge bg-dark border border-primary text-primary">1 Box</span></td>
+                                <td><span class="text-primary fw-bold">@record.Tag</span></td>
+                                <td>@record.Label</td>
+                                <td class="small text-truncate" style="max-width: 150px;">@(record.Item?.ItemName ?? "N/A")</td>
+                                <td class="smaller">@record.CreatedBy</td>
+                            </tr>
+                        }
+                        @if (!Model.RecentPooling.Any())
+                        {
+                            <tr><td colspan="6" class="text-center py-4 text-muted small">Tidak ada data pooling pada tanggal ini.</td></tr>
+                        }
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 
-    <div class="row">
-        <!-- Detailed Data Table -->
-        <div class="col-12 mb-4">
-            <div class="cyber-card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-3">
-                    <span class="fw-bold text-primary"><i class="bi bi-list-ul me-2"></i> Detail Data Barang</span>
-                    
-                    <!-- Search and Filter Controls -->
-                    <div class="d-flex gap-3 align-items-center flex-grow-1 justify-content-end">
-                        <div class="input-group input-group-sm" style="max-width: 300px;">
-                            <span class="input-group-text bg-dark border-primary text-primary"><i class="bi bi-search"></i></span>
-                            <input type="text" id="tagLabelSearch" class="form-control bg-dark text-white border-primary" placeholder="Cari Tag atau Label...">
-                        </div>
-                        <div class="d-flex gap-2 align-items-center">
-                            <span id="activeFilterLabel" class="badge bg-primary">All Items</span>
-                            <button id="btnClearFilter" class="btn btn-outline-secondary btn-xs" style="font-size: 0.6rem;">Clear</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0" id="stockDetailTable">
-                        <thead>
+    <!-- Preparation History (OUT) -->
+    <div class="col-md-6 mb-4">
+        <div class="cyber-card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 text-info"><i class="bi bi-truck me-2"></i> Preparation (OUT)</h5>
+                <span class="badge bg-info text-dark">@Model.RecentPreparation.Count Records</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Tag</th>
+                            <th>Label</th>
+                            <th>Kanban</th>
+                            <th>Operator</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var record in Model.RecentPreparation)
+                        {
                             <tr>
-                                <th>No</th>
-                                <th>Tag</th>
-                                <th>Label</th>
-                                <th>Nama Item</th>
-                                <th>Stock</th>
-                                <th>Min</th>
-                                <th>Max</th>
-                                <th class="text-nowrap">Level Stock</th>
-                                <th class="text-center">Location</th>
-                                <th>Time</th>
-                                <th class="text-nowrap">Operator</th>
+                                <td class="small">@record.CreatedDate.ToString("HH:mm:ss")</td>
+                                <td><span class="text-info fw-bold">@record.Tag</span></td>
+                                <td>@record.Label</td>
+                                <td><span class="badge bg-info text-dark">@record.Kanban</span></td>
+                                <td class="smaller">@record.CreatedBy</td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var record in Model.StockDetails)
-                            {
-                                <tr class="stock-row" data-status="@record.Status">
-                                    <td>@record.No</td>
-                                    <td><span class="text-primary fw-bold">@record.Tag</span></td>
-                                    <td>@record.Label</td>
-                                    <td class="small">@record.ItemName</td>
-                                    <td>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <span class="fw-bold @(record.Status == "Shortage" ? "text-danger" : record.Status == "Over" ? "text-info" : "text-success")">@record.CurrentStock.ToString("G29")</span>
-                                            <small class="text-muted" style="font-size: 0.6rem;">BOX</small>
-                                        </div>
-                                    </td>
-                                    <td><span class="text-muted smaller">@(record.Min?.ToString() ?? "-")</span></td>
-                                    <td><span class="text-muted smaller">@(record.Max?.ToString() ?? "-")</span></td>
-                                     <td>
-                                         @if (record.LevelStock < 1.0m)
-                                         {
-                                             <span class="badge badge-pulse-critical py-1" style="font-size: 0.75rem;">
-                                                 <i class="bi bi-exclamation-triangle-fill me-1"></i> @record.LevelStock.ToString("N1").Replace(".", ",") Days
-                                             </span>
-                                         }
-                                         else
-                                         {
-                                             <span class="text-white-50 smaller">@record.LevelStock.ToString("N1").Replace(".", ",") Days</span>
-                                         }
-                                     </td>
-                                    <td class="text-center"><span class="badge bg-dark border border-primary text-white">@record.Location</span></td>
-                                    <td>@record.Time <small class="text-muted d-block" style="font-size: 0.65rem;">@record.Date</small></td>
-                                    <td class="text-nowrap small">@record.Operator</td>
-                                </tr>
-                            }
-                            @if (!Model.StockDetails.Any())
-                            {
-                                <tr><td colspan="10" class="text-center py-5 text-muted small">Tidak ada data barang dalam stok.</td></tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
+                        }
+                        @if (!Model.RecentPreparation.Any())
+                        {
+                            <tr><td colspan="5" class="text-center py-4 text-muted small">Tidak ada data preparation pada tanggal ini.</td></tr>
+                        }
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -144,133 +115,12 @@
 @section Scripts {
     <script>
         $(document).ready(function () {
-            const connection = new signalR.HubConnectionBuilder()
-                .withUrl("/stockHub")
-                .withAutomaticReconnect()
-                .build();
-
-            connection.on("UpdateStock", function () {
-                refreshDashboard();
+            $('#logSearch').on('keyup', function() {
+                var value = $(this).val().toLowerCase();
+                $(".table tbody tr").filter(function() {
+                    $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
+                });
             });
-
-            connection.start().catch(err => console.error(err.toString()));
-
-            function refreshDashboard() {
-                $.ajax({
-                    url: window.location.href,
-                    type: 'GET',
-                    success: function (html) {
-                        const newContent = $(html).find('#dashboardContent').html();
-                        $('#dashboardContent').fadeOut(200, function() {
-                            $(this).html(newContent).fadeIn(200);
-                            bindFilterEvents();
-                        });
-                    }
-                });
-            }
-
-            let currentStatusFilter = 'All';
-
-            function bindFilterEvents() {
-                $('.indicator-card.clickable').off('click').on('click', function() {
-                    currentStatusFilter = $(this).data('filter');
-                    applyAllFilters();
-                });
-
-                $('#btnClearFilter').off('click').on('click', function() {
-                    currentStatusFilter = 'All';
-                    $('#tagLabelSearch').val('');
-                    applyAllFilters();
-                });
-
-                $('#tagLabelSearch').off('input').on('input', function() {
-                    applyAllFilters();
-                });
-            }
-
-            function applyAllFilters() {
-                const searchText = $('#tagLabelSearch').val().toLowerCase();
-                
-                $('.indicator-card').removeClass('active-filter').css('opacity', '0.5');
-                
-                if (currentStatusFilter === 'All') {
-                    $('.indicator-card').css('opacity', '1');
-                    $('#activeFilterLabel').text('All Items').removeClass().addClass('badge bg-primary');
-                } else {
-                    $(`.indicator-card[data-filter="${currentStatusFilter}"]`).addClass('active-filter').css('opacity', '1');
-                    
-                    let badgeClass = 'bg-secondary';
-                    if (currentStatusFilter === 'Shortage') badgeClass = 'bg-danger';
-                    if (currentStatusFilter === 'Normal') badgeClass = 'bg-success';
-                    if (currentStatusFilter === 'Over') badgeClass = 'bg-info text-dark';
-                    $('#activeFilterLabel').text('Status: ' + currentStatusFilter).removeClass().addClass('badge ' + badgeClass);
-                }
-
-                $('.stock-row').each(function() {
-                    const rowStatus = $(this).data('status');
-                    const tag = $(this).find('td:nth-child(2)').text().toLowerCase();
-                    const label = $(this).find('td:nth-child(3)').text().toLowerCase();
-                    const itemName = $(this).find('td:nth-child(4)').text().toLowerCase();
-                    
-                    const matchesStatus = (currentStatusFilter === 'All' || rowStatus === currentStatusFilter);
-                    const matchesSearch = (tag.includes(searchText) || label.includes(searchText) || itemName.includes(searchText));
-                    
-                    if (matchesStatus && matchesSearch) {
-                        $(this).fadeIn(200);
-                    } else {
-                        $(this).fadeOut(100);
-                    }
-                });
-            }
-
-            bindFilterEvents();
         });
     </script>
 }
-
-<style>
-    .smaller { font-size: 0.75rem; }
-    .btn-xs { padding: 0.1rem 0.3rem; font-size: 0.7rem; }
-    
-    .status-indicator-live {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #94a3b8;
-        display: inline-block;
-        margin-bottom: 5px;
-    }
-    .indicator-card {
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        border-width: 2px !important;
-    }
-    .indicator-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-    }
-    .indicator-card.active-filter {
-        transform: scale(1.05);
-        box-shadow: 0 0 15px rgba(255,255,255,0.1);
-        border-width: 3px !important;
-    }
-    .status-indicator-live.active {
-        background: #10b981;
-        box-shadow: 0 0 10px #10b981;
-        animation: pulse-live 2s infinite;
-    }
-    .badge-pulse-critical {
-        animation: pulse-red 2s infinite;
-        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
-        border: none !important;
-        color: white !important;
-    }
-    @@keyframes pulse-red {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
-        50% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
-    }
-    @@keyframes pulse-live {
-        0% { opacity: 1; }
-        50% { opacity: 0.4; }
-        100% { opacity: 1; }
-    }
-</style>

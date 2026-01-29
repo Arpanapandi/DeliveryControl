@@ -14,24 +14,30 @@ namespace DeliveryControl.Controllers
             _context = context;
         }
 
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
-            return RedirectToAction("Molded");
-        }
-
-        public async Task<IActionResult> Molded()
-        {
+            // Dashboard FG can default to showing data for any plant or a aggregate, 
+            // but currently the view is built for a specific plant data.
+            // Let's default to "Molded" for the indicators but use the Index view.
             return View(await GetStockViewModel("Molded"));
         }
 
-        public async Task<IActionResult> Hose()
+        public async Task<IActionResult> Molded(DateTime? date)
         {
-            return View(await GetStockViewModel("Hose"));
+            ViewBag.SelectedDate = date?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
+            return View(await GetStockViewModel("Molded", date));
         }
 
-        public async Task<IActionResult> RVI()
+        public async Task<IActionResult> Hose(DateTime? date)
         {
-            return View(await GetStockViewModel("RVI"));
+            ViewBag.SelectedDate = date?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
+            return View(await GetStockViewModel("Hose", date));
+        }
+
+        public async Task<IActionResult> RVI(DateTime? date)
+        {
+            ViewBag.SelectedDate = date?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
+            return View(await GetStockViewModel("RVI", date));
         }
 
         public async Task<IActionResult> Trend(string period = "Day")
@@ -225,9 +231,11 @@ namespace DeliveryControl.Controllers
             public int? RackMax { get; set; }
         }
 
-        private async Task<StockDashboardViewModel> GetStockViewModel(string plant)
+        private async Task<StockDashboardViewModel> GetStockViewModel(string plant, DateTime? searchDate = null)
         {
             var today = DateTime.Today;
+            var filterDate = searchDate ?? DateTime.Today;
+            var isFiltered = searchDate.HasValue;
 
             // 1. Get all pieces currently in stock for this plant
             var allPooling = await _context.PoolingRecords
@@ -353,12 +361,19 @@ namespace DeliveryControl.Controllers
                 ShortageCount = shortageCount,
                 NormalCount = normalCount,
                 OverCount = overCount,
-                RecentPooling = allPooling.OrderByDescending(r => r.CreatedDate).Take(5).ToList(),
-                RecentPreparation = await _context.PreparationRecords
-                    .Where(r => r.Plant == plant)
-                    .OrderByDescending(r => r.CreatedDate)
-                    .Take(5)
-                    .ToListAsync(),
+                RecentPooling = isFiltered 
+                    ? inStockPieces.Where(r => r.CreatedDate.Date == filterDate.Date).OrderByDescending(r => r.CreatedDate).ToList()
+                    : inStockPieces.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
+                RecentPreparation = isFiltered
+                    ? await _context.PreparationRecords
+                        .Where(r => r.Plant == plant && r.CreatedDate.Date == filterDate.Date)
+                        .OrderByDescending(r => r.CreatedDate)
+                        .ToListAsync()
+                    : await _context.PreparationRecords
+                        .Where(r => r.Plant == plant)
+                        .OrderByDescending(r => r.CreatedDate)
+                        .Take(5)
+                        .ToListAsync(),
                 TotalPoolingToday = await _context.PoolingRecords
                     .CountAsync(r => r.Plant == plant && r.CreatedDate >= today),
                 TotalPreparationToday = await _context.PreparationRecords
