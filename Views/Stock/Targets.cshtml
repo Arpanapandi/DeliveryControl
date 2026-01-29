@@ -10,8 +10,8 @@
                 <h2 class="mb-1"><i class="bi bi-gear text-info"></i> Manage Stock Targets</h2>
                 <p class="text-muted">Set threshold limits for Shortage, Normal, and Over stock categories.</p>
             </div>
-            <a asp-controller="Items" asp-action="Index" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left me-1"></i> Back to Master Item
+            <a asp-controller="Items" asp-action="Index" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                <i class="bi bi-arrow-left me-1"></i> Kembali ke Master Item
             </a>
 
         </div>
@@ -33,11 +33,13 @@
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-dark">
                             <tr>
-                                <th>Item Code</th>
-                                <th>Item Name</th>
-                                <th style="width: 150px;">Min Stock (Shortage)</th>
-                                <th style="width: 150px;">Max Stock (Over)</th>
-                                <th>Current Category Logic</th>
+                                <th>Item</th>
+                                <th style="width: 80px;">Rak</th>
+                                <th style="width: 80px;">No</th>
+                                <th style="width: 100px;">Qty/Lot</th>
+                                <th style="width: 100px;">Min (Lot)</th>
+                                <th style="width: 100px;">Max (Lot)</th>
+                                <th>Current Status Logic</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -46,20 +48,38 @@
                                 <tr>
                                     <td>
                                         <input type="hidden" name="updates[@i].ItemId" value="@Model[i].ItemId" />
-                                        <span class="text-primary fw-bold">@Model[i].ItemCode</span>
-                                    </td>
-                                    <td>@Model[i].ItemName</td>
-                                    <td>
-                                        <input type="number" name="updates[@i].MinStock" value="@Model[i].MinStock" class="form-control form-control-sm bg-dark text-white border-danger" required />
+                                        <div class="fw-bold text-info">@Model[i].ItemCode</div>
+                                        <div class="small text-muted">@Model[i].ItemName</div>
                                     </td>
                                     <td>
-                                        <input type="number" name="updates[@i].MaxStock" value="@Model[i].MaxStock" class="form-control form-control-sm bg-dark text-white border-info" required />
+                                        <select name="updates[@i].Rack" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                            <option value="">-</option>
+                                            @foreach(var r in "ABCDEFGHI") {
+                                                if (Model[i].Rack == r.ToString()) {
+                                                    <option value="@r" selected>@r</option>
+                                                } else {
+                                                    <option value="@r">@r</option>
+                                                }
+                                            }
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="number" name="updates[@i].NoRack" value="@Model[i].NoRack" class="form-control form-control-sm bg-dark text-white border-secondary" />
+                                    </td>
+                                    <td>
+                                        <input type="number" name="updates[@i].QtyLot" value="@Model[i].QtyLot" class="form-control form-control-sm bg-dark text-white border-secondary" />
+                                    </td>
+                                    <td>
+                                        <input type="number" name="updates[@i].RackMin" value="@Model[i].RackMin" class="form-control form-control-sm bg-dark text-white border-danger" required />
+                                    </td>
+                                    <td>
+                                        <input type="number" name="updates[@i].RackMax" value="@Model[i].RackMax" class="form-control form-control-sm bg-dark text-white border-info" required />
                                     </td>
                                     <td>
                                         <small class="text-muted">
-                                            Status: <span class="text-danger">&lt;@Model[i].MinStock</span> | 
-                                            <span class="text-success">@Model[i].MinStock-@Model[i].MaxStock</span> | 
-                                            <span class="text-info">&gt;@Model[i].MaxStock</span>
+                                            Shortage: <span class="text-danger">&lt;@(Model[i].RackMin ?? 5)</span> | 
+                                            Normal: <span class="text-success">@(Model[i].RackMin ?? 5)-@(Model[i].RackMax ?? 20)</span> | 
+                                            Over: <span class="text-info">&gt;@(Model[i].RackMax ?? 20)</span>
                                         </small>
                                     </td>
                                 </tr>

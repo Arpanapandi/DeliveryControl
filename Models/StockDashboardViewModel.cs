@@ -25,9 +25,15 @@ namespace DeliveryControl.Models
         public int No { get; set; }
         public string Tag { get; set; } = string.Empty;
         public string Label { get; set; } = string.Empty;
+        public string ItemName { get; set; } = string.Empty;
         public string Time { get; set; } = string.Empty;
         public string Date { get; set; } = string.Empty;
         public string Location { get; set; } = string.Empty;
+        public int? QtyLot { get; set; }
+        public int? Min { get; set; }
+        public int? Max { get; set; }
+        public decimal CurrentStock { get; set; }
+        public decimal LevelStock { get; set; }
         public string Operator { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty; // Shortage, Normal, Over
     }

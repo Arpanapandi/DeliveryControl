@@ -10,17 +10,17 @@
     </div>
     <div class="col-md-7 text-end">
         <div class="btn-group gap-2">
-            <a asp-action="DownloadTemplate" class="btn btn-success">
-                <i class="bi bi-file-earmark-spreadsheet-fill"></i> Template Excel
+            <a asp-action="DownloadTemplate" class="btn btn-success px-3 shadow-sm rounded-pill">
+                <i class="bi bi-file-earmark-spreadsheet-fill me-1"></i> Template Excel
             </a>
-            <button type="button" class="btn btn-info text-white" data-bs-toggle="modal" data-bs-target="#importModal">
-                <i class="bi bi-box-arrow-in-down"></i> Import Excel
+            <button type="button" class="btn btn-info text-white px-3 shadow-sm rounded-pill" data-bs-toggle="modal" data-bs-target="#importModal">
+                <i class="bi bi-box-arrow-in-down me-1"></i> Import Excel
             </button>
-            <a asp-action="Create" class="btn btn-primary">
-                <i class="bi bi-plus-circle-fill"></i> Tambah Item
+            <a asp-action="Create" class="btn btn-primary px-3 shadow-sm rounded-pill">
+                <i class="bi bi-plus-circle-fill me-1"></i> Tambah Item
             </a>
-            <a asp-controller="Stock" asp-action="Targets" class="btn btn-dark-blue">
-                <i class="bi bi-bullseye"></i> Stock Targets
+            <a asp-controller="Stock" asp-action="Targets" class="btn btn-dark-blue px-3 shadow-sm rounded-pill">
+                <i class="bi bi-bullseye me-1"></i> Stock Targets
             </a>
         </div>
     </div>
@@ -71,12 +71,12 @@
                 <table class="table table-hover mb-0" id="itemsTable">
                     <thead>
                         <tr>
-                            <th>Kode</th>
+                            <th>Kode (Tag)</th>
                             <th>Nama</th>
-                            <th>Deskripsi</th>
-                            <th>Unit</th>
-                            <th>Kategori</th>
-                            <th>Berat (KG)</th>
+                            <th>Plant</th>
+                            <th>Location (Rak.No)</th>
+                            <th>Qty/Lot</th>
+                            <th>Capacity</th>
                             <th>Status</th>
                             <th>Action</th>
                         </tr>
@@ -87,20 +87,28 @@
                             <tr>
                                 <td>@item.ItemCode</td>
                                 <td>@item.ItemName</td>
-                                <td>@(item.Description ?? "-")</td>
-                                <td>@(item.Unit ?? "-")</td>
+                                <td>@(item.Plant ?? "-")</td>
                                 <td>
-                                    @if (!string.IsNullOrEmpty(item.Category))
+                                    @if (!string.IsNullOrEmpty(item.Rack))
                                     {
-                                        <span class="badge bg-info">@item.Category</span>
+                                        <span>@(item.Rack).@(item.NoRack)</span>
                                     }
                                     else
                                     {
                                         <span class="text-muted">-</span>
                                     }
                                 </td>
-
-                                <td>@(item.Weight?.ToString("N2") ?? "-")</td>
+                                <td>@(item.QtyLot?.ToString() ?? "-")</td>
+                                <td>
+                                    @if (item.RackMin.HasValue)
+                                    {
+                                        <small class="text-muted">Min: @item.RackMin / Max: @item.RackMax</small>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
                                 <td>
                                     @if (item.IsActive)
                                     {

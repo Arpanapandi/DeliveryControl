@@ -24,7 +24,7 @@
             </div>
             <div class="card-body">
                 <dl class="row">
-                    <dt class="col-sm-3">Kode Item</dt>
+                    <dt class="col-sm-3">Kode Item (Tag)</dt>
                     <dd class="col-sm-9"><strong>@Model.ItemCode</strong></dd>
 
                     <dt class="col-sm-3">Nama Item</dt>
@@ -55,7 +55,7 @@
                     <dd class="col-sm-9">@(Model.Volume?.ToString("N2") ?? "-")</dd>
 
                     <dt class="col-sm-3">Status</dt>
-                    <dd class="col-sm-9">
+                    <dd class="col-sm-9 mb-3">
                         @if (Model.IsActive)
                         {
                             <span class="badge bg-success">Aktif</span>
@@ -63,6 +63,38 @@
                         else
                         {
                             <span class="badge bg-danger">Tidak Aktif</span>
+                        }
+                    </dd>
+
+                    <dt class="col-sm-12"><hr /></dt>
+
+                    <dt class="col-sm-3 text-primary">Plant</dt>
+                    <dd class="col-sm-9">@(Model.Plant ?? "-")</dd>
+
+                    <dt class="col-sm-3 text-primary">Lokasi Rak</dt>
+                    <dd class="col-sm-9">
+                        @if (!string.IsNullOrEmpty(Model.Rack))
+                        {
+                            <span class="fw-bold">@Model.Rack . @Model.NoRack</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">-</span>
+                        }
+                    </dd>
+
+                    <dt class="col-sm-3 text-primary">Qty per Lot</dt>
+                    <dd class="col-sm-9">@(Model.QtyLot?.ToString() ?? "-")</dd>
+
+                    <dt class="col-sm-3 text-primary">Kapasitas Rak</dt>
+                    <dd class="col-sm-9">
+                        @if (Model.RackMin.HasValue)
+                        {
+                            <span>Min: @Model.RackMin / Max: @Model.RackMax</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">-</span>
                         }
                     </dd>
                 </dl>

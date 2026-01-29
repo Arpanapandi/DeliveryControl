@@ -64,16 +64,17 @@ namespace DeliveryControl.Controllers
             return View(item);
         }
 
-        // GET: Items/Create
         public IActionResult Create()
         {
+            ViewBag.Plants = new List<string> { "Molded", "Hose", "RVI" };
+            ViewBag.Units = new List<string> { "PCS", "KG", "BOX" };
+            ViewBag.Racks = "ABCDEFGHI".Select(c => c.ToString()).ToList();
             return View();
         }
 
-        // POST: Items/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("ItemId,ItemCode,ItemName,Description,Unit,Category,Weight,Volume,MinStock,MaxStock,IsActive")] Item item)
+        public async Task<IActionResult> Create([Bind("ItemId,ItemCode,ItemName,Description,Unit,Category,Weight,Volume,MinStock,MaxStock,IsActive,Plant,Rack,NoRack,QtyLot,RackMin,RackMax")] Item item)
         {
             if (ModelState.IsValid)
             {
@@ -83,6 +84,9 @@ namespace DeliveryControl.Controllers
                 TempData["SuccessMessage"] = "Item berhasil ditambahkan!";
                 return RedirectToAction(nameof(Index));
             }
+            ViewBag.Plants = new List<string> { "Molded", "Hose", "RVI" };
+            ViewBag.Units = new List<string> { "PCS", "KG", "BOX" };
+            ViewBag.Racks = "ABCDEFGHI".Select(c => c.ToString()).ToList();
             return View(item);
         }
 
@@ -102,14 +106,16 @@ namespace DeliveryControl.Controllers
             {
                 return NotFound();
             }
+            ViewBag.Plants = new List<string> { "Molded", "Hose", "RVI" };
+            ViewBag.Units = new List<string> { "PCS", "KG", "BOX" };
+            ViewBag.Racks = "ABCDEFGHI".Select(c => c.ToString()).ToList();
             return View(item);
         }
-
 
         // POST: Items/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("ItemId,ItemCode,ItemName,Description,Unit,Category,Weight,Volume,MinStock,MaxStock,IsActive,CreatedDate")] Item item)
+        public async Task<IActionResult> Edit(int id, [Bind("ItemId,ItemCode,ItemName,Description,Unit,Category,Weight,Volume,MinStock,MaxStock,IsActive,CreatedDate,Plant,Rack,NoRack,QtyLot,RackMin,RackMax")] Item item)
         {
             if (id != item.ItemId)
             {
@@ -141,6 +147,9 @@ namespace DeliveryControl.Controllers
                 }
                 return RedirectToAction(nameof(Index));
             }
+            ViewBag.Plants = new List<string> { "Molded", "Hose", "RVI" };
+            ViewBag.Units = new List<string> { "PCS", "KG", "BOX" };
+            ViewBag.Racks = "ABCDEFGHI".Select(c => c.ToString()).ToList();
             return View(item);
         }
 
@@ -267,16 +276,21 @@ namespace DeliveryControl.Controllers
                 var worksheet = workbook.Worksheets.Add("Template Item");
 
                 // Header
-                worksheet.Cell(1, 1).Value = "Kode Item";
+                worksheet.Cell(1, 1).Value = "Kode Item (Tag)";
                 worksheet.Cell(1, 2).Value = "Nama Item";
                 worksheet.Cell(1, 3).Value = "Deskripsi";
                 worksheet.Cell(1, 4).Value = "Unit";
-                worksheet.Cell(1, 5).Value = "Kategori";
-                worksheet.Cell(1, 6).Value = "Berat (KG)";
-                worksheet.Cell(1, 7).Value = "Volume (M3)";
+                worksheet.Cell(1, 5).Value = "Plant";
+                worksheet.Cell(1, 6).Value = "Rak";
+                worksheet.Cell(1, 7).Value = "No Rak";
+                worksheet.Cell(1, 8).Value = "Qty per Lot";
+                worksheet.Cell(1, 9).Value = "QTY Min";
+                worksheet.Cell(1, 10).Value = "QTY Max";
+                worksheet.Cell(1, 11).Value = "Berat (KG)";
+                worksheet.Cell(1, 12).Value = "Volume (M3)";
 
                 // Style header
-                var headerRange = worksheet.Range(1, 1, 1, 7);
+                var headerRange = worksheet.Range(1, 1, 1, 12);
                 headerRange.Style.Font.Bold = true;
                 headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
                 headerRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
@@ -286,18 +300,28 @@ namespace DeliveryControl.Controllers
                 worksheet.Cell(2, 2).Value = "Steel Plate 10mm";
                 worksheet.Cell(2, 3).Value = "Plat besi ukuran 10mm";
                 worksheet.Cell(2, 4).Value = "PCS";
-                worksheet.Cell(2, 5).Value = "Raw Material";
-                worksheet.Cell(2, 6).Value = 25.5;
-                worksheet.Cell(2, 7).Value = 0.05;
+                worksheet.Cell(2, 5).Value = "Molded";
+                worksheet.Cell(2, 6).Value = "A";
+                worksheet.Cell(2, 7).Value = 1;
+                worksheet.Cell(2, 8).Value = 100;
+                worksheet.Cell(2, 9).Value = 10;
+                worksheet.Cell(2, 10).Value = 200;
+                worksheet.Cell(2, 11).Value = 25.5;
+                worksheet.Cell(2, 12).Value = 0.05;
 
                 // Contoh data 2 (baris 3)
                 worksheet.Cell(3, 1).Value = "ITM002";
                 worksheet.Cell(3, 2).Value = "Bolt M12";
                 worksheet.Cell(3, 3).Value = "Baut ukuran M12";
                 worksheet.Cell(3, 4).Value = "BOX";
-                worksheet.Cell(3, 5).Value = "Hardware";
-                worksheet.Cell(3, 6).Value = 5.0;
-                worksheet.Cell(3, 7).Value = 0.01;
+                worksheet.Cell(3, 5).Value = "Hose";
+                worksheet.Cell(3, 6).Value = "B";
+                worksheet.Cell(3, 7).Value = 15;
+                worksheet.Cell(3, 8).Value = 500;
+                worksheet.Cell(3, 9).Value = 50;
+                worksheet.Cell(3, 10).Value = 1000;
+                worksheet.Cell(3, 11).Value = 5.0;
+                worksheet.Cell(3, 12).Value = 0.01;
 
                 // Catatan
                 worksheet.Cell(5, 1).Value = "Catatan:";
@@ -362,20 +386,30 @@ namespace DeliveryControl.Controllers
                         {
                             try
                             {
-                                // Column 1: Item Code
+                                // Column 1: Item Code (Tag)
                                 // Column 2: Item Name
                                 // Column 3: Description
                                 // Column 4: Unit
-                                // Column 5: Category
-                                // Column 6: Weight
-                                // Column 7: Volume
+                                // Column 5: Plant
+                                // Column 6: Rack
+                                // Column 7: No Rak
+                                // Column 8: Qty per Lot
+                                // Column 9: QTY Min
+                                // Column 10: QTY Max
+                                // Column 11: Berat
+                                // Column 12: Volume
                                 var itemCode = row.Cell(1).GetString().Trim();
                                 var itemName = row.Cell(2).GetString().Trim();
                                 var description = row.Cell(3).GetString().Trim();
                                 var unit = row.Cell(4).GetString().Trim();
-                                var category = row.Cell(5).GetString().Trim();
-                                var weightStr = row.Cell(6).GetString().Trim();
-                                var volumeStr = row.Cell(7).GetString().Trim();
+                                var plant = row.Cell(5).GetString().Trim();
+                                var rack = row.Cell(6).GetString().Trim();
+                                var noRakStr = row.Cell(7).GetString().Trim();
+                                var qtyLotStr = row.Cell(8).GetString().Trim();
+                                var minCapStr = row.Cell(9).GetString().Trim();
+                                var maxCapStr = row.Cell(10).GetString().Trim();
+                                var weightStr = row.Cell(11).GetString().Trim();
+                                var volumeStr = row.Cell(12).GetString().Trim();
 
                                 // Skip baris kosong atau baris catatan
                                 if (string.IsNullOrWhiteSpace(itemCode) || 
@@ -390,14 +424,6 @@ namespace DeliveryControl.Controllers
                                 if (string.IsNullOrWhiteSpace(itemName) || itemName.Length < 2)
                                 {
                                     errorMessages.Add($"Baris {row.RowNumber()}: Nama Item wajib diisi (min 2 karakter)");
-                                    errorCount++;
-                                    continue;
-                                }
-
-                                // Check duplicate item code
-                                if (existingItemCodes.Contains(itemCode.ToUpper()))
-                                {
-                                    errorMessages.Add($"Baris {row.RowNumber()}: Kode Item '{itemCode}' sudah ada di database");
                                     errorCount++;
                                     continue;
                                 }
@@ -436,21 +462,60 @@ namespace DeliveryControl.Controllers
                                     }
                                 }
 
-                                var item = new Item
-                                {
-                                    ItemCode = itemCode.ToUpper(),
-                                    ItemName = itemName,
-                                    Description = string.IsNullOrWhiteSpace(description) ? null : description,
-                                    Unit = string.IsNullOrWhiteSpace(unit) ? null : unit,
-                                    Category = string.IsNullOrWhiteSpace(category) ? null : category,
-                                    Weight = weight,
-                                    Volume = volume,
-                                    IsActive = true,
-                                    CreatedDate = DateTime.Now
-                                };
+                                // Handle numeric fields
+                                int? noRak = null;
+                                if (int.TryParse(noRakStr, out int nr)) noRak = nr;
 
-                                items.Add(item);
-                                existingItemCodes.Add(itemCode.ToUpper()); // Add to list to check for duplicates in same file
+                                int? qtyLot = null;
+                                if (int.TryParse(qtyLotStr, out int ql)) qtyLot = ql;
+
+                                int? minCap = null;
+                                if (int.TryParse(minCapStr, out int mic)) minCap = mic;
+
+                                int? maxCap = null;
+                                if (int.TryParse(maxCapStr, out int mac)) maxCap = mac;
+
+                                // Item Logic: Update if exists, otherwise create new
+                                var existingItem = await _context.Items.FirstOrDefaultAsync(i => i.ItemCode == itemCode);
+                                if (existingItem != null)
+                                {
+                                    existingItem.ItemName = itemName;
+                                    existingItem.Description = string.IsNullOrWhiteSpace(description) ? null : description;
+                                    existingItem.Unit = string.IsNullOrWhiteSpace(unit) ? null : unit;
+                                    existingItem.Plant = string.IsNullOrWhiteSpace(plant) ? null : plant;
+                                    existingItem.Rack = string.IsNullOrWhiteSpace(rack) ? null : rack;
+                                    existingItem.NoRack = noRak;
+                                    existingItem.QtyLot = qtyLot;
+                                    existingItem.RackMin = minCap;
+                                    existingItem.RackMax = maxCap;
+                                    existingItem.Weight = weight;
+                                    existingItem.Volume = volume;
+                                    existingItem.UpdatedDate = DateTime.Now;
+                                    _context.Items.Update(existingItem);
+                                }
+                                else if (!items.Any(i => i.ItemCode == itemCode)) // Avoid duplicates in same batch
+                                {
+                                    var item = new Item
+                                    {
+                                        ItemCode = itemCode,
+                                        ItemName = itemName,
+                                        Description = string.IsNullOrWhiteSpace(description) ? null : description,
+                                        Unit = string.IsNullOrWhiteSpace(unit) ? null : unit,
+                                        Category = "-", // Hide but keep as placeholder
+                                        Plant = string.IsNullOrWhiteSpace(plant) ? null : plant,
+                                        Rack = string.IsNullOrWhiteSpace(rack) ? null : rack,
+                                        NoRack = noRak,
+                                        QtyLot = qtyLot,
+                                        RackMin = minCap,
+                                        RackMax = maxCap,
+                                        Weight = weight,
+                                        Volume = volume,
+                                        IsActive = true,
+                                        CreatedDate = DateTime.Now
+                                    };
+                                    items.Add(item);
+                                }
+
                                 successCount++;
                             }
                             catch (Exception ex)
@@ -465,8 +530,13 @@ namespace DeliveryControl.Controllers
                 if (items.Any())
                 {
                     _context.Items.AddRange(items);
-                    await _context.SaveChangesAsync();
-                    TempData["SuccessMessage"] = $"✅ Berhasil import {successCount} item!";
+                }
+                
+                await _context.SaveChangesAsync();
+                
+                if (successCount > 0)
+                {
+                    TempData["SuccessMessage"] = $"✅ Berhasil memproses {successCount} item!";
                 }
                 else
                 {
@@ -488,6 +558,25 @@ namespace DeliveryControl.Controllers
                 TempData["ErrorMessage"] = $"❌ Error saat import Excel: {ex.Message}";
                 return RedirectToAction(nameof(Index));
             }
+        }
+
+        // Helper for PartNumber lookup
+        [HttpGet]
+        public async Task<IActionResult> GetItemInfo(string itemCode)
+        {
+            if (string.IsNullOrEmpty(itemCode)) return Json(new { success = false });
+
+            // Try find by ItemCode or Label
+            var item = await _context.Items
+                .AsNoTracking()
+                .FirstOrDefaultAsync(i => i.ItemCode == itemCode);
+
+            if (item != null)
+            {
+                return Json(new { success = true, itemName = item.ItemName });
+            }
+
+            return Json(new { success = false });
         }
     }
 }

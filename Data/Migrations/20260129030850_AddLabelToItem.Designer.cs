@@ -3,16 +3,19 @@ using System;
 using DeliveryControl.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace DeliveryControl.Migrations
+namespace DeliveryControl.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260129030850_AddLabelToItem")]
+    partial class AddLabelToItem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.0");
@@ -146,7 +149,7 @@ namespace DeliveryControl.Migrations
                         new
                         {
                             CustomerId = 1,
-                            CreatedDate = new DateTime(2026, 1, 29, 11, 47, 17, 725, DateTimeKind.Local).AddTicks(336),
+                            CreatedDate = new DateTime(2026, 1, 29, 10, 8, 50, 350, DateTimeKind.Local).AddTicks(7867),
                             CustomerCode = "CUST001",
                             CustomerName = "PT ABC Manufacturing",
                             IsActive = true,
@@ -156,7 +159,7 @@ namespace DeliveryControl.Migrations
                         new
                         {
                             CustomerId = 2,
-                            CreatedDate = new DateTime(2026, 1, 29, 11, 47, 17, 725, DateTimeKind.Local).AddTicks(338),
+                            CreatedDate = new DateTime(2026, 1, 29, 10, 8, 50, 350, DateTimeKind.Local).AddTicks(7869),
                             CustomerCode = "CUST002",
                             CustomerName = "PT XYZ Industries",
                             IsActive = true,
@@ -363,6 +366,10 @@ namespace DeliveryControl.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Label")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("MaxStock")
                         .HasColumnType("INTEGER");
 
@@ -414,7 +421,7 @@ namespace DeliveryControl.Migrations
                         {
                             ItemId = 1,
                             Category = "Raw Material",
-                            CreatedDate = new DateTime(2026, 1, 29, 11, 47, 17, 725, DateTimeKind.Local).AddTicks(428),
+                            CreatedDate = new DateTime(2026, 1, 29, 10, 8, 50, 350, DateTimeKind.Local).AddTicks(7958),
                             Description = "Raw material untuk produksi",
                             IsActive = true,
                             ItemCode = "ITM001",
@@ -428,7 +435,7 @@ namespace DeliveryControl.Migrations
                         {
                             ItemId = 2,
                             Category = "Finished Goods",
-                            CreatedDate = new DateTime(2026, 1, 29, 11, 47, 17, 725, DateTimeKind.Local).AddTicks(431),
+                            CreatedDate = new DateTime(2026, 1, 29, 10, 8, 50, 350, DateTimeKind.Local).AddTicks(7961),
                             Description = "Produk jadi siap kirim",
                             IsActive = true,
                             ItemCode = "ITM002",
@@ -442,7 +449,7 @@ namespace DeliveryControl.Migrations
                         {
                             ItemId = 3,
                             Category = "Packaging",
-                            CreatedDate = new DateTime(2026, 1, 29, 11, 47, 17, 725, DateTimeKind.Local).AddTicks(433),
+                            CreatedDate = new DateTime(2026, 1, 29, 10, 8, 50, 350, DateTimeKind.Local).AddTicks(7963),
                             Description = "Material packaging",
                             IsActive = true,
                             ItemCode = "ITM003",

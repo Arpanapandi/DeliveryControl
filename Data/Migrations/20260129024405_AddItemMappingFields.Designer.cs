@@ -3,16 +3,19 @@ using System;
 using DeliveryControl.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace DeliveryControl.Migrations
+namespace DeliveryControl.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260129024405_AddItemMappingFields")]
+    partial class AddItemMappingFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.0");
@@ -146,7 +149,7 @@ namespace DeliveryControl.Migrations
                         new
                         {
                             CustomerId = 1,
-                            CreatedDate = new DateTime(2026, 1, 29, 11, 47, 17, 725, DateTimeKind.Local).AddTicks(336),
+                            CreatedDate = new DateTime(2026, 1, 29, 9, 44, 5, 227, DateTimeKind.Local).AddTicks(9693),
                             CustomerCode = "CUST001",
                             CustomerName = "PT ABC Manufacturing",
                             IsActive = true,
@@ -156,7 +159,7 @@ namespace DeliveryControl.Migrations
                         new
                         {
                             CustomerId = 2,
-                            CreatedDate = new DateTime(2026, 1, 29, 11, 47, 17, 725, DateTimeKind.Local).AddTicks(338),
+                            CreatedDate = new DateTime(2026, 1, 29, 9, 44, 5, 227, DateTimeKind.Local).AddTicks(9695),
                             CustomerCode = "CUST002",
                             CustomerName = "PT XYZ Industries",
                             IsActive = true,
@@ -414,7 +417,7 @@ namespace DeliveryControl.Migrations
                         {
                             ItemId = 1,
                             Category = "Raw Material",
-                            CreatedDate = new DateTime(2026, 1, 29, 11, 47, 17, 725, DateTimeKind.Local).AddTicks(428),
+                            CreatedDate = new DateTime(2026, 1, 29, 9, 44, 5, 227, DateTimeKind.Local).AddTicks(9781),
                             Description = "Raw material untuk produksi",
                             IsActive = true,
                             ItemCode = "ITM001",
@@ -428,7 +431,7 @@ namespace DeliveryControl.Migrations
                         {
                             ItemId = 2,
                             Category = "Finished Goods",
-                            CreatedDate = new DateTime(2026, 1, 29, 11, 47, 17, 725, DateTimeKind.Local).AddTicks(431),
+                            CreatedDate = new DateTime(2026, 1, 29, 9, 44, 5, 227, DateTimeKind.Local).AddTicks(9783),
                             Description = "Produk jadi siap kirim",
                             IsActive = true,
                             ItemCode = "ITM002",
@@ -442,7 +445,7 @@ namespace DeliveryControl.Migrations
                         {
                             ItemId = 3,
                             Category = "Packaging",
-                            CreatedDate = new DateTime(2026, 1, 29, 11, 47, 17, 725, DateTimeKind.Local).AddTicks(433),
+                            CreatedDate = new DateTime(2026, 1, 29, 9, 44, 5, 227, DateTimeKind.Local).AddTicks(9785),
                             Description = "Material packaging",
                             IsActive = true,
                             ItemCode = "ITM003",

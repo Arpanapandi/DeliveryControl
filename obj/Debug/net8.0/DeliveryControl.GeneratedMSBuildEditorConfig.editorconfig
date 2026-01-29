@@ -62,6 +62,10 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRGVsaXZlcnlTY2hlZHVsZXNcQ3JlYXRlLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
+[C:/ControlDelivery/DeliveryControl/Views/DeliverySchedules/Dashboard.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRGVsaXZlcnlTY2hlZHVsZXNcRGFzaGJvYXJkLmNzaHRtbA==
+build_metadata.AdditionalFiles.CssScope = 
+
 [C:/ControlDelivery/DeliveryControl/Views/DeliverySchedules/DelayChart.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRGVsaXZlcnlTY2hlZHVsZXNcRGVsYXlDaGFydC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
@@ -128,22 +132,6 @@ build_metadata.AdditionalFiles.CssScope =
 
 [C:/ControlDelivery/DeliveryControl/Views/Driver/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRHJpdmVyXEluZGV4LmNzaHRtbA==
-build_metadata.AdditionalFiles.CssScope = 
-
-[C:/ControlDelivery/DeliveryControl/Views/FgMappings/Create.cshtml]
-build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRmdNYXBwaW5nc1xDcmVhdGUuY3NodG1s
-build_metadata.AdditionalFiles.CssScope = 
-
-[C:/ControlDelivery/DeliveryControl/Views/FgMappings/Delete.cshtml]
-build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRmdNYXBwaW5nc1xEZWxldGUuY3NodG1s
-build_metadata.AdditionalFiles.CssScope = 
-
-[C:/ControlDelivery/DeliveryControl/Views/FgMappings/Edit.cshtml]
-build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRmdNYXBwaW5nc1xFZGl0LmNzaHRtbA==
-build_metadata.AdditionalFiles.CssScope = 
-
-[C:/ControlDelivery/DeliveryControl/Views/FgMappings/Index.cshtml]
-build_metadata.AdditionalFiles.TargetPath = Vmlld3NcRmdNYXBwaW5nc1xJbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
 [C:/ControlDelivery/DeliveryControl/Views/Home/Index.cshtml]
@@ -228,6 +216,10 @@ build_metadata.AdditionalFiles.CssScope =
 
 [C:/ControlDelivery/DeliveryControl/Views/Stock/Targets.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcVGFyZ2V0cy5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/ControlDelivery/DeliveryControl/Views/Stock/Trend.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcVHJlbmQuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
 [C:/ControlDelivery/DeliveryControl/Views/Users/Create.cshtml]

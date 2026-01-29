@@ -40,33 +40,28 @@ namespace DeliveryControl.Controllers
                     return Json(new { success = false, message = "Data DUPLIKAT! Barang ini sudah pernah di-scan pooling." });
                 }
 
-                // 2. Auto-map ItemId and Location based on FgMapping
+                // 2. Lookup Item Master (Primary key of automation)
+                // Match by Tag (ItemCode). Label is used for extra validation if present.
                 var item = await _context.Items
-                    .FirstOrDefaultAsync(i => i.ItemCode == record.Tag || i.ItemCode == record.Label);
+                    .FirstOrDefaultAsync(i => i.ItemCode == record.Tag);
                 
                 if (item != null)
                 {
                     record.ItemId = item.ItemId;
                     
-                    // Get FG Mapping for location automatic fill
-                    var mapping = await _context.FgMappings.FirstOrDefaultAsync(m => m.ItemId == item.ItemId);
-                    if (mapping != null)
-                    {
-                        record.Plant = mapping.Plant;
-                        record.Rack = mapping.Rack;
-                        record.Column = mapping.NoRack;
-                    }
-                    else
-                    {
-                        // Fallback if no mapping exists
-                        record.Plant = record.Plant ?? "N/A";
-                        record.Rack = record.Rack ?? "-";
-                    }
+                    // Force copy location from Master Item
+                    // This ensures the operator only needs to input Tag/Label
+                    record.Plant = item.Plant ?? "Unknown";
+                    record.Rack = item.Rack ?? "-";
+                    record.Column = item.NoRack ?? 0;
+                    
+                    // If the master item has a specific Label snapshot, it should match the scanned label
+                    // but we allow scanning any label if master snapshot is empty.
                 }
                 else
                 {
-                    record.Plant = record.Plant ?? "N/A";
-                    record.Rack = record.Rack ?? "-";
+                    // Item not found in master
+                    return Json(new { success = false, message = $"Item '{record.Tag}' tidak ditemukan di Master Data. Silakan hubungi Admin." });
                 }
 
                 record.CreatedDate = DateTime.Now;

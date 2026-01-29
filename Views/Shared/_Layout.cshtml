@@ -175,6 +175,11 @@
                 <div class="link-glow"></div>
             </button>
             <div class="collapse" id="menuStock">
+                <a asp-controller="Stock" asp-action="Trend" class="sidebar-link sidebar-link-sub">
+                    <i class="bi bi-graph-up"></i>
+                    <span>Grafik Trend</span>
+                    <div class="link-glow"></div>
+                </a>
                 <a asp-controller="Stock" asp-action="Molded" class="sidebar-link sidebar-link-sub">
                     <i class="bi bi-grid-3x3-gap"></i>
                     <span>Molded</span>
@@ -233,11 +238,6 @@
                     <a asp-controller="Items" asp-action="Index" class="sidebar-link sidebar-link-sub">
                         <i class="bi bi-boxes"></i>
                         <span>Item</span>
-                        <div class="link-glow"></div>
-                    </a>
-                    <a asp-controller="FgMappings" asp-action="Index" class="sidebar-link sidebar-link-sub">
-                        <i class="bi bi-geo-alt"></i>
-                        <span>Mapping FG</span>
                         <div class="link-glow"></div>
                     </a>
                     <a asp-controller="Users" asp-action="Index" class="sidebar-link sidebar-link-sub">

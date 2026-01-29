@@ -19,6 +19,7 @@ namespace DeliveryControl.Models
         [StringLength(200)]
         public string ItemName { get; set; } = string.Empty;
 
+
         [StringLength(1000)]
         public string? Description { get; set; }
 
@@ -38,6 +39,20 @@ namespace DeliveryControl.Models
 
         public int MinStock { get; set; } = 5;
         public int MaxStock { get; set; } = 20;
+
+        // Integration with Mapping FG (Rack & Physical location)
+        [StringLength(20)]
+        public string? Plant { get; set; } // Molded, Hose, RVI
+
+        [StringLength(5)]
+        public string? Rack { get; set; } // A - I
+
+        public int? NoRack { get; set; } // 1 - 33
+
+        public int? QtyLot { get; set; } // Qty per lot
+
+        public int? RackMin { get; set; } // Capacity Min (Rack)
+        public int? RackMax { get; set; } // Capacity Max (Rack)
 
         public bool IsActive { get; set; } = true;
 
