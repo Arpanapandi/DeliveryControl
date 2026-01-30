@@ -906,3 +906,54 @@ body.futuristic-body::before {
     display: none;
   }
 }
+
+/* ==================== STOCK LEVEL BADGES ==================== */
+.stock-badge {
+    padding: 0.35rem 0.8rem;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    transition: all 0.2s ease;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.stock-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.stock-level-red {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white !important;
+    animation: badge-pulse-red 2s infinite;
+}
+
+.stock-level-orange {
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    color: white !important;
+}
+
+.stock-level-yellow {
+    background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+    color: #0f172a !important;
+}
+
+.stock-level-green {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: white !important;
+}
+
+.stock-level-blue {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white !important;
+}
+
+@keyframes badge-pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}

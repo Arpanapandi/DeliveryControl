@@ -141,58 +141,60 @@
     </div>
 </div>
 
-<!-- Modal Force Delete -->
-<div class="modal fade" id="forceDeleteModal" tabindex="-1" aria-labelledby="forceDeleteModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-danger">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="forceDeleteModalLabel">
-                    <i class="bi bi-exclamation-triangle-fill"></i> Konfirmasi Force Delete
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="alert alert-danger mb-3">
-                    <i class="bi bi-exclamation-triangle-fill"></i>
-                    <strong>PERINGATAN KERAS!</strong>
+@section Modals {
+    <!-- Modal Force Delete -->
+    <div class="modal fade" id="forceDeleteModal" tabindex="-1" aria-labelledby="forceDeleteModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-danger">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="forceDeleteModalLabel">
+                        <i class="bi bi-exclamation-triangle-fill"></i> Konfirmasi Force Delete
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                
-                <h6 class="fw-bold">Data yang akan dihapus:</h6>
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <p class="mb-1"><strong>Kode:</strong> <span id="deleteCustomerCode"></span></p>
-                        <p class="mb-0"><strong>Nama:</strong> <span id="deleteCustomerName"></span></p>
+                <div class="modal-body">
+                    <div class="alert alert-danger mb-3">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <strong>PERINGATAN KERAS!</strong>
                     </div>
-                </div>
+                    
+                    <h6 class="fw-bold">Data yang akan dihapus:</h6>
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <p class="mb-1"><strong>Kode:</strong> <span id="deleteCustomerCode"></span></p>
+                            <p class="mb-0"><strong>Nama:</strong> <span id="deleteCustomerName"></span></p>
+                        </div>
+                    </div>
 
-                <div class="alert alert-warning">
-                    <p class="mb-2"><strong>Sistem akan menghapus:</strong></p>
-                    <ul class="mb-0" id="warningList">
-                        <li>Customer ini</li>
-                        <li><strong>SEMUA</strong> Delivery Schedule terkait (jika ada)</li>
-                        <li><strong>SEMUA</strong> Delivery Items dalam schedule (jika ada)</li>
-                    </ul>
+                    <div class="alert alert-warning">
+                        <p class="mb-2"><strong>Sistem akan menghapus:</strong></p>
+                        <ul class="mb-0" id="warningList">
+                            <li>Customer ini</li>
+                            <li><strong>SEMUA</strong> Delivery Schedule terkait (jika ada)</li>
+                            <li><strong>SEMUA</strong> Delivery Items dalam schedule (jika ada)</li>
+                        </ul>
+                    </div>
+                    
+                    <p class="text-danger fw-bold mb-0">
+                        <i class="bi bi-exclamation-circle"></i> Tindakan ini TIDAK DAPAT DIBATALKAN!
+                    </p>
                 </div>
-                
-                <p class="text-danger fw-bold mb-0">
-                    <i class="bi bi-exclamation-circle"></i> Tindakan ini TIDAK DAPAT DIBATALKAN!
-                </p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="bi bi-x-circle"></i> Batal
-                </button>
-                <form asp-action="ForceDelete" method="post" style="display: inline;" id="forceDeleteForm">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" id="forceDeleteId" name="id" value="" />
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-trash-fill"></i> Ya, Hapus Paksa!
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle"></i> Batal
                     </button>
-                </form>
+                    <form asp-action="ForceDelete" method="post" style="display: inline;" id="forceDeleteForm">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" id="forceDeleteId" name="id" value="" />
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash-fill"></i> Ya, Hapus Paksa!
+                        </button>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
-</div>
+}
 
 @section Scripts {
     <script>
@@ -209,11 +211,7 @@
                 </text>
             }
 
-            // Fix Modal Stacking Context - Move modal to body
-            var modalElement = document.getElementById('forceDeleteModal');
-            if (modalElement) {
-                document.body.appendChild(modalElement);
-            }
+
             
             // Select All functionality
             const selectAllCheckbox = document.getElementById('selectAll');

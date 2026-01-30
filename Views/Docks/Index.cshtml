@@ -122,47 +122,49 @@
     </div>
 </div>
 
-<!-- Modal Import Excel -->
-<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form asp-action="ImportExcel" method="post" enctype="multipart/form-data">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="importModalLabel">
-                        <i class="bi bi-upload"></i> Import Data Dock dari Excel
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i> 
-                        <strong>Panduan Import:</strong>
-                        <ol class="mb-0 mt-2">
-                            <li>Download template Excel terlebih dahulu</li>
-                            <li>Isi data sesuai format template</li>
-                            <li>Customer ID harus sesuai dengan ID di database</li>
-                            <li>Kode Dock akan di-generate otomatis</li>
-                            <li>Upload file yang sudah diisi</li>
-                        </ol>
+@section Modals {
+    <!-- Modal Import Excel -->
+    <div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form asp-action="ImportExcel" method="post" enctype="multipart/form-data">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="importModalLabel">
+                            <i class="bi bi-upload"></i> Import Data Dock dari Excel
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-                    <div class="mb-3">
-                        <label for="file" class="form-label">Pilih File Excel</label>
-                        <input type="file" class="form-control" id="file" name="file" accept=".xlsx,.xls" required>
-                        <div class="form-text">Format file: .xlsx atau .xls</div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> 
+                            <strong>Panduan Import:</strong>
+                            <ol class="mb-0 mt-2">
+                                <li>Download template Excel terlebih dahulu</li>
+                                <li>Isi data sesuai format template</li>
+                                <li>Customer ID harus sesuai dengan ID di database</li>
+                                <li>Kode Dock akan di-generate otomatis</li>
+                                <li>Upload file yang sudah diisi</li>
+                            </ol>
+                        </div>
+                        <div class="mb-3">
+                            <label for="file" class="form-label">Pilih File Excel</label>
+                            <input type="file" class="form-control" id="file" name="file" accept=".xlsx,.xls" required>
+                            <div class="form-text">Format file: .xlsx atau .xls</div>
+                        </div>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="bi bi-x-circle"></i> Batal
-                    </button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-upload"></i> Upload & Import
-                    </button>
-                </div>
-            </form>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="bi bi-x-circle"></i> Batal
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-upload"></i> Upload & Import
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
-</div>
+}
 
 @section Scripts {
     <script>

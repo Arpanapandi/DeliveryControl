@@ -3,25 +3,76 @@
     ViewData["Title"] = "Dashboard FG";
 }
 
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center">
+<div class="header-container mb-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <!-- Title Section -->
+        <div class="d-flex align-items-center gap-3">
+            <i class="bi bi-columns-gap fs-3 text-primary"></i>
             <div>
-                <h2 class="mb-1"><i class="bi bi-columns-gap text-primary"></i> Dashboard Finished Goods</h2>
-                <p class="text-muted">Monitoring stock levels across all plants</p>
-            </div>
-            <div class="text-end">
-                <div class="d-flex gap-2">
-                    <a asp-controller="Pooling" asp-action="Index" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-plus-circle me-1"></i> New Pooling
-                    </a>
-                    <a asp-controller="PreparationWorkflow" asp-action="Index" class="btn btn-primary btn-sm">
-                        <i class="bi bi-truck me-1"></i> New Preparation
-                    </a>
-                </div>
+                <h1 class="h4 fw-bold mb-0 text-white">Dashboard Finished Goods</h1>
+                <p class="text-muted mb-0 smaller">Monitoring stock levels across all plants</p>
             </div>
         </div>
-        <hr />
+
+        <!-- Filter Bar Section -->
+        <div class="custom-filter-bar">
+            <!-- Search Box -->
+            <div class="search-box-wrapper">
+                <i class="bi bi-search search-icon"></i>
+                <input type="text" id="tagLabelSearch" class="custom-search-input" placeholder="Cari Tag atau Kanban...">
+            </div>
+
+            <!-- Plant Filter -->
+            <div class="filter-group">
+                <span class="filter-label">Plant:</span>
+                <select id="plantFilter" class="custom-select-input">
+                    <option value="Overall" selected="@(Model.PlantName == "Overall")">Overall</option>
+                    <option value="Molded" selected="@(Model.PlantName == "Molded")">Molded</option>
+                    <option value="Hose" selected="@(Model.PlantName == "Hose")">Hose</option>
+                    <option value="RVI" selected="@(Model.PlantName == "RVI")">RVI</option>
+                </select>
+            </div>
+
+            <!-- Date Filter -->
+            <div class="filter-group">
+                <span class="filter-label">Tanggal:</span>
+                <input type="date" id="dateFilter" class="custom-date-input" value="@(Model.SearchDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))">
+            </div>
+
+            <div class="dash-v-divider"></div>
+
+            <!-- Excel Download -->
+            <button id="btnDownloadExcel" class="btn-custom-excel">
+                <i class="bi bi-file-earmark-excel"></i>
+                <span>Template Excel</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Dashboard Sub-Menu Navigation -->
+    <div class="dashboard-nav-wrapper">
+        <div class="nav-links-container">
+            <a asp-controller="Stock" asp-action="Index" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")">
+                <i class="bi bi-columns-gap"></i>
+                <span>Overall Stock</span>
+            </a>
+            <a asp-controller="Stock" asp-action="Molded" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Molded" ? "active" : "")">
+                <i class="bi bi-grid-3x3-gap"></i>
+                <span>Transaction Molded</span>
+            </a>
+            <a asp-controller="Stock" asp-action="Hose" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Hose" ? "active" : "")">
+                <i class="bi bi-layers"></i>
+                <span>Transaction Hose</span>
+            </a>
+            <a asp-controller="Stock" asp-action="RVI" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "RVI" ? "active" : "")">
+                <i class="bi bi-cpu"></i>
+                <span>Transaction RVI</span>
+            </a>
+            <a asp-controller="Stock" asp-action="Trend" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Trend" ? "active" : "")">
+                <i class="bi bi-graph-up"></i>
+                <span>Trend Stock</span>
+            </a>
+        </div>
     </div>
 </div>
 
@@ -63,25 +114,14 @@
         <!-- Detailed Data Table -->
         <div class="col-12 mb-4">
             <div class="cyber-card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <span class="fw-bold text-primary"><i class="bi bi-list-ul me-2"></i> Detail Data Barang (@Model.PlantName)</span>
                     
-                    <!-- Search and Filter Controls -->
-                    <div class="d-flex gap-3 align-items-center flex-grow-1 justify-content-end">
-                        <div class="d-flex align-items-center gap-2 me-2">
-                             <span id="autoScrollStatus" class="small text-muted fw-bold me-1" style="font-size: 0.75rem;">Auto Scroll: OFF</span>
-                             <button id="btnToggleAutoScroll" class="btn btn-outline-secondary btn-xs d-flex align-items-center gap-1">
-                                 <i class="bi bi-play-circle"></i> Toggle
-                             </button>
-                        </div>
-                        <div class="input-group input-group-sm" style="max-width: 250px;">
-                            <span class="input-group-text bg-dark border-primary text-primary"><i class="bi bi-search"></i></span>
-                            <input type="text" id="tagLabelSearch" class="form-control bg-dark text-white border-primary" placeholder="Cari Tag atau Nama Item...">
-                        </div>
-                        <div class="d-flex gap-2 align-items-center">
-                            <span id="activeFilterLabel" class="badge bg-primary">All Items</span>
-                            <button id="btnClearFilter" class="btn btn-outline-secondary btn-xs" style="font-size: 0.6rem;">Clear</button>
-                        </div>
+                    <div class="d-flex align-items-center gap-2">
+                         <span id="autoScrollStatus" class="small text-muted fw-bold me-1" style="font-size: 0.75rem;">Auto Scroll: OFF</span>
+                         <button id="btnToggleAutoScroll" class="btn btn-outline-secondary btn-xs d-flex align-items-center gap-1">
+                             <i class="bi bi-play-circle"></i> Toggle
+                         </button>
                     </div>
                 </div>
                 <div class="table-responsive main-stock-container">
@@ -89,6 +129,7 @@
                         <thead>
                             <tr>
                                 <th>No</th>
+                                <th>Plant</th>
                                 <th>Tag</th>
                                 <th>Label</th>
                                 <th>Nama Item</th>
@@ -104,6 +145,7 @@
                             {
                                 <tr class="stock-row" data-status="@record.Status">
                                     <td>@record.No</td>
+                                    <td><span class="badge @(record.Plant == "Molded" ? "bg-primary" : record.Plant == "Hose" ? "bg-info text-dark" : "bg-warning text-dark") smaller">@record.Plant</span></td>
                                     <td><span class="text-primary fw-bold">@record.Tag</span></td>
                                     <td>@record.Label</td>
                                     <td class="small">@record.ItemName</td>
@@ -118,13 +160,33 @@
                                      <td>
                                          @if (record.LevelStock < 1.0m)
                                          {
-                                             <span class="badge badge-pulse-critical py-1" style="font-size: 0.75rem;">
-                                                 <i class="bi bi-exclamation-triangle-fill me-1"></i> @record.LevelStock.ToString("N1").Replace(".", ",") Days
+                                             <span class="stock-badge stock-level-red px-2 py-1">
+                                                 <i class="bi bi-exclamation-triangle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
+                                             </span>
+                                         }
+                                         else if (record.LevelStock >= 1.0m && record.LevelStock < 1.5m)
+                                         {
+                                             <span class="stock-badge stock-level-orange px-2 py-1">
+                                                 <i class="bi bi-exclamation-circle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
+                                             </span>
+                                         }
+                                         else if (record.LevelStock >= 1.5m && record.LevelStock < 2.0m)
+                                         {
+                                             <span class="stock-badge stock-level-yellow px-2 py-1">
+                                                 <i class="bi bi-info-circle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
+                                             </span>
+                                         }
+                                         else if (record.LevelStock >= 2.0m && record.LevelStock <= 3.0m)
+                                         {
+                                             <span class="stock-badge stock-level-green px-2 py-1">
+                                                 <i class="bi bi-check-circle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
                                              </span>
                                          }
                                          else
                                          {
-                                             <span class="text-white-50 smaller">@record.LevelStock.ToString("N1").Replace(".", ",") Days</span>
+                                             <span class="stock-badge stock-level-blue px-2 py-1">
+                                                 <i class="bi bi-star-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
+                                             </span>
                                          }
                                      </td>
                                      <td class="text-center"><span class="badge bg-dark border border-primary text-white">@record.Location</span></td>
@@ -157,14 +219,18 @@
             connection.start().catch(err => console.error(err.toString()));
 
             function refreshDashboard() {
+                const plant = $('#plantFilter').val() || 'Overall';
+                const date = $('#dateFilter').val() || '';
+                
                 $.ajax({
-                    url: window.location.href,
+                    url: `/Stock/Index?plant=${plant}&date=${date}`,
                     type: 'GET',
                     success: function (html) {
                         const newContent = $(html).find('#dashboardContent').html();
                         $('#dashboardContent').fadeOut(200, function() {
                             $(this).html(newContent).fadeIn(200);
                             bindFilterEvents();
+                            applyAllFilters(); // Re-apply local filters (Search & Status)
                             
                             // Re-apply auto scroll state if it was active
                             if (isAutoScrollActive) {
@@ -184,14 +250,18 @@
                     applyAllFilters();
                 });
 
-                $('#btnClearFilter').off('click').on('click', function() {
-                    currentStatusFilter = 'All';
-                    $('#tagLabelSearch').val('');
-                    applyAllFilters();
+                $('#plantFilter, #dateFilter').off('change').on('change', function() {
+                    refreshDashboard();
                 });
 
                 $('#tagLabelSearch').off('input').on('input', function() {
                     applyAllFilters();
+                });
+
+                $('#tagLabelSearch').off('keypress').on('keypress', function(e) {
+                    if (e.which == 13) {
+                        refreshDashboard();
+                    }
                 });
 
                 $('#btnToggleAutoScroll').off('click').on('click', toggleAutoScroll);
@@ -217,31 +287,35 @@
 
                 $('.stock-row').each(function() {
                     const rowStatus = $(this).data('status');
-                    const tag = $(this).find('td:nth-child(2)').text().toLowerCase();
-                    const itemName = $(this).find('td:nth-child(4)').text().toLowerCase();
+                    const tag = $(this).find('td:nth-child(3)').text().toLowerCase(); // td 3 = Tag
+                    const label = $(this).find('td:nth-child(4)').text().toLowerCase(); // td 4 = Label
+                    const itemName = $(this).find('td:nth-child(5)').text().toLowerCase(); // td 5 = Item Name
                     
                     const matchesStatus = (currentStatusFilter === 'All' || rowStatus === currentStatusFilter);
-                    const matchesSearch = (tag.includes(searchText) || itemName.includes(searchText));
+                    const matchesSearch = (tag.includes(searchText) || label.includes(searchText) || itemName.includes(searchText));
                     
                     if (matchesStatus && matchesSearch) {
-                        $(this).fadeIn(200);
+                        $(this).show();
                     } else {
-                        $(this).fadeOut(100);
+                        $(this).hide();
                     }
                 });
             }
 
             // Auto Scroll Logic
-            let isAutoScrollActive = false;
+            let isAutoScrollActive = localStorage.getItem('autoScrollActive') === 'true';
             let scrollInterval;
-            const scrollSpeed = 1; // pixels
-            const scrollDelay = 40; // ms (Faster speed: 80ms -> 40ms)
+            let scrollDirection = 1; // 1: Down, -1: Up
+            const scrollSpeed = 1; 
+            const scrollDelay = 40; // ms
 
             function toggleAutoScroll() {
                 isAutoScrollActive = !isAutoScrollActive;
+                localStorage.setItem('autoScrollActive', isAutoScrollActive);
                 syncAutoScrollUI();
                 
                 if (isAutoScrollActive) {
+                    scrollDirection = 1;
                     startScrolling();
                 } else {
                     stopScrolling();
@@ -266,37 +340,191 @@
 
             function startScrolling() {
                 const container = $('.main-stock-container');
+                if (container.length === 0) return;
+                const el = container[0];
+                
                 if (scrollInterval) clearInterval(scrollInterval);
                 
                 scrollInterval = setInterval(function() {
-                    const currentPos = container.scrollTop();
-                    const maxPos = container[0].scrollHeight - container.innerHeight();
+                    if (!isAutoScrollActive) return;
+
+                    const prevPos = el.scrollTop;
+                    el.scrollTop += (scrollDirection * scrollSpeed);
                     
-                    if (currentPos >= maxPos - 1) {
-                        // Reached bottom, pause and reset
+                    // If position didn't change, we hit a boundary
+                    if (el.scrollTop === prevPos && el.scrollHeight > el.clientHeight) {
                         clearInterval(scrollInterval);
                         setTimeout(function() {
-                            container.animate({ scrollTop: 0 }, 1000, 'swing', function() {
-                                if (isAutoScrollActive) startScrolling();
-                            });
-                        }, 2000);
-                    } else {
-                        container.scrollTop(currentPos + scrollSpeed);
+                            if (isAutoScrollActive) {
+                                scrollDirection *= -1;
+                                startScrolling();
+                            }
+                        }, 2000); // Wait 2 seconds at edges
                     }
                 }, scrollDelay);
             }
 
             function stopScrolling() {
                 clearInterval(scrollInterval);
-                $('.main-stock-container').stop(); // Stop any ongoing animate
+                scrollDirection = 1;
             }
 
             bindFilterEvents();
+            
+            // Initial load check
+            if (isAutoScrollActive) {
+                syncAutoScrollUI();
+                startScrolling();
+            }
         });
     </script>
 }
 
 <style>
+    /* ========================================
+       COMPACT HEADER & FILTER BAR STYLING
+       ======================================== */
+    .header-container {
+        padding: 5px 0;
+    }
+
+    .custom-filter-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: nowrap;
+    }
+
+    .search-box-wrapper {
+        display: flex;
+        align-items: center;
+        background: #0f172a;
+        border: 1px solid #3b82f6;
+        border-radius: 4px;
+        padding: 0 10px;
+        height: 36px;
+    }
+
+    .search-icon {
+        color: #3b82f6;
+        font-size: 0.9rem;
+        margin-right: 8px;
+    }
+
+    .custom-search-input {
+        background: transparent;
+        border: none;
+        color: #fff;
+        outline: none;
+        font-size: 0.85rem;
+        width: 180px;
+    }
+
+    .filter-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .filter-label {
+        color: #64748b;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .custom-date-input, .custom-select-input {
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 4px;
+        color: #fff;
+        padding: 0 8px;
+        height: 36px;
+        font-size: 0.85rem;
+        outline: none;
+        color-scheme: dark;
+    }
+
+    .custom-date-input::-webkit-calendar-picker-indicator {
+        filter: invert(1);
+        cursor: pointer;
+    }
+
+    .custom-date-input:focus, .custom-select-input:focus {
+        border-color: #3b82f6;
+    }
+
+    .btn-custom-excel {
+        background: transparent;
+        border: 1px solid #10b981;
+        color: #10b981;
+        border-radius: 6px;
+        padding: 0 12px;
+        height: 36px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .btn-custom-excel:hover {
+        background: rgba(16, 185, 129, 0.1);
+    }
+
+    .dash-v-divider {
+        width: 1px;
+        height: 20px;
+        background: rgba(255,255,255,0.1);
+        margin: 0 2px;
+    }
+
+    /* ========================================
+       DASHBOARD SUB-MENU NAV STYLING
+       ======================================== */
+    .dashboard-nav-wrapper {
+        border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+        margin-top: 5px;
+        padding-bottom: 0;
+    }
+
+    .nav-links-container {
+        display: flex;
+        align-items: center;
+        gap: 25px;
+    }
+
+    .nav-link-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #94a3b8;
+        text-decoration: none;
+        padding: 10px 0px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        position: relative;
+        border-bottom: 2px solid transparent;
+    }
+
+    .nav-link-item i {
+        font-size: 1rem;
+    }
+
+    .nav-link-item:hover {
+        color: #fff;
+    }
+
+    .nav-link-item.active {
+        color: #3b82f6;
+        border-bottom-color: #3b82f6;
+    }
+
+    .nav-link-item.active i {
+        color: #3b82f6;
+    }
+
     .smaller { font-size: 0.75rem; }
     .btn-xs { padding: 0.1rem 0.3rem; font-size: 0.7rem; }
     
@@ -326,12 +554,7 @@
         box-shadow: 0 0 10px #10b981;
         animation: pulse-live 2s infinite;
     }
-    .badge-pulse-critical {
-        animation: pulse-red 2s infinite;
-        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
-        border: none !important;
-        color: white !important;
-    }
+
     .main-stock-container {
         max-height: 50vh;
         overflow-y: auto;
@@ -357,10 +580,7 @@
         z-index: 10;
         border-bottom: 2px solid #1e293b;
     }
-    @@keyframes pulse-red {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
-        50% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
-    }
+
     @@keyframes pulse-live {
         0% { opacity: 1; }
         50% { opacity: 0.4; }

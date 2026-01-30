@@ -50,9 +50,9 @@
                             <label asp-for="Unit" class="form-label">Unit</label>
                             <select asp-for="Unit" class="form-select">
                                 <option value="">-- Pilih Unit --</option>
-                                @if (ViewBag.Units != null)
+                                @if (ViewBag.Units is List<string> units)
                                 {
-                                    @foreach (var unit in ViewBag.Units as List<string>)
+                                    @foreach (var unit in units)
                                     {
                                         <option value="@unit">@unit</option>
                                     }

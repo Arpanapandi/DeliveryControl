@@ -62,6 +62,7 @@ namespace DeliveryControl.Models
 
         // Navigation properties
         public virtual ICollection<DeliveryItem> DeliveryItems { get; set; } = new List<DeliveryItem>();
+        public virtual ICollection<PoolingRecord> PoolingRecords { get; set; } = new List<PoolingRecord>();
     }
 }
 

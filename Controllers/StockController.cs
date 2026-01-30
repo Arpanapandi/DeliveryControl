@@ -14,12 +14,9 @@ namespace DeliveryControl.Controllers
             _context = context;
         }
 
-        public async Task<IActionResult> Index()
+        public async Task<IActionResult> Index(string plant = "Overall", DateTime? date = null)
         {
-            // Dashboard FG can default to showing data for any plant or a aggregate, 
-            // but currently the view is built for a specific plant data.
-            // Let's default to "Molded" for the indicators but use the Index view.
-            return View(await GetStockViewModel("Molded"));
+            return View(await GetStockViewModel(plant, date));
         }
 
         public async Task<IActionResult> Molded(DateTime? date)
@@ -40,7 +37,53 @@ namespace DeliveryControl.Controllers
             return View(await GetStockViewModel("RVI", date));
         }
 
-        public async Task<IActionResult> Trend(string period = "Day")
+        public async Task<IActionResult> ExportToExcel(string plant = "Overall", DateTime? date = null)
+        {
+            var viewModel = await GetStockViewModel(plant, date);
+            var dateStr = (date ?? DateTime.Today).ToString("dd-MM-yyyy");
+            
+            using (var workbook = new ClosedXML.Excel.XLWorkbook())
+            {
+                var worksheet = workbook.Worksheets.Add("Stock Report");
+                
+                // Header
+                var headers = new string[] { "No", "Plant", "Tag", "Label", "Item Name", "Stock", "Level", "Location", "Time", "Date", "Operator" };
+                for (int i = 0; i < headers.Length; i++)
+                {
+                    worksheet.Cell(1, i + 1).Value = headers[i];
+                    worksheet.Cell(1, i + 1).Style.Font.Bold = true;
+                    worksheet.Cell(1, i + 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
+                }
+
+                // Data
+                for (int i = 0; i < viewModel.StockDetails.Count; i++)
+                {
+                    var detail = viewModel.StockDetails[i];
+                    worksheet.Cell(i + 2, 1).Value = detail.No;
+                    worksheet.Cell(i + 2, 2).Value = detail.Plant;
+                    worksheet.Cell(i + 2, 3).Value = detail.Tag;
+                    worksheet.Cell(i + 2, 4).Value = detail.Label;
+                    worksheet.Cell(i + 2, 5).Value = detail.ItemName;
+                    worksheet.Cell(i + 2, 6).Value = detail.CurrentStock;
+                    worksheet.Cell(i + 2, 7).Value = detail.LevelStock;
+                    worksheet.Cell(i + 2, 8).Value = detail.Location;
+                    worksheet.Cell(i + 2, 9).Value = detail.Time;
+                    worksheet.Cell(i + 2, 10).Value = detail.Date;
+                    worksheet.Cell(i + 2, 11).Value = detail.Operator;
+                }
+
+                worksheet.Columns().AdjustToContents();
+
+                using (var stream = new MemoryStream())
+                {
+                    workbook.SaveAs(stream);
+                    var content = stream.ToArray();
+                    return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"StockReport_{plant}_{dateStr}.xlsx");
+                }
+            }
+        }
+
+        public async Task<IActionResult> Trend(string period = "Day", string mode = "Activity")
         {
             var now = DateTime.Now;
             var today = DateTime.Today;
@@ -49,130 +92,124 @@ namespace DeliveryControl.Controllers
 
             var viewModel = new StockTrendViewModel
             {
-                FilterPeriod = period
+                FilterPeriod = period,
+                ViewMode = mode
             };
 
-            // 1. Total FG Stock (Sum of current stock in all plants)
+            // 1. Calculate Total FG Activity based on selected period for relevant plants
+            var activePlants = new[] { "Molded", "Hose", "RVI" };
+            DateTime filterStartDate = period switch
+            {
+                "Month" => startOfMonth,
+                "Year" => startOfYear,
+                _ => today // Default to "Day"
+            };
+
+            viewModel.TotalFGStock = await _context.PoolingRecords
+                .CountAsync(r => activePlants.Contains(r.Plant) && r.CreatedDate >= filterStartDate);
+
+            if (mode == "Level")
+            {
+                viewModel.CategoryTrends = await GetHistoricalCategoryTrends(filterStartDate, now, period);
+            }
+
+            // Fetch current stock summaries for recent activity status mapping
             var moldedStockVM = await GetStockViewModel("Molded");
             var hoseStockVM = await GetStockViewModel("Hose");
             var rviStockVM = await GetStockViewModel("RVI");
-            
-            viewModel.TotalFGStock = moldedStockVM.NetStock + hoseStockVM.NetStock + rviStockVM.NetStock;
 
-            // Populate Recent Shortage Lists
-            viewModel.RecentMolded = moldedStockVM.StockDetails.Where(d => d.Status == "Shortage").ToList();
-            viewModel.RecentHose = hoseStockVM.StockDetails.Where(d => d.Status == "Shortage").ToList();
-            viewModel.RecentRVI = rviStockVM.StockDetails.Where(d => d.Status == "Shortage").ToList();
+            // Fetch pooling records based on the selected period for each plant
+            var moldedPooling = await _context.PoolingRecords
+                .Where(r => r.Plant == "Molded" && r.CreatedDate >= filterStartDate)
+                .Include(r => r.Item)
+                .OrderByDescending(r => r.CreatedDate)
+                .ToListAsync();
+
+            var hosePooling = await _context.PoolingRecords
+                .Where(r => r.Plant == "Hose" && r.CreatedDate >= filterStartDate)
+                .Include(r => r.Item)
+                .OrderByDescending(r => r.CreatedDate)
+                .ToListAsync();
+
+            var rviPooling = await _context.PoolingRecords
+                .Where(r => r.Plant == "RVI" && r.CreatedDate >= filterStartDate)
+                .Include(r => r.Item)
+                .OrderByDescending(r => r.CreatedDate)
+                .ToListAsync();
+
+            // Map to StockItemDetail for the view
+            viewModel.RecentMolded = moldedPooling.Select(p => new StockItemDetail {
+                ItemName = p.Item?.ItemName ?? "N/A",
+                LevelStock = p.Item != null && moldedStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
+                                ? moldedStockVM.StockDetails.First(d => d.Tag == p.Tag).LevelStock : 0,
+                Status = p.Item != null && moldedStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
+                                ? moldedStockVM.StockDetails.First(d => d.Tag == p.Tag).Status : "Normal"
+            }).ToList();
+
+            viewModel.RecentHose = hosePooling.Select(p => new StockItemDetail {
+                ItemName = p.Item?.ItemName ?? "N/A",
+                LevelStock = p.Item != null && hoseStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
+                                ? hoseStockVM.StockDetails.First(d => d.Tag == p.Tag).LevelStock : 0,
+                Status = p.Item != null && hoseStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
+                                ? hoseStockVM.StockDetails.First(d => d.Tag == p.Tag).Status : "Normal"
+            }).ToList();
+
+            viewModel.RecentRVI = rviPooling.Select(p => new StockItemDetail {
+                ItemName = p.Item?.ItemName ?? "N/A",
+                LevelStock = p.Item != null && rviStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
+                                ? rviStockVM.StockDetails.First(d => d.Tag == p.Tag).LevelStock : 0,
+                Status = p.Item != null && rviStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
+                                ? rviStockVM.StockDetails.First(d => d.Tag == p.Tag).Status : "Normal"
+            }).ToList();
 
             // 2. Trend Data Calculation
-            var plants = new[] { "Molded", "Hose", "RVI" };
-            
-            foreach (var plant in plants)
+            foreach (var plant in activePlants)
             {
                 var plantTrend = new PlantTrendData { PlantName = plant.ToUpper() };
-                
-                // Map current stock
-                if (plant == "Molded") plantTrend.TotalStock = moldedStockVM.NetStock;
-                else if (plant == "Hose") plantTrend.TotalStock = hoseStockVM.NetStock;
-                else if (plant == "RVI") plantTrend.TotalStock = rviStockVM.NetStock;
-
                 var poolingQuery = _context.PoolingRecords.Where(r => r.Plant == plant);
                 var preparationQuery = _context.PreparationRecords.Where(r => r.Plant == plant);
+                plantTrend.TotalStock = await poolingQuery.CountAsync(r => r.CreatedDate >= filterStartDate);
 
                 if (period == "Day")
                 {
-                    // Group by Hour for Today
-                    var poolingData = await poolingQuery
-                        .Where(r => r.CreatedDate >= today)
-                        .GroupBy(r => r.CreatedDate.Hour)
-                        .Select(g => new { Key = g.Key, Count = g.Count() })
-                        .ToDictionaryAsync(x => x.Key, x => x.Count);
-
-                    var preparationData = await preparationQuery
-                        .Where(r => r.CreatedDate >= today)
-                        .GroupBy(r => r.CreatedDate.Hour)
-                        .Select(g => new { Key = g.Key, Count = g.Count() })
-                        .ToDictionaryAsync(x => x.Key, x => x.Count);
-
-                    for (int i = 0; i < 24; i++)
-                    {
-                        plantTrend.DataPoints.Add(new TrendDataPoint 
-                        { 
-                            Label = $"{i:D2}:00", 
-                            PoolingCount = poolingData.ContainsKey(i) ? poolingData[i] : 0,
-                            PreparationCount = preparationData.ContainsKey(i) ? preparationData[i] : 0
-                        });
+                    var poolingData = await poolingQuery.Where(r => r.CreatedDate >= today).GroupBy(r => r.CreatedDate.Hour).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+                    var preparationData = await preparationQuery.Where(r => r.CreatedDate >= today).GroupBy(r => r.CreatedDate.Hour).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+                    for (int i = 0; i < 24; i++) {
+                        plantTrend.DataPoints.Add(new TrendDataPoint { Label = $"{i:D2}:00", PoolingCount = poolingData.GetValueOrDefault(i, 0), PreparationCount = preparationData.GetValueOrDefault(i, 0) });
                     }
                 }
                 else if (period == "Month")
                 {
-                    // Group by Day for current Month
                     var daysInMonth = DateTime.DaysInMonth(now.Year, now.Month);
-                    var poolingData = await poolingQuery
-                        .Where(r => r.CreatedDate >= startOfMonth)
-                        .GroupBy(r => r.CreatedDate.Day)
-                        .Select(g => new { Key = g.Key, Count = g.Count() })
-                        .ToDictionaryAsync(x => x.Key, x => x.Count);
-
-                    var preparationData = await preparationQuery
-                        .Where(r => r.CreatedDate >= startOfMonth)
-                        .GroupBy(r => r.CreatedDate.Day)
-                        .Select(g => new { Key = g.Key, Count = g.Count() })
-                        .ToDictionaryAsync(x => x.Key, x => x.Count);
-
-                    for (int i = 1; i <= daysInMonth; i++)
-                    {
-                        plantTrend.DataPoints.Add(new TrendDataPoint 
-                        { 
-                            Label = i.ToString(), 
-                            PoolingCount = poolingData.ContainsKey(i) ? poolingData[i] : 0,
-                            PreparationCount = preparationData.ContainsKey(i) ? preparationData[i] : 0
-                        });
+                    var poolingData = await poolingQuery.Where(r => r.CreatedDate >= startOfMonth).GroupBy(r => r.CreatedDate.Day).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+                    var preparationData = await preparationQuery.Where(r => r.CreatedDate >= startOfMonth).GroupBy(r => r.CreatedDate.Day).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+                    for (int i = 1; i <= daysInMonth; i++) {
+                        plantTrend.DataPoints.Add(new TrendDataPoint { Label = i.ToString(), PoolingCount = poolingData.GetValueOrDefault(i, 0), PreparationCount = preparationData.GetValueOrDefault(i, 0) });
                     }
                 }
                 else // Year
                 {
-                    // Group by Month for current Year
-                    var poolingData = await poolingQuery
-                        .Where(r => r.CreatedDate >= startOfYear)
-                        .GroupBy(r => r.CreatedDate.Month)
-                        .Select(g => new { Key = g.Key, Count = g.Count() })
-                        .ToDictionaryAsync(x => x.Key, x => x.Count);
-
-                    var preparationData = await preparationQuery
-                        .Where(r => r.CreatedDate >= startOfYear)
-                        .GroupBy(r => r.CreatedDate.Month)
-                        .Select(g => new { Key = g.Key, Count = g.Count() })
-                        .ToDictionaryAsync(x => x.Key, x => x.Count);
-
-                    for (int i = 1; i <= 12; i++)
-                    {
-                        plantTrend.DataPoints.Add(new TrendDataPoint 
-                        { 
-                            Label = new DateTime(now.Year, i, 1).ToString("MMM"), 
-                            PoolingCount = poolingData.ContainsKey(i) ? poolingData[i] : 0,
-                            PreparationCount = preparationData.ContainsKey(i) ? preparationData[i] : 0
-                        });
+                    var poolingData = await poolingQuery.Where(r => r.CreatedDate >= startOfYear).GroupBy(r => r.CreatedDate.Month).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+                    var preparationData = await preparationQuery.Where(r => r.CreatedDate >= startOfYear).GroupBy(r => r.CreatedDate.Month).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+                    for (int i = 1; i <= 12; i++) {
+                        plantTrend.DataPoints.Add(new TrendDataPoint { Label = new DateTime(now.Year, i, 1).ToString("MMM"), PoolingCount = poolingData.GetValueOrDefault(i, 0), PreparationCount = preparationData.GetValueOrDefault(i, 0) });
                     }
                 }
 
-                if (plantTrend.DataPoints.Any())
-                {
+                if (plantTrend.DataPoints.Any()) {
                     plantTrend.PeakActivity = plantTrend.DataPoints.Max(p => Math.Max(p.PoolingCount, p.PreparationCount));
                 }
-                
                 viewModel.PlantTrends.Add(plantTrend);
             }
 
-            // Calculate Overall Trend (Aggregate from all plants)
+            // Calculate Overall Trend
             if (viewModel.PlantTrends.Any())
             {
                 var numPoints = viewModel.PlantTrends[0].DataPoints.Count;
                 for (int i = 0; i < numPoints; i++)
                 {
                     var point = new TrendDataPoint { Label = viewModel.PlantTrends[0].DataPoints[i].Label };
-                    foreach (var pt in viewModel.PlantTrends)
-                    {
+                    foreach (var pt in viewModel.PlantTrends) {
                         point.PoolingCount += pt.DataPoints[i].PoolingCount;
                         point.PreparationCount += pt.DataPoints[i].PreparationCount;
                     }
@@ -180,8 +217,7 @@ namespace DeliveryControl.Controllers
                 }
             }
             
-            if (viewModel.OverallTrend.Any())
-            {
+            if (viewModel.OverallTrend.Any()) {
                 viewModel.HighestActivityTarget = viewModel.OverallTrend.Max(p => Math.Max(p.PoolingCount, p.PreparationCount));
             }
 
@@ -234,25 +270,28 @@ namespace DeliveryControl.Controllers
         private async Task<StockDashboardViewModel> GetStockViewModel(string plant, DateTime? searchDate = null)
         {
             var today = DateTime.Today;
-            var filterDate = searchDate ?? DateTime.Today;
-            var isFiltered = searchDate.HasValue;
+            var isFilteredByDate = searchDate.HasValue;
+            var filterDate = searchDate ?? today;
 
-            // 1. Get all pieces currently in stock for this plant
-            var allPooling = await _context.PoolingRecords
-                .Where(r => r.Plant == plant)
-                .Include(r => r.Item)
-                .OrderBy(r => r.CreatedDate)
-                .ToListAsync();
+            var poolingQuery = _context.PoolingRecords.Include(r => r.Item).AsQueryable();
+            var preparationQuery = _context.PreparationRecords.AsQueryable();
 
-            var allPreparation = await _context.PreparationRecords
-                .Where(r => r.Plant == plant)
-                .OrderBy(r => r.CreatedDate)
-                .ToListAsync();
+            if (plant != "Overall")
+            {
+                poolingQuery = poolingQuery.Where(r => r.Plant == plant);
+                preparationQuery = preparationQuery.Where(r => r.Plant == plant);
+            }
 
-            // FIFO matching logic: each PreparationRecord consumes exactly one oldest PoolingRecord 
-            // that matches BOTH Tag and Label (case-insensitive & trimmed).
-            // A preparation can only consume a piece that was pooled BEFORE or AT the time of preparation.
-            // A 5-second buffer is added to handle potential timestamp precision issues between operations.
+            if (isFilteredByDate)
+            {
+                var endOfFilterDate = filterDate.Date.AddDays(1);
+                poolingQuery = poolingQuery.Where(r => r.CreatedDate < endOfFilterDate);
+                preparationQuery = preparationQuery.Where(r => r.CreatedDate < endOfFilterDate);
+            }
+
+            var allPooling = await poolingQuery.OrderBy(r => r.CreatedDate).ToListAsync();
+            var allPreparation = await preparationQuery.OrderBy(r => r.CreatedDate).ToListAsync();
+
             var inStockPieces = new List<PoolingRecord>();
             var consumedPoolingIds = new HashSet<int>();
 
@@ -260,127 +299,233 @@ namespace DeliveryControl.Controllers
             {
                 var prepTag = (prep.Tag ?? "").Trim().ToUpper();
                 var prepLabel = (prep.Label ?? "").Trim().ToUpper();
-
-                // Find oldest available pooling record that matches our criteria
-                var match = allPooling.FirstOrDefault(p => 
-                    !consumedPoolingIds.Contains(p.PoolingId) &&
-                    (p.Tag ?? "").Trim().ToUpper() == prepTag && 
-                    (p.Label ?? "").Trim().ToUpper() == prepLabel &&
-                    p.CreatedDate <= prep.CreatedDate.AddSeconds(5));
-
-                if (match != null)
-                {
-                    consumedPoolingIds.Add(match.PoolingId);
-                }
+                var match = allPooling.FirstOrDefault(p => !consumedPoolingIds.Contains(p.PoolingId) && (p.Tag ?? "").Trim().ToUpper() == prepTag && (p.Label ?? "").Trim().ToUpper() == prepLabel && p.CreatedDate <= prep.CreatedDate.AddSeconds(5));
+                if (match != null) consumedPoolingIds.Add(match.PoolingId);
             }
 
-            inStockPieces = allPooling
-                .Where(p => !consumedPoolingIds.Contains(p.PoolingId))
-                .ToList();
-
-            // 2. Map Items to their status
+            inStockPieces = allPooling.Where(p => !consumedPoolingIds.Contains(p.PoolingId)).ToList();
             var allItems = await _context.Items.ToListAsync();
             var itemStatuses = new Dictionary<int, string>();
-            var shortageCount = 0;
-            var normalCount = 0;
-            var overCount = 0;
-
-            // Group pieces by ItemId to calculate status
-            var piecesByItem = inStockPieces
-                .Where(p => p.ItemId.HasValue)
-                .GroupBy(p => p.ItemId!.Value)
-                .ToDictionary(g => g.Key, g => (decimal)g.Count());
+            var piecesByItem = inStockPieces.Where(p => p.ItemId.HasValue).GroupBy(p => p.ItemId!.Value).ToDictionary(g => g.Key, g => (decimal)g.Count());
 
             foreach (var item in allItems)
             {
-                var count = piecesByItem.ContainsKey(item.ItemId) ? piecesByItem[item.ItemId] : 0;
-                string status;
-                
-                if (count < (item.RackMin ?? 5))
-                {
-                    status = "Shortage";
-                }
-                else if (count > (item.RackMax ?? 20))
-                {
-                    status = "Over";
-                }
-                else
-                {
-                    status = "Normal";
-                }
-                itemStatuses[item.ItemId] = status;
+                var count = piecesByItem.GetValueOrDefault(item.ItemId, 0);
+                if (count < (item.RackMin ?? 5)) itemStatuses[item.ItemId] = "Shortage";
+                else if (count > (item.RackMax ?? 20)) itemStatuses[item.ItemId] = "Over";
+                else itemStatuses[item.ItemId] = "Normal";
             }
 
-            // 3. Build Detailed Table Data and Calculate Counts per Piece (Row)
             var stockDetails = new List<StockItemDetail>();
-            shortageCount = 0;
-            normalCount = 0;
-            overCount = 0;
+            int shortageCount = 0, normalCount = 0, overCount = 0;
 
             foreach (var piece in inStockPieces.OrderByDescending(p => p.CreatedDate))
             {
-                var status = piece.ItemId.HasValue && itemStatuses.ContainsKey(piece.ItemId.Value) 
-                    ? itemStatuses[piece.ItemId.Value] 
-                    : "None";
+                var status = piece.ItemId.HasValue ? itemStatuses.GetValueOrDefault(piece.ItemId.Value, "None") : "None";
+                if (status == "Shortage") shortageCount++; else if (status == "Normal") normalCount++; else if (status == "Over") overCount++;
 
-                if (status == "Shortage") shortageCount++;
-                else if (status == "Normal") normalCount++;
-                else if (status == "Over") overCount++;
-
-                var currentStock = piece.ItemId.HasValue && piecesByItem.ContainsKey(piece.ItemId.Value) 
-                    ? piecesByItem[piece.ItemId.Value] 
-                    : 0;
-
+                var currentStock = piece.ItemId.HasValue ? piecesByItem.GetValueOrDefault(piece.ItemId.Value, 0) : 0;
                 stockDetails.Add(new StockItemDetail
                 {
-                    Tag = piece.Tag,
-                    Label = piece.Label,
-                    ItemName = piece.Item?.ItemName ?? "N/A",
-                    Time = piece.CreatedDate.ToString("HH:mm:ss"),
-                    Date = piece.CreatedDate.ToString("dd-MM-yyyy"),
-                    Location = piece.Item != null ? $"{piece.Item.Rack}.{piece.Item.NoRack}" : $"{piece.Rack}.{piece.Column}",
-                    QtyLot = piece.Item?.QtyLot,
-                    Min = piece.Item?.RackMin ?? 5,
-                    Max = piece.Item?.RackMax ?? 20,
-                    CurrentStock = currentStock,
-                    LevelStock = (piece.Item?.RackMin ?? 5) > 0 
-                        ? currentStock / (piece.Item?.RackMin ?? 5) 
-                        : 0,
-                    Operator = piece.CreatedBy ?? "-",
-                    Status = status
+                    Tag = piece.Tag, Label = piece.Label, ItemName = piece.Item?.ItemName ?? "N/A", Time = piece.CreatedDate.ToString("HH:mm:ss"), Date = piece.CreatedDate.ToString("dd-MM-yyyy"),
+                    Location = piece.Item != null ? $"{piece.Item.Rack}.{piece.Item.NoRack}" : $"{piece.Rack}.{piece.Column}", Plant = piece.Plant ?? string.Empty, QtyLot = piece.Item?.QtyLot,
+                    Min = piece.Item?.RackMin ?? 5, Max = piece.Item?.RackMax ?? 20, CurrentStock = currentStock,
+                    LevelStock = (piece.Item?.RackMin ?? 5) > 0 ? currentStock / (piece.Item?.RackMin ?? 5) : 0, Operator = piece.CreatedBy ?? "-", Status = status
                 });
             }
 
-            // Assign numbers (1 to N)
             for (int i = 0; i < stockDetails.Count; i++) stockDetails[i].No = i + 1;
 
-            var viewModel = new StockDashboardViewModel
+            return new StockDashboardViewModel
             {
-                PlantName = plant,
-                StockDetails = stockDetails,
-                ShortageCount = shortageCount,
-                NormalCount = normalCount,
-                OverCount = overCount,
-                RecentPooling = isFiltered 
-                    ? inStockPieces.Where(r => r.CreatedDate.Date == filterDate.Date).OrderByDescending(r => r.CreatedDate).ToList()
-                    : inStockPieces.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
-                RecentPreparation = isFiltered
-                    ? await _context.PreparationRecords
-                        .Where(r => r.Plant == plant && r.CreatedDate.Date == filterDate.Date)
-                        .OrderByDescending(r => r.CreatedDate)
-                        .ToListAsync()
-                    : await _context.PreparationRecords
-                        .Where(r => r.Plant == plant)
-                        .OrderByDescending(r => r.CreatedDate)
-                        .Take(5)
-                        .ToListAsync(),
-                TotalPoolingToday = await _context.PoolingRecords
-                    .CountAsync(r => r.Plant == plant && r.CreatedDate >= today),
-                TotalPreparationToday = await _context.PreparationRecords
-                    .CountAsync(r => r.Plant == plant && r.CreatedDate >= today)
+                PlantName = plant, StockDetails = stockDetails, ShortageCount = shortageCount, NormalCount = normalCount, OverCount = overCount, SearchDate = searchDate,
+                RecentPooling = isFilteredByDate ? inStockPieces.Where(r => r.CreatedDate.Date == filterDate.Date).OrderByDescending(r => r.CreatedDate).ToList() : inStockPieces.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
+                RecentPreparation = isFilteredByDate ? allPreparation.Where(r => r.CreatedDate.Date == filterDate.Date).OrderByDescending(r => r.CreatedDate).ToList() : allPreparation.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
+                TotalPoolingToday = isFilteredByDate ? await _context.PoolingRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate.Date == filterDate.Date) : await _context.PoolingRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= today),
+                TotalPreparationToday = isFilteredByDate ? await _context.PreparationRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate.Date == filterDate.Date) : await _context.PreparationRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= today)
             };
+        }
 
-            return viewModel;
+        public async Task<IActionResult> ExportTrendToExcel()
+        {
+            var now = DateTime.Now;
+            var startOfMonth = new DateTime(now.Year, now.Month, 1);
+            var daysInMonth = DateTime.DaysInMonth(now.Year, now.Month);
+            var endOfMonth = new DateTime(now.Year, now.Month, daysInMonth, 23, 59, 59);
+
+            var snapshots = await GetHistoricalCategorySnapshots(startOfMonth, endOfMonth);
+
+            using (var workbook = new ClosedXML.Excel.XLWorkbook())
+            {
+                var worksheet = workbook.Worksheets.Add("Trend Level Stock");
+                string[] categories = { "< 1 D", "< 1.5 D", "1.5 - 2 D", "2 - 3 D", "> 3 D" };
+                int currentRow = 1;
+
+                foreach (var cat in categories)
+                {
+                    // Block Heading
+                    var titleRange = worksheet.Range(currentRow, 1, currentRow, daysInMonth + 1);
+                    titleRange.Merge().Value = $"SUMMARY STOCK FG VIN {cat} DAY";
+                    titleRange.Style.Font.Bold = true;
+                    titleRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+                    titleRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.AliceBlue;
+                    currentRow++;
+
+                    // Table Header
+                    worksheet.Cell(currentRow, 1).Value = cat;
+                    worksheet.Cell(currentRow, 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.Red;
+                    worksheet.Cell(currentRow, 1).Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+                    worksheet.Cell(currentRow, 1).Style.Font.Bold = true;
+
+                    for (int d = 1; d <= daysInMonth; d++)
+                    {
+                        var cell = worksheet.Cell(currentRow, d + 1);
+                        cell.Value = $"{d:D2}-{now:MMM}";
+                        cell.Style.Font.Bold = true;
+                        cell.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+                        cell.Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+                    }
+                    currentRow++;
+
+                    // Rows: Plan Total, Act Hose, Act Mold, Act RVI, Act BTR, Act Total
+                    string[] rows = { "Plan Total", "Act Hose", "Act Mold", "Act RVI", "Act BTR", "Act Total" };
+                    foreach (var rowName in rows)
+                    {
+                        worksheet.Cell(currentRow, 1).Value = rowName;
+                        if (rowName == "Act Total") worksheet.Cell(currentRow, 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGreen;
+                        worksheet.Cell(currentRow, 1).Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+
+                        for (int d = 1; d <= daysInMonth; d++)
+                        {
+                            var dayData = snapshots.FirstOrDefault(s => s.Date.Day == d);
+                            int val = 0;
+                            if (dayData != null)
+                            {
+                                if (rowName == "Plan Total") val = 0; // Static context, can be updated if Plan data exists
+                                else if (rowName == "Act Hose") val = dayData.PlantStats.GetValueOrDefault("HOSE")?.GetCount(cat) ?? 0;
+                                else if (rowName == "Act Mold") val = dayData.PlantStats.GetValueOrDefault("MOLDED")?.GetCount(cat) ?? 0;
+                                else if (rowName == "Act RVI") val = dayData.PlantStats.GetValueOrDefault("RVI")?.GetCount(cat) ?? 0;
+                                else if (rowName == "Act BTR") val = dayData.PlantStats.GetValueOrDefault("BTR")?.GetCount(cat) ?? 0;
+                                else if (rowName == "Act Total") val = dayData.TotalStats.GetCount(cat);
+                            }
+                            var dataCell = worksheet.Cell(currentRow, d + 1);
+                            dataCell.Value = val;
+                            dataCell.Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+                        }
+                        currentRow++;
+                    }
+                    currentRow += 2; // Spacer
+                }
+
+                worksheet.Columns().AdjustToContents();
+
+                using (var stream = new MemoryStream())
+                {
+                    workbook.SaveAs(stream);
+                    return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"TrendStockReport_{now:MMM_yyyy}.xlsx");
+                }
+            }
+        }
+
+        private async Task<List<CategoryTrendPoint>> GetHistoricalCategoryTrends(DateTime start, DateTime end, string period)
+        {
+            var snapshots = await GetHistoricalCategorySnapshots(start, end, period);
+            return snapshots.Select(s => new CategoryTrendPoint
+            {
+                Label = s.Label,
+                CatLess1 = s.TotalStats.Less1,
+                CatLess1_5 = s.TotalStats.Less1_5,
+                CatRange1_5_2 = s.TotalStats.Range1_5_2,
+                CatRange2_3 = s.TotalStats.Range2_3,
+                CatMore3 = s.TotalStats.More3
+            }).ToList();
+        }
+
+        private async Task<List<DaySnapshot>> GetHistoricalCategorySnapshots(DateTime start, DateTime end, string period = "Month")
+        {
+            var items = await _context.Items.ToListAsync();
+            var poolings = await _context.PoolingRecords.Where(p => p.CreatedDate <= end).OrderBy(p => p.CreatedDate).ToListAsync();
+            var preps = await _context.PreparationRecords.Where(p => p.CreatedDate <= end).OrderBy(p => p.CreatedDate).ToListAsync();
+
+            var snapshots = new List<DaySnapshot>();
+            var availablePoolings = new List<PoolingRecord>();
+            int pIdx = 0, rIdx = 0;
+
+            var intervalEnds = new List<DateTime>();
+            if (period == "Day") {
+                for (int i = 1; i <= 24; i++) intervalEnds.Add(start.Date.AddHours(i));
+            } else if (period == "Month") {
+                for (int i = 1; i <= DateTime.DaysInMonth(start.Year, start.Month); i++) 
+                    intervalEnds.Add(new DateTime(start.Year, start.Month, i, 23, 59, 59));
+            } else {
+                for (int i = 1; i <= 12; i++) 
+                    intervalEnds.Add(new DateTime(start.Year, i, DateTime.DaysInMonth(start.Year, i), 23, 59, 59));
+            }
+
+            foreach (var tEnd in intervalEnds)
+            {
+                while (pIdx < poolings.Count && poolings[pIdx].CreatedDate <= tEnd) { availablePoolings.Add(poolings[pIdx]); pIdx++; }
+                while (rIdx < preps.Count && preps[rIdx].CreatedDate <= tEnd)
+                {
+                    var prep = preps[rIdx];
+                    var tag = (prep.Tag ?? "").Trim().ToUpper();
+                    var lbl = (prep.Label ?? "").Trim().ToUpper();
+                    var match = availablePoolings.FirstOrDefault(p => 
+                        (p.Tag ?? "").Trim().ToUpper() == tag && (p.Label ?? "").Trim().ToUpper() == lbl && p.CreatedDate <= prep.CreatedDate.AddSeconds(5));
+                    if (match != null) availablePoolings.Remove(match);
+                    rIdx++;
+                }
+
+                var snapshot = new DaySnapshot { Date = tEnd, Label = period == "Day" ? $"{tEnd.Hour-1:D2}:00" : period == "Month" ? tEnd.Day.ToString() : tEnd.ToString("MMM") };
+                var stockByItem = availablePoolings.Where(p => p.ItemId.HasValue).GroupBy(p => p.ItemId!.Value).ToDictionary(g => g.Key, g => (decimal)g.Count());
+                
+                foreach (var item in items)
+                {
+                    var stock = stockByItem.GetValueOrDefault(item.ItemId, 0);
+                    var min = (decimal)(item.RackMin ?? 5);
+                    var level = min > 0 ? stock / min : 0;
+                    var plant = (availablePoolings.FirstOrDefault(p => p.ItemId == item.ItemId)?.Plant ?? "Unknown").ToUpper();
+
+                    var stats = snapshot.PlantStats.GetOrAdd(plant, () => new CategoryStats());
+                    UpdateStats(stats, level);
+                    UpdateStats(snapshot.TotalStats, level);
+                }
+                snapshots.Add(snapshot);
+            }
+            return snapshots;
+        }
+
+        private void UpdateStats(CategoryStats s, decimal level)
+        {
+            if (level < 1) s.Less1++;
+            if (level < 1.5m) s.Less1_5++;
+            if (level >= 1.5m && level <= 2m) s.Range1_5_2++;
+            else if (level >= 2m && level <= 3m) s.Range2_3++;
+            else if (level > 3m) s.More3++;
+        }
+
+        private class CategoryStats {
+            public int Less1 { get; set; }
+            public int Less1_5 { get; set; }
+            public int Range1_5_2 { get; set; }
+            public int Range2_3 { get; set; }
+            public int More3 { get; set; }
+            public int GetCount(string cat) => cat switch { "< 1 D" => Less1, "< 1.5 D" => Less1_5, "1.5 - 2 D" => Range1_5_2, "2 - 3 D" => Range2_3, "> 3 D" => More3, _ => 0 };
+        }
+
+        private class DaySnapshot {
+            public DateTime Date { get; set; }
+            public string Label { get; set; } = "";
+            public Dictionary<string, CategoryStats> PlantStats { get; set; } = new();
+            public CategoryStats TotalStats { get; set; } = new();
+        }
+    }
+
+    public static class DictExtensions {
+        public static TValue GetOrAdd<TKey, TValue>(this Dictionary<TKey, TValue> dict, TKey key, Func<TValue> factory) where TKey : notnull
+        {
+            if (!dict.TryGetValue(key, out var val)) { val = factory(); dict[key] = val; }
+            return val;
         }
     }
 }

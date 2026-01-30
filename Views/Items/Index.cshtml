@@ -4,22 +4,22 @@
     ViewData["Title"] = "Master Item";
 }
 
-<div class="row mb-3">
+<div class="row mb-4 align-items-center">
     <div class="col-md-5">
-        <h2 class="fw-bold"><i class="bi bi-box-seam me-2"></i>Master Item</h2>
+        <h2 class="fw-bold mb-0 text-gradient"><i class="bi bi-box-seam me-2"></i>Master Item</h2>
     </div>
     <div class="col-md-7 text-end">
-        <div class="btn-group gap-2">
-            <a asp-action="DownloadTemplate" class="btn btn-success px-3 shadow-sm rounded-pill">
+        <div class="btn-group gap-2 flex-wrap">
+            <a asp-action="DownloadTemplate" class="premium-btn btn-glass-success shadow-sm">
                 <i class="bi bi-file-earmark-spreadsheet-fill me-1"></i> Template Excel
             </a>
-            <button type="button" class="btn btn-info text-white px-3 shadow-sm rounded-pill" data-bs-toggle="modal" data-bs-target="#importModal">
+            <button type="button" class="premium-btn btn-glass-info shadow-sm" data-bs-toggle="modal" data-bs-target="#importModal">
                 <i class="bi bi-box-arrow-in-down me-1"></i> Import Excel
             </button>
-            <a asp-action="Create" class="btn btn-primary px-3 shadow-sm rounded-pill">
+            <a asp-action="Create" class="premium-btn btn-primary shadow-sm">
                 <i class="bi bi-plus-circle-fill me-1"></i> Tambah Item
             </a>
-            <a asp-controller="Stock" asp-action="Targets" class="btn btn-dark-blue px-3 shadow-sm rounded-pill">
+            <a asp-controller="Stock" asp-action="Targets" class="premium-btn btn-dark-blue shadow-sm">
                 <i class="bi bi-bullseye me-1"></i> Stock Targets
             </a>
         </div>
@@ -27,13 +27,44 @@
 </div>
 
 <style>
-    .btn-dark-blue {
-        background-color: #3f51b5;
-        color: white;
+    .text-gradient {
+        background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
     }
-    .btn-dark-blue:hover {
-        background-color: #303f9f;
-        color: white;
+    .premium-btn {
+        padding: 0.5rem 1.25rem;
+        border-radius: 12px;
+        font-weight: 500;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 1px solid rgba(255,255,255,0.1);
+        font-size: 0.9rem;
+    }
+    .premium-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+        filter: brightness(1.1);
+    }
+    .btn-glass-success {
+        background: rgba(16, 185, 129, 0.2);
+        color: #10b981 !important;
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+    .btn-glass-info {
+        background: rgba(59, 130, 246, 0.2);
+        color: #3b82f6 !important;
+        border-color: rgba(59, 130, 246, 0.3);
+    }
+    .btn-dark-blue {
+        background: #1e293b;
+        color: #94a3b8 !important;
+    }
+    .btn-primary {
+        background: var(--primary-blue);
+        color: white !important;
     }
 </style>
 
@@ -121,10 +152,16 @@
                                 </td>
                                 <td>
                                     <div class="btn-group" role="group">
-                                        <a asp-action="Details" asp-route-id="@item.ItemId" class="btn btn-sm btn-info" title="Detail">
+                                        <form asp-action="ToggleStatus" asp-route-id="@item.ItemId" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-sm @(item.IsActive ? "btn-success" : "btn-outline-secondary")" title="@(item.IsActive ? "Deactive" : "Activate")">
+                                                <i class="bi @(item.IsActive ? "bi-check-circle-fill" : "bi-circle")"></i>
+                                            </button>
+                                        </form>
+                                        <a asp-action="Details" asp-route-id="@item.ItemId" class="btn btn-sm btn-info text-white" title="Detail">
                                             <i class="bi bi-eye"></i>
                                         </a>
-                                        <a asp-action="Edit" asp-route-id="@item.ItemId" class="btn btn-sm btn-warning" title="Edit">
+                                        <a asp-action="Edit" asp-route-id="@item.ItemId" class="btn btn-sm btn-warning text-white" title="Edit">
                                             <i class="bi bi-pencil"></i>
                                         </a>
                                         <a asp-action="Delete" asp-route-id="@item.ItemId" class="btn btn-sm btn-danger" title="Hapus">
@@ -147,46 +184,46 @@
     </div>
 </div>
 
-<!-- Modal Import Excel -->
-<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form asp-action="ImportExcel" method="post" enctype="multipart/form-data">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="importModalLabel">
-                        <i class="bi bi-upload"></i> Import Data Item dari Excel
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i> 
-                        <strong>Panduan Import:</strong>
-                        <ol class="mb-0 mt-2">
-                            <li>Download template Excel terlebih dahulu</li>
-                            <li>Isi data sesuai format template</li>
-                            <li>Kode Item harus unique (tidak boleh sama)</li>
-                            <li>Nama Item wajib diisi</li>
-                            <li>Gunakan titik (.) untuk angka desimal</li>
-                            <li>Upload file yang sudah diisi</li>
-                        </ol>
+@section Modals {
+    <!-- Modal Import Excel -->
+    <div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form asp-action="ImportExcel" method="post" enctype="multipart/form-data">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="importModalLabel">
+                            <i class="bi bi-upload"></i> Import Data Item dari Excel
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-                    <div class="mb-3">
-                        <label for="file" class="form-label">Pilih File Excel</label>
-                        <input type="file" class="form-control" id="file" name="file" accept=".xlsx,.xls" required>
-                        <div class="form-text">Format file: .xlsx atau .xls</div>
+                    <div class="modal-body">
+                        <div class="alert alert-info border-0 shadow-sm" style="background: rgba(59, 130, 246, 0.1); color: #f1f5f9;">
+                            <h6 class="fw-bold"><i class="bi bi-info-circle-fill me-2 text-info"></i> Panduan Format Baru:</h6>
+                            <ul class="mb-0 mt-2 small opacity-75">
+                                <li>Urutan Kolom: <strong>Kode, Nama, Plant, Location, Qty/Lot, Capacity, Status</strong></li>
+                                <li><strong>Location:</strong> Format [Huruf].[Nomor] (Contoh: <strong>A.1</strong> atau <strong>B.15</strong>)</li>
+                                <li><strong>Capacity:</strong> Diisi angka kapasitas maksimal rak</li>
+                                <li><strong>Status:</strong> Diisi <strong>'Aktif'</strong> atau <strong>'Tidak Aktif'</strong></li>
+                                <li>Import akan mengupdate data jika Kode Item sudah ada</li>
+                            </ul>
+                        </div>
+                        <div class="mb-3">
+                            <label for="file" class="form-label">Pilih File Excel</label>
+                            <input type="file" class="form-control" id="file" name="file" accept=".xlsx,.xls" required>
+                            <div class="form-text">Format file: .xlsx atau .xls</div>
+                        </div>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="bi bi-x-circle"></i> Batal
-                    </button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-upload"></i> Upload & Import
-                    </button>
-                </div>
-            </form>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="bi bi-x-circle"></i> Batal
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-upload"></i> Upload & Import
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
-</div>
+}
 

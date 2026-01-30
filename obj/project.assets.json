@@ -8753,19 +8753,19 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\arpan\\.nuget\\packages\\": {}
+    "C:\\Users\\fio.vlt00122\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\DeliveryControl\\DeliveryControl\\DeliveryControl.csproj",
+      "projectUniqueName": "C:\\ControlDelivery\\DeliveryControl\\DeliveryControl.csproj",
       "projectName": "DeliveryControl",
-      "projectPath": "C:\\DeliveryControl\\DeliveryControl\\DeliveryControl.csproj",
-      "packagesPath": "C:\\Users\\arpan\\.nuget\\packages\\",
-      "outputPath": "C:\\DeliveryControl\\DeliveryControl\\obj\\",
+      "projectPath": "C:\\ControlDelivery\\DeliveryControl\\DeliveryControl.csproj",
+      "packagesPath": "C:\\Users\\fio.vlt00122\\.nuget\\packages\\",
+      "outputPath": "C:\\ControlDelivery\\DeliveryControl\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\arpan\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "C:\\Users\\fio.vlt00122\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
@@ -8788,7 +8788,8 @@
         "enableAudit": "true",
         "auditLevel": "low",
         "auditMode": "direct"
-      }
+      },
+      "SdkAnalysisLevel": "10.0.100"
     },
     "frameworks": {
       "net8.0": {
@@ -8842,7 +8843,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.416/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.101/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

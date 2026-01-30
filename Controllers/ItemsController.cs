@@ -181,14 +181,22 @@ namespace DeliveryControl.Controllers
         {
             var item = await _context.Items
                 .Include(i => i.DeliveryItems)
+                .Include(i => i.PoolingRecords)
                 .FirstOrDefaultAsync(i => i.ItemId == id);
 
             if (item != null)
             {
-                // Cek apakah ada relasi dengan DeliveryItem
+                // Cek relasi dengan DeliveryItem
                 if (item.DeliveryItems.Any())
                 {
-                    TempData["ErrorMessage"] = $"Tidak dapat menghapus item! Masih ada {item.DeliveryItems.Count} delivery item yang terkait. Hapus delivery item terlebih dahulu.";
+                    TempData["ErrorMessage"] = $"Tidak dapat menghapus item! Masih ada {item.DeliveryItems.Count} delivery item yang terkait.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                // Cek relasi dengan PoolingRecords
+                if (item.PoolingRecords.Any())
+                {
+                    TempData["ErrorMessage"] = $"Tidak dapat menghapus item! Masih ada {item.PoolingRecords.Count} riwayat transaksi pooling. Anda bisa menonaktifkan status 'Aktif' alih-alih menghapus.";
                     return RedirectToAction(nameof(Index));
                 }
 
@@ -204,6 +212,21 @@ namespace DeliveryControl.Controllers
                 }
             }
 
+            return RedirectToAction(nameof(Index));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleStatus(int id)
+        {
+            var item = await _context.Items.FindAsync(id);
+            if (item != null)
+            {
+                item.IsActive = !item.IsActive;
+                item.UpdatedDate = DateTime.Now;
+                await _context.SaveChangesAsync();
+                TempData["SuccessMessage"] = $"Item {item.ItemCode} berhasil {(item.IsActive ? "diaktifkan" : "dinonaktifkan")}!";
+            }
             return RedirectToAction(nameof(Index));
         }
 
@@ -226,6 +249,7 @@ namespace DeliveryControl.Controllers
             var ids = selectedIds.Split(',').Select(int.Parse).ToList();
             var itemsToDelete = await _context.Items
                 .Include(i => i.DeliveryItems)
+                .Include(i => i.PoolingRecords)
                 .Where(i => ids.Contains(i.ItemId))
                 .ToListAsync();
 
@@ -237,7 +261,14 @@ namespace DeliveryControl.Controllers
             {
                 if (item.DeliveryItems.Any())
                 {
-                    errorMessages.Add($"{item.ItemCode}: Masih ada {item.DeliveryItems.Count} delivery item");
+                    errorMessages.Add($"{item.ItemCode}: Ada delivery item");
+                    errorCount++;
+                    continue;
+                }
+
+                if (item.PoolingRecords.Any())
+                {
+                    errorMessages.Add($"{item.ItemCode}: Ada riwayat pooling");
                     errorCount++;
                     continue;
                 }
@@ -275,63 +306,53 @@ namespace DeliveryControl.Controllers
             {
                 var worksheet = workbook.Worksheets.Add("Template Item");
 
-                // Header
-                worksheet.Cell(1, 1).Value = "Kode Item (Tag)";
-                worksheet.Cell(1, 2).Value = "Nama Item";
-                worksheet.Cell(1, 3).Value = "Deskripsi";
-                worksheet.Cell(1, 4).Value = "Unit";
-                worksheet.Cell(1, 5).Value = "Plant";
-                worksheet.Cell(1, 6).Value = "Rak";
-                worksheet.Cell(1, 7).Value = "No Rak";
-                worksheet.Cell(1, 8).Value = "Qty per Lot";
-                worksheet.Cell(1, 9).Value = "QTY Min";
-                worksheet.Cell(1, 10).Value = "QTY Max";
-                worksheet.Cell(1, 11).Value = "Berat (KG)";
-                worksheet.Cell(1, 12).Value = "Volume (M3)";
+                // Header matches the UI table
+                worksheet.Cell(1, 1).Value = "KODE (TAG)";
+                worksheet.Cell(1, 2).Value = "NAMA";
+                worksheet.Cell(1, 3).Value = "PLANT";
+                worksheet.Cell(1, 4).Value = "LOCATION (RAK.NO)";
+                worksheet.Cell(1, 5).Value = "QTY/LOT";
+                worksheet.Cell(1, 6).Value = "CAPACITY (MAX)";
+                worksheet.Cell(1, 7).Value = "STATUS";
 
                 // Style header
-                var headerRange = worksheet.Range(1, 1, 1, 12);
+                var headerRange = worksheet.Range(1, 1, 1, 7);
                 headerRange.Style.Font.Bold = true;
-                headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
+                headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#3b82f6");
+                headerRange.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
                 headerRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
 
                 // Contoh data (baris 2)
                 worksheet.Cell(2, 1).Value = "ITM001";
                 worksheet.Cell(2, 2).Value = "Steel Plate 10mm";
-                worksheet.Cell(2, 3).Value = "Plat besi ukuran 10mm";
-                worksheet.Cell(2, 4).Value = "PCS";
-                worksheet.Cell(2, 5).Value = "Molded";
-                worksheet.Cell(2, 6).Value = "A";
-                worksheet.Cell(2, 7).Value = 1;
-                worksheet.Cell(2, 8).Value = 100;
-                worksheet.Cell(2, 9).Value = 10;
-                worksheet.Cell(2, 10).Value = 200;
-                worksheet.Cell(2, 11).Value = 25.5;
-                worksheet.Cell(2, 12).Value = 0.05;
+                worksheet.Cell(2, 3).Value = "Molded";
+                worksheet.Cell(2, 4).Value = "A.1";
+                worksheet.Cell(2, 5).Value = 100;
+                worksheet.Cell(2, 6).Value = 500;
+                worksheet.Cell(2, 7).Value = "Aktif";
 
                 // Contoh data 2 (baris 3)
                 worksheet.Cell(3, 1).Value = "ITM002";
                 worksheet.Cell(3, 2).Value = "Bolt M12";
-                worksheet.Cell(3, 3).Value = "Baut ukuran M12";
-                worksheet.Cell(3, 4).Value = "BOX";
-                worksheet.Cell(3, 5).Value = "Hose";
-                worksheet.Cell(3, 6).Value = "B";
-                worksheet.Cell(3, 7).Value = 15;
-                worksheet.Cell(3, 8).Value = 500;
-                worksheet.Cell(3, 9).Value = 50;
-                worksheet.Cell(3, 10).Value = 1000;
-                worksheet.Cell(3, 11).Value = 5.0;
-                worksheet.Cell(3, 12).Value = 0.01;
+                worksheet.Cell(3, 3).Value = "Hose";
+                worksheet.Cell(3, 4).Value = "B.15";
+                worksheet.Cell(3, 5).Value = 500;
+                worksheet.Cell(3, 6).Value = 1000;
+                worksheet.Cell(3, 7).Value = "Aktif";
 
                 // Catatan
-                worksheet.Cell(5, 1).Value = "Catatan:";
-                worksheet.Cell(6, 1).Value = "- Kode Item wajib diisi dan harus unique";
-                worksheet.Cell(7, 1).Value = "- Nama Item wajib diisi";
-                worksheet.Cell(8, 1).Value = "- Deskripsi, Unit, Kategori, Berat, dan Volume boleh kosong";
-                worksheet.Cell(9, 1).Value = "- Berat dalam satuan kilogram (KG)";
-                worksheet.Cell(10, 1).Value = "- Volume dalam satuan meter kubik (M3)";
-                worksheet.Cell(11, 1).Value = "- Gunakan format angka desimal dengan titik (.) bukan koma";
+                int noteRow = 5;
+                worksheet.Cell(noteRow++, 1).Value = "PANDUAN PENGISIAN:";
+                worksheet.Cell(noteRow++, 1).Value = "1. KODE (TAG): Wajib diisi & Unique (Contoh: ITM001)";
+                worksheet.Cell(noteRow++, 1).Value = "2. NAMA: Wajib diisi (Contoh: Bolt M12)";
+                worksheet.Cell(noteRow++, 1).Value = "3. PLANT: Molded, Hose, atau RVI";
+                worksheet.Cell(noteRow++, 1).Value = "4. LOCATION (RAK.NO): Format Huruf.Angka (Contoh: A.1)";
+                worksheet.Cell(noteRow++, 1).Value = "5. QTY/LOT: Jumlah item per lot (Angka)";
+                worksheet.Cell(noteRow++, 1).Value = "6. CAPACITY: Kapasitas maksimal rak (Angka)";
+                worksheet.Cell(noteRow++, 1).Value = "7. STATUS: Aktif atau Tidak Aktif";
 
+                headerRange.RangeUsed().Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+                
                 // Auto-fit columns
                 worksheet.Columns().AdjustToContents();
 
@@ -339,7 +360,7 @@ namespace DeliveryControl.Controllers
                 {
                     workbook.SaveAs(stream);
                     var content = stream.ToArray();
-                    return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Template_Item.xlsx");
+                    return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Template_Master_Item.xlsx");
                 }
             }
         }
@@ -377,143 +398,95 @@ namespace DeliveryControl.Controllers
                         var worksheet = workbook.Worksheet(1);
                         var rows = worksheet.RowsUsed().Skip(1); // Skip header
 
-                        // Get existing item codes to check for duplicates
-                        var existingItemCodes = await _context.Items
-                            .Select(i => i.ItemCode.ToUpper())
-                            .ToListAsync();
-
                         foreach (var row in rows)
                         {
                             try
                             {
-                                // Column 1: Item Code (Tag)
-                                // Column 2: Item Name
-                                // Column 3: Description
-                                // Column 4: Unit
-                                // Column 5: Plant
-                                // Column 6: Rack
-                                // Column 7: No Rak
-                                // Column 8: Qty per Lot
-                                // Column 9: QTY Min
-                                // Column 10: QTY Max
-                                // Column 11: Berat
-                                // Column 12: Volume
+                                // Excel Format matches UI:
+                                // 1: KODE (TAG)
+                                // 2: NAMA
+                                // 3: PLANT
+                                // 4: LOCATION (RAK.NO)
+                                // 5: QTY/LOT
+                                // 6: CAPACITY
+                                // 7: STATUS
+                                
                                 var itemCode = row.Cell(1).GetString().Trim();
                                 var itemName = row.Cell(2).GetString().Trim();
-                                var description = row.Cell(3).GetString().Trim();
-                                var unit = row.Cell(4).GetString().Trim();
-                                var plant = row.Cell(5).GetString().Trim();
-                                var rack = row.Cell(6).GetString().Trim();
-                                var noRakStr = row.Cell(7).GetString().Trim();
-                                var qtyLotStr = row.Cell(8).GetString().Trim();
-                                var minCapStr = row.Cell(9).GetString().Trim();
-                                var maxCapStr = row.Cell(10).GetString().Trim();
-                                var weightStr = row.Cell(11).GetString().Trim();
-                                var volumeStr = row.Cell(12).GetString().Trim();
+                                var plant = row.Cell(3).GetString().Trim();
+                                var location = row.Cell(4).GetString().Trim();
+                                var qtyLotStr = row.Cell(5).GetString().Trim();
+                                var maxCapStr = row.Cell(6).GetString().Trim();
+                                var statusStr = row.Cell(7).GetString().Trim();
 
-                                // Skip baris kosong atau baris catatan
+                                // Skip empty rows or note markers
                                 if (string.IsNullOrWhiteSpace(itemCode) || 
-                                    itemCode.StartsWith("Catatan", StringComparison.OrdinalIgnoreCase) ||
-                                    itemCode.StartsWith("-", StringComparison.OrdinalIgnoreCase) ||
-                                    itemCode == "Kode Item")
+                                    itemCode.StartsWith("PANDUAN", StringComparison.OrdinalIgnoreCase) ||
+                                    itemCode.Length <= 1 && char.IsDigit(itemCode[0])) // Skip row numbers in notes
                                 {
                                     continue;
                                 }
 
                                 // Validasi required fields
-                                if (string.IsNullOrWhiteSpace(itemName) || itemName.Length < 2)
+                                if (string.IsNullOrWhiteSpace(itemName))
                                 {
-                                    errorMessages.Add($"Baris {row.RowNumber()}: Nama Item wajib diisi (min 2 karakter)");
+                                    errorMessages.Add($"Baris {row.RowNumber()}: Nama Item wajib diisi");
                                     errorCount++;
                                     continue;
                                 }
 
-                                // Parse weight
-                                decimal? weight = null;
-                                if (!string.IsNullOrWhiteSpace(weightStr))
+                                // Handle Location (RAK.NO) -> Split by . or -
+                                string? rack = null;
+                                int? noRak = null;
+                                if (!string.IsNullOrEmpty(location))
                                 {
-                                    if (decimal.TryParse(weightStr.Replace(",", "."), System.Globalization.NumberStyles.Any, 
-                                        System.Globalization.CultureInfo.InvariantCulture, out decimal weightValue))
-                                    {
-                                        weight = weightValue;
-                                    }
-                                    else
-                                    {
-                                        errorMessages.Add($"Baris {row.RowNumber()}: Format berat tidak valid");
-                                        errorCount++;
-                                        continue;
-                                    }
-                                }
-
-                                // Parse volume
-                                decimal? volume = null;
-                                if (!string.IsNullOrWhiteSpace(volumeStr))
-                                {
-                                    if (decimal.TryParse(volumeStr.Replace(",", "."), System.Globalization.NumberStyles.Any, 
-                                        System.Globalization.CultureInfo.InvariantCulture, out decimal volumeValue))
-                                    {
-                                        volume = volumeValue;
-                                    }
-                                    else
-                                    {
-                                        errorMessages.Add($"Baris {row.RowNumber()}: Format volume tidak valid");
-                                        errorCount++;
-                                        continue;
-                                    }
+                                    var parts = location.Split(new[] { '.', '-', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                                    if (parts.Length >= 1) rack = parts[0].ToUpper();
+                                    if (parts.Length >= 2 && int.TryParse(parts[1], out int nr)) noRak = nr;
                                 }
 
                                 // Handle numeric fields
-                                int? noRak = null;
-                                if (int.TryParse(noRakStr, out int nr)) noRak = nr;
-
                                 int? qtyLot = null;
                                 if (int.TryParse(qtyLotStr, out int ql)) qtyLot = ql;
 
-                                int? minCap = null;
-                                if (int.TryParse(minCapStr, out int mic)) minCap = mic;
-
                                 int? maxCap = null;
                                 if (int.TryParse(maxCapStr, out int mac)) maxCap = mac;
+
+                                // Status logic
+                                bool isActive = !statusStr.Equals("Tidak Aktif", StringComparison.OrdinalIgnoreCase);
 
                                 // Item Logic: Update if exists, otherwise create new
                                 var existingItem = await _context.Items.FirstOrDefaultAsync(i => i.ItemCode == itemCode);
                                 if (existingItem != null)
                                 {
                                     existingItem.ItemName = itemName;
-                                    existingItem.Description = string.IsNullOrWhiteSpace(description) ? null : description;
-                                    existingItem.Unit = string.IsNullOrWhiteSpace(unit) ? null : unit;
                                     existingItem.Plant = string.IsNullOrWhiteSpace(plant) ? null : plant;
-                                    existingItem.Rack = string.IsNullOrWhiteSpace(rack) ? null : rack;
+                                    existingItem.Rack = rack;
                                     existingItem.NoRack = noRak;
                                     existingItem.QtyLot = qtyLot;
-                                    existingItem.RackMin = minCap;
                                     existingItem.RackMax = maxCap;
-                                    existingItem.Weight = weight;
-                                    existingItem.Volume = volume;
+                                    existingItem.RackMin = (maxCap.HasValue ? maxCap / 10 : 0); // Logic: Min is 10% of Max
+                                    existingItem.IsActive = isActive;
                                     existingItem.UpdatedDate = DateTime.Now;
                                     _context.Items.Update(existingItem);
                                 }
-                                else if (!items.Any(i => i.ItemCode == itemCode)) // Avoid duplicates in same batch
+                                else
                                 {
                                     var item = new Item
                                     {
                                         ItemCode = itemCode,
                                         ItemName = itemName,
-                                        Description = string.IsNullOrWhiteSpace(description) ? null : description,
-                                        Unit = string.IsNullOrWhiteSpace(unit) ? null : unit,
-                                        Category = "-", // Hide but keep as placeholder
                                         Plant = string.IsNullOrWhiteSpace(plant) ? null : plant,
-                                        Rack = string.IsNullOrWhiteSpace(rack) ? null : rack,
+                                        Rack = rack,
                                         NoRack = noRak,
                                         QtyLot = qtyLot,
-                                        RackMin = minCap,
                                         RackMax = maxCap,
-                                        Weight = weight,
-                                        Volume = volume,
-                                        IsActive = true,
+                                        RackMin = (maxCap.HasValue ? maxCap / 10 : 0),
+                                        Category = "-",
+                                        IsActive = isActive,
                                         CreatedDate = DateTime.Now
                                     };
-                                    items.Add(item);
+                                    _context.Items.Add(item);
                                 }
 
                                 successCount++;
@@ -527,37 +500,25 @@ namespace DeliveryControl.Controllers
                     }
                 }
 
-                if (items.Any())
-                {
-                    _context.Items.AddRange(items);
-                }
-                
                 await _context.SaveChangesAsync();
                 
                 if (successCount > 0)
                 {
                     TempData["SuccessMessage"] = $"✅ Berhasil memproses {successCount} item!";
                 }
-                else
-                {
-                    TempData["ErrorMessage"] = "Tidak ada data valid untuk diimport. Pastikan file Excel sudah diisi dengan benar.";
-                }
-
+                
                 if (errorCount > 0)
                 {
-                    var errorDetail = string.Join("<br/>", errorMessages.Take(10));
-                    TempData["ErrorMessage"] = TempData["ErrorMessage"] != null 
-                        ? TempData["ErrorMessage"] + $"<br/><br/>{errorCount} baris gagal: <br/>{errorDetail}"
-                        : $"{errorCount} baris gagal diimport: <br/>{errorDetail}";
+                    var errorDetail = string.Join("<br/>", errorMessages.Take(5));
+                    TempData["ErrorMessage"] = $"{errorCount} baris gagal diimport: <br/>{errorDetail}";
                 }
-
-                return RedirectToAction(nameof(Index));
             }
             catch (Exception ex)
             {
-                TempData["ErrorMessage"] = $"❌ Error saat import Excel: {ex.Message}";
-                return RedirectToAction(nameof(Index));
+                TempData["ErrorMessage"] = "Terjadi kesalahan saat memproses file: " + ex.Message;
             }
+
+            return RedirectToAction(nameof(Index));
         }
 
         // Helper for PartNumber lookup

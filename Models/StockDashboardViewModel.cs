@@ -16,6 +16,7 @@ namespace DeliveryControl.Models
 
         public int TotalPoolingToday { get; set; }
         public int TotalPreparationToday { get; set; }
+        public DateTime? SearchDate { get; set; }
         
         public int NetStock => StockDetails.Count; // Updated to show current actual stock
     }
@@ -29,6 +30,7 @@ namespace DeliveryControl.Models
         public string Time { get; set; } = string.Empty;
         public string Date { get; set; } = string.Empty;
         public string Location { get; set; } = string.Empty;
+        public string Plant { get; set; } = string.Empty;
         public int? QtyLot { get; set; }
         public int? Min { get; set; }
         public int? Max { get; set; }

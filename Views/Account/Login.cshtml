@@ -169,6 +169,31 @@
             border: 1px solid rgba(59, 130, 246, 0.15);
             backdrop-filter: blur(12px);
         }
+
+        /* Password Toggle Styling */
+        .password-wrapper {
+            position: relative;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 1.25rem;
+            transition: color 0.3s;
+            z-index: 10;
+        }
+
+        .password-toggle:hover {
+            color: var(--primary-blue);
+        }
+
+        .form-control-login {
+            padding-right: 45px; /* Space for eye icon */
+        }
     </style>
 </head>
 <body class="futuristic-body">
@@ -205,7 +230,10 @@
                         <i class="bi bi-lock-fill"></i>
                         <span>Password</span>
                     </label>
-                    <input asp-for="Password" class="form-control form-control-login" placeholder="Masukkan password" />
+                    <div class="password-wrapper">
+                        <input asp-for="Password" class="form-control form-control-login" placeholder="Masukkan password" />
+                        <i id="togglePassword" class="bi bi-eye password-toggle"></i>
+                    </div>
                     <span asp-validation-for="Password" class="text-danger"></span>
                 </div>
 
@@ -223,6 +251,18 @@
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
     <script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
+
+    <script>
+        $(document).ready(function() {
+            $('#togglePassword').on('click', function() {
+                const passwordField = $('#Password');
+                const type = passwordField.attr('type') === 'password' ? 'text' : 'password';
+                passwordField.attr('type', type);
+                
+                $(this).toggleClass('bi-eye bi-eye-slash');
+            });
+        });
+    </script>
 </body>
 </html>
 
