@@ -4,26 +4,37 @@
     var selectedDate = ViewBag.SelectedDate as string;
 }
 
-<div class="row mb-4">
+<div class="row mb-3">
     <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <div>
-                <h2 class="mb-1"><i class="bi bi-clock-history text-primary"></i> @Model.PlantName - Transaction Logs</h2>
-                <p class="text-muted mb-0">History of Pooling (IN) and Preparation (OUT)</p>
+        <div class="header-main-row mb-3">
+            <div class="header-title-section">
+                <i class="bi bi-clock-history fs-4 text-primary"></i>
+                <h1 class="h5 fw-bold mb-0 text-white text-nowrap">@Model.PlantName - Transaction Logs</h1>
             </div>
-            <div class="text-end">
-                <div class="d-flex gap-3 align-items-center">
-                    <div class="input-group input-group-sm" style="max-width: 250px;">
-                        <span class="input-group-text bg-dark border-primary text-primary"><i class="bi bi-search"></i></span>
-                        <input type="text" id="logSearch" class="form-control bg-dark text-white border-primary" placeholder="Cari Tag atau Kanban...">
-                    </div>
-                    <form method="get" class="d-flex gap-2 align-items-center">
-                        <label class="small text-muted text-nowrap">Tanggal:</label>
-                        <input type="date" name="date" class="form-control form-control-sm bg-dark text-white border-primary" value="@selectedDate" />
-                        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-                        <a asp-action="@Model.PlantName" class="btn btn-outline-secondary btn-sm">Reset</a>
-                    </form>
+
+            <div class="custom-filter-bar">
+                <div class="search-box-wrapper">
+                    <i class="bi bi-search search-icon"></i>
+                    <input type="text" id="logSearch" class="custom-search-input" placeholder="Cari Tag atau Kanban...">
                 </div>
+
+                <form method="get" class="d-flex gap-2 align-items-center">
+                    <div class="filter-group">
+                        <span class="filter-label">Tanggal:</span>
+                        <input type="date" name="date" class="custom-date-input" value="@selectedDate" />
+                    </div>
+                    <div class="filter-group">
+                        <span class="filter-label">Periode:</span>
+                        <select name="period" class="custom-select-input">
+                            <option value="Day" selected='@(ViewBag.SelectedPeriod == "Day")'>Day</option>
+                            <option value="Week" selected='@(ViewBag.SelectedPeriod == "Week")'>Week</option>
+                            <option value="Month" selected='@(ViewBag.SelectedPeriod == "Month")'>Month</option>
+                            <option value="Year" selected='@(ViewBag.SelectedPeriod == "Year")'>Year</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm px-3" style="height: 30px; display: flex; align-items: center; font-size: 0.75rem;">Filter</button>
+                    <a asp-action="@Model.PlantName" class="btn btn-outline-secondary btn-sm px-3" style="height: 30px; display: flex; align-items: center; font-size: 0.75rem;">Reset</a>
+                </form>
             </div>
         </div>
         
@@ -102,6 +113,7 @@
     }
 </style>
 
+<div id="transactionLogsContent">
 <div class="row">
     <!-- Pooling History (IN) -->
     <div class="col-md-6 mb-4">
@@ -183,16 +195,50 @@
         </div>
     </div>
 </div>
+</div>
 
 @section Scripts {
     <script>
         $(document).ready(function () {
-            $('#logSearch').on('keyup', function() {
-                var value = $(this).val().toLowerCase();
-                $(".table tbody tr").filter(function() {
-                    $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
-                });
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/stockHub")
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on("UpdateStock", function () {
+                refreshLogs();
             });
+
+            connection.start().catch(err => console.error(err.toString()));
+
+            function refreshLogs() {
+                const date = $('input[name="date"]').val() || '';
+                const period = $('select[name="period"]').val() || 'Day';
+                const plant = "@Model.PlantName";
+                
+                $.ajax({
+                    url: `/Stock/${plant}?date=${date}&period=${period}`,
+                    type: 'GET',
+                    success: function (html) {
+                        const newContent = $(html).find('#transactionLogsContent').html();
+                        $('#transactionLogsContent').fadeOut(200, function() {
+                            $(this).html(newContent).fadeIn(200);
+                            bindFilterEvents();
+                        });
+                    }
+                });
+            }
+
+            function bindFilterEvents() {
+                $('#logSearch').off('keyup').on('keyup', function() {
+                    var value = $(this).val().toLowerCase();
+                    $(".table tbody tr").filter(function() {
+                        $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
+                    });
+                });
+            }
+
+            bindFilterEvents();
         });
     </script>
 }

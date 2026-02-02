@@ -4,53 +4,53 @@
     ViewData["Title"] = "Grafik Trend Stok";
 }
 
-<div class="row mb-4">
-    <div class="col-md-5">
-        <h2 class="futuristic-title"><i class="bi bi-graph-up-arrow"></i> @(Model.ViewMode == "Level" ? "Grafik Level Stok" : "Grafik Trend Stok")</h2>
-        <p class="text-muted">@(Model.ViewMode == "Level" ? "Proporsi part number berdasarkan sisa hari stok (FIFO)" : "Visualisasi pergerakan barang (Pooling vs Preparation) di Finished Goods")</p>
+<div class="header-main-row mb-3">
+    <div class="header-title-section">
+        <i class="bi bi-graph-up-arrow fs-4 text-primary"></i>
+        <h1 class="h5 fw-bold mb-0 text-white text-nowrap">@(Model.ViewMode == "Level" ? "Grafik Level Stok" : "Grafik Trend Stok")</h1>
     </div>
-    <div class="col-md-7 text-end">
-        <div class="d-flex justify-content-end align-items-center gap-2 mb-3">
-            <!-- View Mode Switch -->
-            <div class="btn-group shadow-sm me-2" role="group">
-                <a asp-action="Trend" asp-route-period="@Model.FilterPeriod" asp-route-mode="Activity" 
-                   class="btn btn-sm @(Model.ViewMode == "Activity" ? "btn-primary" : "btn-outline-primary")" title="Tren Aktivitas (Produksi vs Pengiriman)">
-                    <i class="bi bi-activity"></i> Aktivitas
-                </a>
-                <a asp-action="Trend" asp-route-period="@Model.FilterPeriod" asp-route-mode="Level" 
-                   class="btn btn-sm @(Model.ViewMode == "Level" ? "btn-primary" : "btn-outline-primary")" title="Tren Level Stok (Kebutuhan vs Aktual)">
-                    <i class="bi bi-bar-chart-steps"></i> Level Stok
-                </a>
-            </div>
 
-            <div class="dash-v-divider" style="width: 1px; height: 30px; background: rgba(59, 130, 246, 0.2); margin: 0 5px;"></div>
-
-            <!-- Excel Export -->
-            <a asp-action="ExportTrendToExcel" class="btn btn-sm btn-success shadow-sm me-2">
-                <i class="bi bi-file-earmark-excel"></i> Template Excel
+    <div class="custom-filter-bar">
+        <!-- View Mode Switch -->
+        <div class="btn-group shadow-sm me-2" role="group">
+            <a asp-action="Trend" asp-route-period="@Model.FilterPeriod" asp-route-mode="Activity" 
+               class="btn btn-sm @(Model.ViewMode == "Activity" ? "btn-primary" : "btn-outline-primary")" title="Tren Aktivitas (Produksi vs Pengiriman)" style="height: 30px; display: flex; align-items: center;">
+                <i class="bi bi-activity"></i> <span class="ms-1">Aktivitas</span>
             </a>
+            <a asp-action="Trend" asp-route-period="@Model.FilterPeriod" asp-route-mode="Level" 
+               class="btn btn-sm @(Model.ViewMode == "Level" ? "btn-primary" : "btn-outline-primary")" title="Tren Level Stok (Kebutuhan vs Aktual)" style="height: 30px; display: flex; align-items: center;">
+                <i class="bi bi-bar-chart-steps"></i> <span class="ms-1">Level Stok</span>
+            </a>
+        </div>
 
-            <!-- Dropdowns & Period -->
-            <div class="dropdown">
-                <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" id="plantFilterBtn" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="bi bi-filter"></i> Semua Plant
-                </button>
-                <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end shadow" aria-labelledby="plantFilterBtn">
-                    <li><a class="dropdown-item active" href="#" onclick="updateMainChart('Overall', 'Semua Plant', this)">Semua Plant</a></li>
-                    <li><hr class="dropdown-divider opacity-25"></li>
-                    @foreach (var plant in Model.PlantTrends)
-                    {
-                        <li><a class="dropdown-item" href="#" onclick="updateMainChart('@plant.PlantName', 'Trend @plant.PlantName', this)">@plant.PlantName</a></li>
-                    }
-                </ul>
-            </div>
-            <div class="btn-group btn-group-sm shadow-sm" role="group">
-                <a asp-action="Trend" asp-route-period="Day" asp-route-mode="@Model.ViewMode" class="btn @(Model.FilterPeriod == "Day" ? "btn-primary" : "btn-outline-primary")">Hari Ini</a>
-                <a asp-action="Trend" asp-route-period="Month" asp-route-mode="@Model.ViewMode" class="btn @(Model.FilterPeriod == "Month" ? "btn-primary" : "btn-outline-primary")">Bulan Ini</a>
-                <a asp-action="Trend" asp-route-period="Year" asp-route-mode="@Model.ViewMode" class="btn @(Model.FilterPeriod == "Year" ? "btn-primary" : "btn-outline-primary")">Tahun Ini</a>
-            </div>
+        <div class="dash-v-divider" style="width: 1px; height: 20px; background: rgba(255,255,255,0.1); margin: 0 5px;"></div>
+
+        <!-- Excel Export -->
+        <a asp-action="ExportTrendToExcel" class="btn btn-sm btn-success shadow-sm me-2" style="height: 30px; display: flex; align-items: center; gap: 6px; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">
+            <i class="bi bi-file-earmark-excel"></i> <span>Template Excel</span>
+        </a>
+
+        <!-- Dropdowns & Period -->
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" id="plantFilterBtn" data-bs-toggle="dropdown" aria-expanded="false" style="height: 30px; font-size: 0.75rem;">
+                <i class="bi bi-filter"></i> Semua Plant
+            </button>
+            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end shadow" aria-labelledby="plantFilterBtn">
+                <li><a class="dropdown-item active" href="#" onclick="updateMainChart('Overall', 'Semua Plant', this)">Semua Plant</a></li>
+                <li><hr class="dropdown-divider opacity-25"></li>
+                @foreach (var plant in Model.PlantTrends)
+                {
+                    <li><a class="dropdown-item" href="#" onclick="updateMainChart('@plant.PlantName', 'Trend @plant.PlantName', this)">@plant.PlantName</a></li>
+                }
+            </ul>
+        </div>
+        <div class="btn-group btn-group-sm shadow-sm" role="group">
+            <a asp-action="Trend" asp-route-period="Day" asp-route-mode="@Model.ViewMode" class="btn @(Model.FilterPeriod == "Day" ? "btn-primary" : "btn-outline-primary")" style="height: 30px; display: flex; align-items: center; font-size: 0.75rem;">Hari Ini</a>
+            <a asp-action="Trend" asp-route-period="Month" asp-route-mode="@Model.ViewMode" class="btn @(Model.FilterPeriod == "Month" ? "btn-primary" : "btn-outline-primary")" style="height: 30px; display: flex; align-items: center; font-size: 0.75rem;">Bulan Ini</a>
+            <a asp-action="Trend" asp-route-period="Year" asp-route-mode="@Model.ViewMode" class="btn @(Model.FilterPeriod == "Year" ? "btn-primary" : "btn-outline-primary")" style="height: 30px; display: flex; align-items: center; font-size: 0.75rem;">Tahun Ini</a>
         </div>
     </div>
+</div>
     
     <div class="col-12 mt-2">
         <!-- Dashboard Sub-Menu Navigation -->

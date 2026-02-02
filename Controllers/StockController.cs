@@ -14,32 +14,35 @@ namespace DeliveryControl.Controllers
             _context = context;
         }
 
-        public async Task<IActionResult> Index(string plant = "Overall", DateTime? date = null)
+        public async Task<IActionResult> Index(string plant = "Overall", DateTime? date = null, string period = "Day")
         {
-            return View(await GetStockViewModel(plant, date));
+            return View(await GetStockViewModel(plant, date, period));
         }
 
-        public async Task<IActionResult> Molded(DateTime? date)
+        public async Task<IActionResult> Molded(DateTime? date, string period = "Day")
         {
             ViewBag.SelectedDate = date?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
-            return View(await GetStockViewModel("Molded", date));
+            ViewBag.SelectedPeriod = period;
+            return View(await GetStockViewModel("Molded", date, period));
         }
 
-        public async Task<IActionResult> Hose(DateTime? date)
+        public async Task<IActionResult> Hose(DateTime? date, string period = "Day")
         {
             ViewBag.SelectedDate = date?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
-            return View(await GetStockViewModel("Hose", date));
+            ViewBag.SelectedPeriod = period;
+            return View(await GetStockViewModel("Hose", date, period));
         }
 
-        public async Task<IActionResult> RVI(DateTime? date)
+        public async Task<IActionResult> RVI(DateTime? date, string period = "Day")
         {
             ViewBag.SelectedDate = date?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
-            return View(await GetStockViewModel("RVI", date));
+            ViewBag.SelectedPeriod = period;
+            return View(await GetStockViewModel("RVI", date, period));
         }
 
-        public async Task<IActionResult> ExportToExcel(string plant = "Overall", DateTime? date = null)
+        public async Task<IActionResult> ExportToExcel(string plant = "Overall", DateTime? date = null, string period = "Day")
         {
-            var viewModel = await GetStockViewModel(plant, date);
+            var viewModel = await GetStockViewModel(plant, date, period);
             var dateStr = (date ?? DateTime.Today).ToString("dd-MM-yyyy");
             
             using (var workbook = new ClosedXML.Excel.XLWorkbook())
@@ -267,7 +270,7 @@ namespace DeliveryControl.Controllers
             public int? RackMax { get; set; }
         }
 
-        private async Task<StockDashboardViewModel> GetStockViewModel(string plant, DateTime? searchDate = null)
+        private async Task<StockDashboardViewModel> GetStockViewModel(string plant, DateTime? searchDate = null, string period = "Day")
         {
             var today = DateTime.Today;
             var isFilteredByDate = searchDate.HasValue;
@@ -282,12 +285,30 @@ namespace DeliveryControl.Controllers
                 preparationQuery = preparationQuery.Where(r => r.Plant == plant);
             }
 
-            if (isFilteredByDate)
+            DateTime startDate, endDate;
+            if (period == "Week")
             {
-                var endOfFilterDate = filterDate.Date.AddDays(1);
-                poolingQuery = poolingQuery.Where(r => r.CreatedDate < endOfFilterDate);
-                preparationQuery = preparationQuery.Where(r => r.CreatedDate < endOfFilterDate);
+                startDate = filterDate.Date.AddDays(-6);
+                endDate = filterDate.Date.AddDays(1).AddSeconds(-1);
             }
+            else if (period == "Month")
+            {
+                startDate = new DateTime(filterDate.Year, filterDate.Month, 1);
+                endDate = startDate.AddMonths(1).AddSeconds(-1);
+            }
+            else if (period == "Year")
+            {
+                startDate = new DateTime(filterDate.Year, 1, 1);
+                endDate = startDate.AddYears(1).AddSeconds(-1);
+            }
+            else // Day
+            {
+                startDate = filterDate.Date;
+                endDate = startDate.AddDays(1).AddSeconds(-1);
+            }
+
+            poolingQuery = poolingQuery.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
+            preparationQuery = preparationQuery.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
 
             var allPooling = await poolingQuery.OrderBy(r => r.CreatedDate).ToListAsync();
             var allPreparation = await preparationQuery.OrderBy(r => r.CreatedDate).ToListAsync();
@@ -339,10 +360,11 @@ namespace DeliveryControl.Controllers
             return new StockDashboardViewModel
             {
                 PlantName = plant, StockDetails = stockDetails, ShortageCount = shortageCount, NormalCount = normalCount, OverCount = overCount, SearchDate = searchDate,
-                RecentPooling = isFilteredByDate ? inStockPieces.Where(r => r.CreatedDate.Date == filterDate.Date).OrderByDescending(r => r.CreatedDate).ToList() : inStockPieces.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
-                RecentPreparation = isFilteredByDate ? allPreparation.Where(r => r.CreatedDate.Date == filterDate.Date).OrderByDescending(r => r.CreatedDate).ToList() : allPreparation.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
-                TotalPoolingToday = isFilteredByDate ? await _context.PoolingRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate.Date == filterDate.Date) : await _context.PoolingRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= today),
-                TotalPreparationToday = isFilteredByDate ? await _context.PreparationRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate.Date == filterDate.Date) : await _context.PreparationRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= today)
+                RecentPooling = isFilteredByDate ? inStockPieces.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ToList() : inStockPieces.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
+                RecentPreparation = isFilteredByDate ? allPreparation.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ToList() : allPreparation.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
+                TotalPoolingToday = await _context.PoolingRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= startDate && r.CreatedDate <= endDate),
+                TotalPreparationToday = await _context.PreparationRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= startDate && r.CreatedDate <= endDate),
+                Period = period
             };
         }
 

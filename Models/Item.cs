@@ -44,15 +44,24 @@ namespace DeliveryControl.Models
         [StringLength(20)]
         public string? Plant { get; set; } // Molded, Hose, RVI
 
-        [StringLength(5)]
-        public string? Rack { get; set; } // A - I
+        [StringLength(10)]
+        public string? Rack { get; set; } // Mapping to RAK
 
-        public int? NoRack { get; set; } // 1 - 33
+        public int? NoRack { get; set; } // Mapping to NO RAK
 
-        public int? QtyLot { get; set; } // Qty per lot
+        [StringLength(100)]
+        public string? Customer { get; set; } // Mapping to CUST
 
-        public int? RackMin { get; set; } // Capacity Min (Rack)
-        public int? RackMax { get; set; } // Capacity Max (Rack)
+        [StringLength(100)]
+        public string? VIN { get; set; } // Mapping to VIN
+
+        public int? QtyLot { get; set; } // Mapping to QPC
+
+        public int? RackMin { get; set; } // Mapping to MIN 1D
+
+        public int? ROP { get; set; } // Mapping to ROP 2D
+
+        public int? RackMax { get; set; } // Mapping to MAX 3D
 
         public bool IsActive { get; set; } = true;
 

@@ -70,7 +70,7 @@ namespace DeliveryControl.Data
                 entity.HasOne(di => di.Item)
                     .WithMany(i => i.DeliveryItems)
                     .HasForeignKey(di => di.ItemId)
-                    .OnDelete(DeleteBehavior.Restrict);
+                    .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(e => new { e.ScheduleId, e.ItemId });
             });
@@ -81,6 +81,15 @@ namespace DeliveryControl.Data
                 entity.HasOne(pr => pr.DeliverySchedule)
                     .WithMany(ds => ds.PreparationRecords)
                     .HasForeignKey(pr => pr.ScheduleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Configure PoolingRecord
+            modelBuilder.Entity<PoolingRecord>(entity =>
+            {
+                entity.HasOne(pr => pr.Item)
+                    .WithMany(i => i.PoolingRecords)
+                    .HasForeignKey(pr => pr.ItemId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
 

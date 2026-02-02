@@ -6,7 +6,7 @@
 
 <div class="row mb-4 align-items-center">
     <div class="col-md-5">
-        <h2 class="fw-bold mb-0 text-gradient"><i class="bi bi-box-seam me-2"></i>Master Item</h2>
+        <h2 class="mb-0"><i class="bi bi-boxes"></i> Master Item <small class="text-muted fs-6" style="vertical-align: middle;">v5.9 Type-Safe</small></h2>
     </div>
     <div class="col-md-7 text-end">
         <div class="btn-group gap-2 flex-wrap">
@@ -22,6 +22,12 @@
             <a asp-controller="Stock" asp-action="Targets" class="premium-btn btn-dark-blue shadow-sm">
                 <i class="bi bi-bullseye me-1"></i> Stock Targets
             </a>
+            <form asp-action="BulkDeleteAll" method="post" class="d-inline" onsubmit="return confirm('APAKAH ANDA YAKIN? Tindakan ini akan MENGHAPUS SELURUH DATA MASTER ITEM DAN SEMUA TRANSAKSI TERKAIT (Pooling, Delivery, Preparation). Tindakan ini tidak dapat dibatalkan!')">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="premium-btn btn-glass-danger shadow-sm">
+                    <i class="bi bi-trash-fill me-1"></i> Hapus Semua Data
+                </button>
+            </form>
         </div>
     </div>
 </div>
@@ -62,10 +68,18 @@
         background: #1e293b;
         color: #94a3b8 !important;
     }
-    .btn-primary {
-        background: var(--primary-blue);
-        color: white !important;
+    .btn-glass-danger {
+        background: rgba(239, 68, 68, 0.2);
+        color: #ef4444 !important;
+        border-color: rgba(239, 68, 68, 0.3);
     }
+    .bg-dark-blue { background: #0f172a !important; }
+    .bg-red { background: #991b1b !important; }
+    .bg-yellow { background: #eab308 !important; }
+    .table-hover tbody tr:hover { background: rgba(59, 130, 246, 0.05); }
+    .master-table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
+    th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; vertical-align: middle; border: 1px solid rgba(255,255,255,0.05) !important; }
+    td { font-size: 0.85rem; vertical-align: middle; border: 1px solid rgba(255,255,255,0.05) !important; color: #cbd5e1; }
 </style>
 
 <div class="card mb-3">
@@ -96,60 +110,53 @@
 
 <div class="card">
     <div class="card-body">
-        @if (Model.Any())
-        {
+    <div class="card-body">
             <div class="master-table-wrapper">
                 <table class="table table-hover mb-0" id="itemsTable">
                     <thead>
                         <tr>
-                            <th>Kode (Tag)</th>
-                            <th>Nama</th>
-                            <th>Plant</th>
-                            <th>Location (Rak.No)</th>
-                            <th>Qty/Lot</th>
-                            <th>Capacity</th>
-                            <th>Status</th>
-                            <th>Action</th>
+                            <th class="bg-dark-blue text-white text-center">NO</th>
+                            <th class="bg-dark-blue text-white">LOKASI RACK</th>
+                            <th class="bg-dark-blue text-white">PROD. PLANT</th>
+                            <th class="bg-dark-blue text-white text-center">RAK</th>
+                            <th class="bg-dark-blue text-white text-center">NO RAK</th>
+                            <th class="bg-dark-blue text-white">CUST</th>
+                            <th class="bg-dark-blue text-white text-center">STATUS</th>
+                            <th class="bg-dark-blue text-white">PROD.</th>
+                            <th class="bg-dark-blue text-white">VIN</th>
+                            <th class="bg-dark-blue text-white text-center">QPC</th>
+                            <th class="bg-red text-white text-center">MIN 1D</th>
+                            <th class="bg-yellow text-dark text-center">ROP 2D</th>
+                            <th class="bg-info text-white text-center">MAX 3D</th>
+                            <th class="bg-dark-blue text-white text-center">ACTION</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var item in Model)
                         {
                             <tr>
-                                <td>@item.ItemCode</td>
-                                <td>@item.ItemName</td>
+                                <td class="text-center">@(Model.ToList().IndexOf(item) + 1)</td>
+                                <td class="fw-bold text-primary">@item.ItemName</td>
                                 <td>@(item.Plant ?? "-")</td>
-                                <td>
-                                    @if (!string.IsNullOrEmpty(item.Rack))
-                                    {
-                                        <span>@(item.Rack).@(item.NoRack)</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td>@(item.QtyLot?.ToString() ?? "-")</td>
-                                <td>
-                                    @if (item.RackMin.HasValue)
-                                    {
-                                        <small class="text-muted">Min: @item.RackMin / Max: @item.RackMax</small>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td>
+                                <td class="text-center">@(item.Rack ?? "-")</td>
+                                <td class="text-center">@(item.NoRack?.ToString() ?? "-")</td>
+                                <td>@(item.Customer ?? "-")</td>
+                                <td class="text-center">
                                     @if (item.IsActive)
                                     {
-                                        <span class="badge bg-success">Aktif</span>
+                                        <span class="badge bg-success opacity-75">Aktif</span>
                                     }
                                     else
                                     {
-                                        <span class="badge bg-danger">Tidak Aktif</span>
+                                        <span class="badge bg-danger opacity-75">Tidak Aktif</span>
                                     }
                                 </td>
+                                <td>@(item.Category ?? "-")</td>
+                                <td>@(item.VIN ?? "-")</td>
+                                <td class="text-center fw-bold text-info">@(item.QtyLot?.ToString() ?? "-")</td>
+                                <td class="text-center fw-bold text-danger">@(item.RackMin?.ToString() ?? "-")</td>
+                                <td class="text-center fw-bold text-warning">@(item.ROP?.ToString() ?? "-")</td>
+                                <td class="text-center fw-bold text-success">@(item.RackMax?.ToString() ?? "-")</td>
                                 <td>
                                     <div class="btn-group" role="group">
                                         <form asp-action="ToggleStatus" asp-route-id="@item.ItemId" method="post" class="d-inline">
@@ -174,13 +181,13 @@
                     </tbody>
                 </table>
             </div>
-        }
-        else
-        {
-            <div class="alert alert-info">
-                <i class="bi bi-info-circle"></i> Tidak ada data item yang ditemukan.
-            </div>
-        }
+            
+            @if (!Model.Any())
+            {
+                <div class="alert alert-info mt-3 text-center">
+                    <i class="bi bi-info-circle me-2"></i> Belum ada data. Silakan Import Excel.
+                </div>
+            }
     </div>
 </div>
 
@@ -198,13 +205,12 @@
                     </div>
                     <div class="modal-body">
                         <div class="alert alert-info border-0 shadow-sm" style="background: rgba(59, 130, 246, 0.1); color: #f1f5f9;">
-                            <h6 class="fw-bold"><i class="bi bi-info-circle-fill me-2 text-info"></i> Panduan Format Baru:</h6>
+                            <h6 class="fw-bold"><i class="bi bi-info-circle-fill me-2 text-info"></i> Panduan Format 12 Kolom:</h6>
                             <ul class="mb-0 mt-2 small opacity-75">
-                                <li>Urutan Kolom: <strong>Kode, Nama, Plant, Location, Qty/Lot, Capacity, Status</strong></li>
-                                <li><strong>Location:</strong> Format [Huruf].[Nomor] (Contoh: <strong>A.1</strong> atau <strong>B.15</strong>)</li>
-                                <li><strong>Capacity:</strong> Diisi angka kapasitas maksimal rak</li>
-                                <li><strong>Status:</strong> Diisi <strong>'Aktif'</strong> atau <strong>'Tidak Aktif'</strong></li>
-                                <li>Import akan mengupdate data jika Kode Item sudah ada</li>
+                                <li><strong>Urutan:</strong> LOKASI RACK, PROD. PLANT, RAK, NO RAK, CUST, STATUS, PROD., VIN, QPC, MIN 1D, ROP 2D, MAX 3D</li>
+                                <li><strong>LOKASI RACK:</strong> Kode Rak (misal RVI, Molded)</li>
+                                <li><strong>VIN:</strong> Kode Unik Barang (Wajib Unik)</li>
+                                <li><strong>STATUS:</strong> 'Aktif' / 'Tidak Aktif'</li>
                             </ul>
                         </div>
                         <div class="mb-3">

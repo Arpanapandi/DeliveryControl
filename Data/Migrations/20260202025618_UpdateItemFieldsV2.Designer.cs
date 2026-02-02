@@ -3,16 +3,19 @@ using System;
 using DeliveryControl.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace DeliveryControl.Migrations
+namespace DeliveryControl.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260202025618_UpdateItemFieldsV2")]
+    partial class UpdateItemFieldsV2
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.0");
@@ -146,7 +149,7 @@ namespace DeliveryControl.Migrations
                         new
                         {
                             CustomerId = 1,
-                            CreatedDate = new DateTime(2026, 2, 2, 10, 14, 37, 435, DateTimeKind.Local).AddTicks(8343),
+                            CreatedDate = new DateTime(2026, 2, 2, 9, 56, 18, 5, DateTimeKind.Local).AddTicks(8006),
                             CustomerCode = "CUST001",
                             CustomerName = "PT ABC Manufacturing",
                             IsActive = true,
@@ -156,7 +159,7 @@ namespace DeliveryControl.Migrations
                         new
                         {
                             CustomerId = 2,
-                            CreatedDate = new DateTime(2026, 2, 2, 10, 14, 37, 435, DateTimeKind.Local).AddTicks(8346),
+                            CreatedDate = new DateTime(2026, 2, 2, 9, 56, 18, 5, DateTimeKind.Local).AddTicks(8008),
                             CustomerCode = "CUST002",
                             CustomerName = "PT XYZ Industries",
                             IsActive = true,
@@ -425,7 +428,7 @@ namespace DeliveryControl.Migrations
                         {
                             ItemId = 1,
                             Category = "Raw Material",
-                            CreatedDate = new DateTime(2026, 2, 2, 10, 14, 37, 435, DateTimeKind.Local).AddTicks(8487),
+                            CreatedDate = new DateTime(2026, 2, 2, 9, 56, 18, 5, DateTimeKind.Local).AddTicks(8122),
                             Description = "Raw material untuk produksi",
                             IsActive = true,
                             ItemCode = "ITM001",
@@ -439,7 +442,7 @@ namespace DeliveryControl.Migrations
                         {
                             ItemId = 2,
                             Category = "Finished Goods",
-                            CreatedDate = new DateTime(2026, 2, 2, 10, 14, 37, 435, DateTimeKind.Local).AddTicks(8490),
+                            CreatedDate = new DateTime(2026, 2, 2, 9, 56, 18, 5, DateTimeKind.Local).AddTicks(8125),
                             Description = "Produk jadi siap kirim",
                             IsActive = true,
                             ItemCode = "ITM002",
@@ -453,7 +456,7 @@ namespace DeliveryControl.Migrations
                         {
                             ItemId = 3,
                             Category = "Packaging",
-                            CreatedDate = new DateTime(2026, 2, 2, 10, 14, 37, 435, DateTimeKind.Local).AddTicks(8492),
+                            CreatedDate = new DateTime(2026, 2, 2, 9, 56, 18, 5, DateTimeKind.Local).AddTicks(8127),
                             Description = "Material packaging",
                             IsActive = true,
                             ItemCode = "ITM003",
@@ -637,7 +640,7 @@ namespace DeliveryControl.Migrations
                     b.HasOne("DeliveryControl.Models.Item", "Item")
                         .WithMany("DeliveryItems")
                         .HasForeignKey("ItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("DeliveryControl.Models.DeliverySchedule", "DeliverySchedule")
@@ -666,8 +669,7 @@ namespace DeliveryControl.Migrations
                 {
                     b.HasOne("DeliveryControl.Models.Item", "Item")
                         .WithMany("PoolingRecords")
-                        .HasForeignKey("ItemId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .HasForeignKey("ItemId");
 
                     b.Navigation("Item");
                 });

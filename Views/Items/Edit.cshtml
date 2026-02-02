@@ -30,15 +30,20 @@
                     <input type="hidden" asp-for="CreatedDate" />
                     
                     <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label asp-for="ItemCode" class="form-label">Item Code (Tag)</label>
+                        <div class="col-md-4">
+                            <label asp-for="ItemCode" class="form-label text-info fw-bold">VIN (Unique Code)</label>
                             <input asp-for="ItemCode" class="form-control" />
                             <span asp-validation-for="ItemCode" class="text-danger"></span>
                         </div>
-                        <div class="col-md-6">
-                            <label asp-for="ItemName" class="form-label">Nama Barang</label>
+                        <div class="col-md-4">
+                            <label asp-for="ItemName" class="form-label fw-bold">LOKASI RACK</label>
                             <input asp-for="ItemName" class="form-control" />
                             <span asp-validation-for="ItemName" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="Customer" class="form-label fw-bold">Customer (CUST)</label>
+                            <input asp-for="Customer" class="form-control" />
+                            <span asp-validation-for="Customer" class="text-danger"></span>
                         </div>
                     </div>
 
@@ -104,21 +109,32 @@
                     </div>
 
                     <div class="row mb-3">
-                        <div class="col-md-4">
-                            <label asp-for="QtyLot" class="form-label">QTY / Lot</label>
+                        <div class="col-md-3">
+                            <label asp-for="QtyLot" class="form-label text-info fw-bold">QPC (Qty/Lot)</label>
                             <input asp-for="QtyLot" class="form-control" type="number" />
                             <span asp-validation-for="QtyLot" class="text-danger"></span>
                         </div>
-                        <div class="col-md-4">
-                            <label asp-for="RackMin" class="form-label">QTY Min (per Lot)</label>
+                        <div class="col-md-3">
+                            <label asp-for="RackMin" class="form-label text-danger fw-bold">MIN 1D</label>
                             <input asp-for="RackMin" class="form-control" type="number" />
                             <span asp-validation-for="RackMin" class="text-danger"></span>
                         </div>
-                        <div class="col-md-4">
-                            <label asp-for="RackMax" class="form-label">QTY Max (per Lot)</label>
+                        <div class="col-md-3">
+                            <label asp-for="ROP" class="form-label text-warning fw-bold">ROP 2D</label>
+                            <input asp-for="ROP" class="form-control" type="number" />
+                            <span asp-validation-for="ROP" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="RackMax" class="form-label text-success fw-bold">MAX 3D</label>
                             <input asp-for="RackMax" class="form-control" type="number" />
                             <span asp-validation-for="RackMax" class="text-danger"></span>
                         </div>
+                    </div>
+
+                    <div class="mb-3 mt-3">
+                        <label asp-for="VIN" class="form-label fw-bold">VIN Number</label>
+                        <input asp-for="VIN" class="form-control" />
+                        <span asp-validation-for="VIN" class="text-danger"></span>
                     </div>
 
                     <hr class="my-4" />

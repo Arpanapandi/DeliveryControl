@@ -4,14 +4,11 @@
 }
 
 <div class="header-container mb-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div class="header-main-row">
         <!-- Title Section -->
-        <div class="d-flex align-items-center gap-3">
-            <i class="bi bi-columns-gap fs-3 text-primary"></i>
-            <div>
-                <h1 class="h4 fw-bold mb-0 text-white">Dashboard Finished Goods</h1>
-                <p class="text-muted mb-0 smaller">Monitoring stock levels across all plants</p>
-            </div>
+        <div class="header-title-section">
+            <i class="bi bi-columns-gap fs-4 text-primary"></i>
+            <h1 class="h5 fw-bold mb-0 text-white text-nowrap">Dashboard Finished Goods</h1>
         </div>
 
         <!-- Filter Bar Section -->
@@ -37,6 +34,17 @@
             <div class="filter-group">
                 <span class="filter-label">Tanggal:</span>
                 <input type="date" id="dateFilter" class="custom-date-input" value="@(Model.SearchDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))">
+            </div>
+
+            <!-- Period Filter -->
+            <div class="filter-group">
+                <span class="filter-label">Periode:</span>
+                <select id="periodFilter" class="custom-select-input">
+                    <option value="Day" selected="@(Model.Period == "Day")">Day</option>
+                    <option value="Week" selected="@(Model.Period == "Week")">Week</option>
+                    <option value="Month" selected="@(Model.Period == "Month")">Month</option>
+                    <option value="Year" selected="@(Model.Period == "Year")">Year</option>
+                </select>
             </div>
 
             <div class="dash-v-divider"></div>
@@ -221,9 +229,10 @@
             function refreshDashboard() {
                 const plant = $('#plantFilter').val() || 'Overall';
                 const date = $('#dateFilter').val() || '';
+                const period = $('#periodFilter').val() || 'Day';
                 
                 $.ajax({
-                    url: `/Stock/Index?plant=${plant}&date=${date}`,
+                    url: `/Stock/Index?plant=${plant}&date=${date}&period=${period}`,
                     type: 'GET',
                     success: function (html) {
                         const newContent = $(html).find('#dashboardContent').html();
@@ -250,7 +259,7 @@
                     applyAllFilters();
                 });
 
-                $('#plantFilter, #dateFilter').off('change').on('change', function() {
+                $('#plantFilter, #dateFilter, #periodFilter').off('change').on('change', function() {
                     refreshDashboard();
                 });
 
@@ -265,6 +274,13 @@
                 });
 
                 $('#btnToggleAutoScroll').off('click').on('click', toggleAutoScroll);
+                
+                $('#btnDownloadExcel').off('click').on('click', function() {
+                    const plant = $('#plantFilter').val() || 'Overall';
+                    const date = $('#dateFilter').val() || '';
+                    const period = $('#periodFilter').val() || 'Day';
+                    window.location.href = `/Stock/ExportToExcel?plant=${plant}&date=${date}&period=${period}`;
+                });
             }
 
             function applyAllFilters() {
@@ -384,106 +400,8 @@
     /* ========================================
        COMPACT HEADER & FILTER BAR STYLING
        ======================================== */
-    .header-container {
-        padding: 5px 0;
-    }
-
-    .custom-filter-bar {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex-wrap: nowrap;
-    }
-
-    .search-box-wrapper {
-        display: flex;
-        align-items: center;
-        background: #0f172a;
-        border: 1px solid #3b82f6;
-        border-radius: 4px;
-        padding: 0 10px;
-        height: 36px;
-    }
-
-    .search-icon {
-        color: #3b82f6;
-        font-size: 0.9rem;
-        margin-right: 8px;
-    }
-
-    .custom-search-input {
-        background: transparent;
-        border: none;
-        color: #fff;
-        outline: none;
-        font-size: 0.85rem;
-        width: 180px;
-    }
-
-    .filter-group {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-
-    .filter-label {
-        color: #64748b;
-        font-size: 0.8rem;
-        font-weight: 600;
-    }
-
-    .custom-date-input, .custom-select-input {
-        background: #0f172a;
-        border: 1px solid #1e293b;
-        border-radius: 4px;
-        color: #fff;
-        padding: 0 8px;
-        height: 36px;
-        font-size: 0.85rem;
-        outline: none;
-        color-scheme: dark;
-    }
-
-    .custom-date-input::-webkit-calendar-picker-indicator {
-        filter: invert(1);
-        cursor: pointer;
-    }
-
-    .custom-date-input:focus, .custom-select-input:focus {
-        border-color: #3b82f6;
-    }
-
-    .btn-custom-excel {
-        background: transparent;
-        border: 1px solid #10b981;
-        color: #10b981;
-        border-radius: 6px;
-        padding: 0 12px;
-        height: 36px;
-        font-size: 0.8rem;
-        font-weight: 600;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-
-    .btn-custom-excel:hover {
-        background: rgba(16, 185, 129, 0.1);
-    }
-
-    .dash-v-divider {
-        width: 1px;
-        height: 20px;
-        background: rgba(255,255,255,0.1);
-        margin: 0 2px;
-    }
-
-    /* ========================================
-       DASHBOARD SUB-MENU NAV STYLING
-       ======================================== */
     .dashboard-nav-wrapper {
-        border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+        border-bottom: 2px solid rgba(59, 130, 246, 0.2);
         margin-top: 5px;
         padding-bottom: 0;
     }

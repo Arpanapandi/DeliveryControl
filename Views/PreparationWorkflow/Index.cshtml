@@ -208,9 +208,9 @@
                 }
 
                 const config = { 
-                    fps: 10, 
-                    qrbox: { width: 250, height: 150 },
-                    aspectRatio: 1.0
+                    fps: 20, 
+                    aspectRatio: 1.0,
+                    showTorchButtonIfSupported: true
                 };
 
                 if (!html5QrCode) {
@@ -263,12 +263,37 @@
                     } else {
                         $('#scheduleSelect').addClass('active-scan');
                         setTimeout(() => $('#scheduleSelect').removeClass('active-scan'), 500);
+                        
+                        // After scan Schedule, automatically focus Tag
+                        setTimeout(() => {
+                            $('#tagInput').focus();
+                        }, 600);
                     }
                     scannerModal.hide();
                 } else if (activeInputId) {
-                    $(`#${activeInputId}`).val(code).addClass('active-scan');
-                    setTimeout(() => $(`#${activeInputId}`).removeClass('active-scan'), 500);
+                    const currentId = activeInputId;
+                    $(`#${currentId}`).val(code).addClass('active-scan');
+                    setTimeout(() => $(`#${currentId}`).removeClass('active-scan'), 500);
+                    
                     scannerModal.hide();
+
+                    // Workflow Automation
+                    if (currentId === 'tagInput') {
+                        // After scan Tag, automatically open scanner for Label
+                        setTimeout(() => {
+                            $('.btn-scan-trigger[data-target="labelInput"]').click();
+                        }, 600);
+                    } else if (currentId === 'labelInput') {
+                        // After scan Label, automatically open scanner for Kanban
+                        setTimeout(() => {
+                            $('.btn-scan-trigger[data-target="kanbanInput"]').click();
+                        }, 600);
+                    } else if (currentId === 'kanbanInput') {
+                        // After scan Kanban, automatically submit
+                        setTimeout(() => {
+                            $('#btnSavePreparation').click();
+                        }, 600);
+                    }
                 }
             }
 
@@ -290,23 +315,26 @@
                 const label = $('#labelInput').val();
                 const kanban = $('#kanbanInput').val();
                 const scheduleId = $('#scheduleSelect').val();
-                const scheduleText = $('#scheduleSelect option:selected').text();
 
                 if (!scheduleId) {
                     alert('SILAKAN PILIH NO. SCHEDULE TERLEBIH DAHULU!');
+                    $('#scheduleSelect').focus();
                     return;
                 }
 
                 if (!tag || !label || !kanban) {
                     alert('Lengkapi semua data yang WAJIB (Tag, Label, Kanban)!');
+                    if (!tag) $('#tagInput').focus();
+                    else if (!label) $('#labelInput').focus();
+                    else $('#kanbanInput').focus();
                     return;
                 }
 
                 const data = {
                     Plant: plant,
-                    Tag: tag,
-                    Label: label,
-                    Kanban: kanban,
+                    Tag: tag.trim(),
+                    Label: label.trim(),
+                    Kanban: kanban.trim(),
                     ScheduleId: parseInt(scheduleId)
                 };
 
@@ -320,8 +348,9 @@
                     success: function (response) {
                         if (response.success) {
                             alert('SUKSES: ' + response.message);
-                            // Reset location elements but NOT plant
+                            // Reset location elements but NOT plant or schedule
                             $('#tagInput, #labelInput, #kanbanInput').val('');
+                            $('#tagInput').focus(); // Ready for next scan
                         } else {
                             alert('GAGAL: ' + response.message);
                         }
@@ -334,6 +363,35 @@
                     }
                 });
             });
+
+            // Hardware Scanner Support (Enter Key)
+            $('#tagInput').on('keypress', function(e) {
+                if (e.which == 13) {
+                    e.preventDefault();
+                    $('#labelInput').focus();
+                }
+            });
+
+            $('#labelInput').on('keypress', function(e) {
+                if (e.which == 13) {
+                    e.preventDefault();
+                    $('#kanbanInput').focus();
+                }
+            });
+
+            $('#kanbanInput').on('keypress', function(e) {
+                if (e.which == 13) {
+                    e.preventDefault();
+                    $('#btnSavePreparation').click();
+                }
+            });
+
+            // Auto-focus Tag if Schedule is already selected
+            if ($('#scheduleSelect').val()) {
+                $('#tagInput').focus();
+            } else {
+                $('#scheduleSelect').focus();
+            }
         });
     </script>
 }
@@ -492,12 +550,22 @@
         height: 2px;
         background: #ef4444;
         box-shadow: 0 0 10px #ef4444;
-        animation: scan-line 2s linear infinite;
+        animation: scan-line 2.5s ease-in-out infinite;
+        -webkit-animation: scan-line 2.5s ease-in-out infinite;
     }
 
     @@keyframes scan-line {
-        0% { top: 0; }
-        100% { top: 100%; }
+        0% { top: 0; opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { top: 100%; opacity: 0; }
+    }
+
+    @@-webkit-keyframes scan-line {
+        0% { top: 0; opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { top: 100%; opacity: 0; }
     }
 
     #reader video {
