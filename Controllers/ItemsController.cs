@@ -374,163 +374,136 @@ namespace DeliveryControl.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var items = new List<Item>();
-            var errorMessages = new List<string>();
             int successCount = 0;
             int errorCount = 0;
             var errorSamples = new List<string>();
 
-            var headerMap = new Dictionary<string, int>();
             try
             {
-                // --- REFACTORED IMPLEMENTATION (v2.6) --- 
-                // Clean separation of concerns for robust import logic
+                // 1. Pre-load ALL existing items into memory for 100% accurate & fast sync
+                var existingItems = await _context.Items.ToListAsync();
+                var itemDict = existingItems
+                    .Where(i => !string.IsNullOrEmpty(i.VIN))
+                    .GroupBy(i => i.VIN.Trim().ToUpper())
+                    .ToDictionary(g => g.Key, g => g.First());
+
                 using (var stream = new MemoryStream())
                 {
                     await file.CopyToAsync(stream);
                     using (var workbook = new ClosedXML.Excel.XLWorkbook(stream))
                     {
-                        // --- v5.8 EXACT MIRROR: Zero Manipulation ---
                         var worksheet = workbook.Worksheet(1);
-                        var headerRow = worksheet.FirstRowUsed();
+                        
+                        // --- v6.1 ROCK-SOLID HEADER DETECTION (Handling Alt+Enter) ---
+                        var headerRow = worksheet.Row(1);
                         int bestScore = -1;
                         var targetKeywords = new[] { "VIN", "LOKASI", "RACK", "CUST", "PLANT", "QPC", "MIN", "ROP", "MAX", "PROD" };
 
-                        // Search first 20 rows for the row with the HIGHEST match score
-                        for (int r = 1; r <= 20; r++) {
+                        // Stop at the FIRST row that has a high keyword match to avoid skipping data
+                        for (int r = 1; r <= 30; r++) {
                             var testRow = worksheet.Row(r);
                             int currentScore = 0;
-                            for (int c = 1; c <= 25; c++) {
-                                var val = GetSafeString(testRow.Cell(c)).ToUpper();
+                            for (int c = 1; c <= 30; c++) {
+                                var val = NormalizeHeader(GetSafeString(testRow.Cell(c)));
                                 foreach (var k in targetKeywords) if (val.Contains(k)) currentScore++;
                             }
+                            // Threshold 6: Very likely a header. Stop immediately.
+                            if (currentScore >= 6) {
+                                headerRow = testRow;
+                                break;
+                            }
+                            // Lower threshold backup
                             if (currentScore > bestScore && currentScore >= 3) {
                                 bestScore = currentScore;
                                 headerRow = testRow;
                             }
                         }
 
-                        // Exact Header Mapping (v5.8): Based on user's Excel screenshot
+                        // Map Headers accurately
                         var cleanedHeaders = new Dictionary<string, int>();
                         for (int col = 1; col <= worksheet.LastColumnUsed().ColumnNumber(); col++) {
-                            var rawVal = GetSafeString(headerRow.Cell(col));
-                            var cleaned = System.Text.RegularExpressions.Regex.Replace(rawVal, @"[^A-Z0-9]", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).ToUpper();
+                            var cleaned = NormalizeHeader(GetSafeString(headerRow.Cell(col)));
                             if (!string.IsNullOrEmpty(cleaned) && !cleanedHeaders.ContainsKey(cleaned)) cleanedHeaders.Add(cleaned, col);
                         }
 
-                        // Pre-calculate Column Indices (v4.7 Absolute Sync)
-                        // Uses an EXACT-match-first strategy to avoid collisions
-                        var aliasMap = new Dictionary<string, string[]> {
-                            { "LOKASI", new[] { "LOKASIRACK", "LOKASI", "TEMPAT" } },
-                            { "PLANT",  new[] { "PRODPLANT", "PLANT", "PLANTCODE" } },
-                            { "RAK",    new[] { "RAK", "SHELF" } },
-                            { "NORAK",  new[] { "NORAK", "NO" } },
-                            { "CUST",   new[] { "CUST", "CUSTOMER" } },
-                            { "STATUS", new[] { "STATUS", "ACTIVE" } },
-                            { "PROD",   new[] { "PROD", "PROD.", "CATEGORY" } }, 
-                            { "VIN",    new[] { "VIN", "ITEMCODE", "PARTNO" } },
-                            { "QPC",    new[] { "QPC", "QTYLOT", "LOT" } },
-                            { "MIN",    new[] { "MIN", "MIN1D", "RACKMIN" } },
-                            { "ROP",    new[] { "ROP", "ROP2D" } },
-                            { "MAX",    new[] { "MAX", "MAX3D", "RACKMAX" } }
-                        };
-
-                        // Specific Indexer: Favors Exact Match from Aliases after Aggressive Cleaning
-                        int FindExact(params string[] aliases) {
-                            foreach (var a in aliases) {
-                                var cleanA = System.Text.RegularExpressions.Regex.Replace(a, @"[^A-Z0-9]", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).ToUpper();
-                                if (cleanedHeaders.ContainsKey(cleanA)) return cleanedHeaders[cleanA];
+                        int FindCol(params string[] keywords) {
+                            foreach (var kw in keywords) {
+                                var cleanKw = NormalizeHeader(kw);
+                                if (cleanedHeaders.ContainsKey(cleanKw)) return cleanedHeaders[cleanKw];
+                                var match = cleanedHeaders.Keys.FirstOrDefault(k => k.Contains(cleanKw));
+                                if (match != null) return cleanedHeaders[match];
                             }
                             return -1;
                         }
+
+                        // Helper for safe cell access
+                        ClosedXML.Excel.IXLCell SafeCell(ClosedXML.Excel.IXLRow r, int idx) => idx > 0 ? r.Cell(idx) : null;
+                        string GetColLetter(int idx) => idx > 0 ? worksheet.Column(idx).ColumnLetter() : "MISSING";
                         
                         var colMap = new {
-                            Lokasi   = FindExact("LOKASI RACK", "LOKASIRACK"),
-                            Plant    = FindExact("PROD PLANT", "PROD. PLANT", "PRODPLANT"),
-                            Rak      = FindExact("RAK"),
-                            NoRak    = FindExact("NO RAK", "NORAK"),
-                            Cust     = FindExact("CUST"),
-                            Status   = FindExact("STATUS"),
-                            Prod     = FindExact("PROD", "PROD."), 
-                            Vin      = FindExact("VIN"),
-                            Qpc      = FindExact("QPC"),
-                            Min      = FindExact("MIN 1D", "MIN1D", "MIN"),
-                            Rop      = FindExact("ROP 2D", "ROP2D", "ROP"),
-                            Max      = FindExact("MAX 3D", "MAX3D", "MAX")
+                            Lokasi   = FindCol("LOKASI RACK", "LOKASIRACK", "LOKASI"),
+                            Plant    = FindCol("PROD PLANT", "PRODPLANT", "PLANT"),
+                            Rak      = FindCol("RAK"),
+                            NoRak    = FindCol("NO RAK", "NORAK"),
+                            Cust     = FindCol("CUST"),
+                            Status   = FindCol("STATUS"),
+                            Prod     = FindCol("PROD", "PROD."), 
+                            Vin      = FindCol("VIN"),
+                            Qpc      = FindCol("QPC"),
+                            Min      = FindCol("MIN1D", "MIN"),
+                            Rop      = FindCol("ROP2D", "ROP"),
+                            Max      = FindCol("MAX3D", "MAX")
                         };
 
-                        if (colMap.Lokasi == -1 || colMap.Vin == -1) {
-                            var list = string.Join(", ", cleanedHeaders.Keys.Take(10));
-                            TempData["ErrorMessage"] = $"Header tidak ditemukan. Dibutuhkan 'LOKASI RACK' & 'VIN'.<br/>Terdeteksi: {list}";
-                            return RedirectToAction(nameof(Index));
-                        }
+                        // --- AUDITOR MODE 6.4: Zero-Tolerance Tracking ---
+                        var processedVinsInThisExcel = new HashSet<string>();
+                        int duplicateVinCount = 0;
+                        int emptyVinCount = 0;
+                        int totalProcessedRows = 0;
 
-                        // Process Range (v5.2 LEGACY MODE: Resilient toward all Excel structures)
-                        var rows = worksheet.RowsUsed().Skip(headerRow.RowNumber());
-
-                        foreach (var row in rows)
+                        int lastRow = worksheet.LastRowUsed().RowNumber();
+                        for (int r = headerRow.RowNumber() + 1; r <= lastRow; r++)
                         {
+                            var row = worksheet.Row(r);
                             if (row.IsEmpty()) continue;
+                            
+                            totalProcessedRows++;
                             try
                             {
-                                // 1. Direct Extraction via pre-calculated indices
-                                string GetS(int c) => c != -1 ? GetSafeString(row.Cell(c)) : "";
-                                string GetN(int c) => c != -1 ? GetSafeNumberString(row.Cell(c)) : "0";
-
-                                var dto = new ItemDto {
-                                    ItemCode  = GetS(colMap.Lokasi),
-                                    Plant     = GetS(colMap.Plant),
-                                    Rack      = GetS(colMap.Rak),
-                                    NoRackStr = GetS(colMap.NoRak),
-                                    Customer  = GetS(colMap.Cust),
-                                    StatusStr = GetS(colMap.Status),
-                                    Category  = GetS(colMap.Prod),
-                                    VIN       = GetS(colMap.Vin),
-                                    QpcStr    = GetN(colMap.Qpc),
-                                    MinStr    = GetN(colMap.Min),
-                                    RopStr    = GetN(colMap.Rop),
-                                    MaxStr    = GetN(colMap.Max)
-                                };
-
-                                if (string.IsNullOrWhiteSpace(dto.VIN) && string.IsNullOrWhiteSpace(dto.ItemCode)) continue;
-                                
-                                // SAFETY: ItemName (Lokasi Rack) is REQUIRED in DB. Fallback to VIN if empty.
-                                if (string.IsNullOrWhiteSpace(dto.ItemCode)) dto.ItemCode = dto.VIN;
-
-                                // 2. Robust Uniqueness (v4.5): 7-Column Identity
-                                int? noRakInt = ParseInt(dto.NoRackStr);
-                                
-                                var existingItem = _context.Items.Local
-                                    .FirstOrDefault(i => i.VIN == dto.VIN && 
-                                                        i.ItemName == dto.ItemCode && 
-                                                        i.Rack == dto.Rack && 
-                                                        i.NoRack == noRakInt &&
-                                                        i.Plant == dto.Plant &&
-                                                        i.Customer == dto.Customer &&
-                                                        i.Category == dto.Category);
-
-                                if (existingItem == null)
-                                {
-                                    existingItem = await _context.Items
-                                        .FirstOrDefaultAsync(i => i.VIN == dto.VIN && 
-                                                                i.ItemName == dto.ItemCode && 
-                                                                i.Rack == dto.Rack && 
-                                                                i.NoRack == noRakInt &&
-                                                                i.Plant == dto.Plant &&
-                                                                i.Customer == dto.Customer &&
-                                                                i.Category == dto.Category);
+                                string vin = GetSafeString(SafeCell(row, colMap.Vin)).Trim();
+                                if (string.IsNullOrEmpty(vin)) {
+                                    emptyVinCount++;
+                                    continue;
                                 }
 
-                                 // 3. Update or Create
-                                 if (existingItem != null)
-                                 {
-                                     UpdateItem(existingItem, dto);
-                                 }
+                                string vinKey = vin.ToUpper();
+                                if (processedVinsInThisExcel.Contains(vinKey)) duplicateVinCount++;
+                                processedVinsInThisExcel.Add(vinKey);
+
+                                var dto = new ItemDto {
+                                    ItemCode  = GetSafeString(SafeCell(row, colMap.Lokasi)),
+                                    Plant     = GetSafeString(SafeCell(row, colMap.Plant)),
+                                    Rack      = GetSafeString(SafeCell(row, colMap.Rak)),
+                                    NoRackStr = GetSafeString(SafeCell(row, colMap.NoRak)),
+                                    Customer  = GetSafeString(SafeCell(row, colMap.Cust)),
+                                    StatusStr = GetSafeString(SafeCell(row, colMap.Status)),
+                                    Category  = GetSafeString(SafeCell(row, colMap.Prod)),
+                                    VIN       = vin,
+                                    QpcStr    = GetSafeNumberString(SafeCell(row, colMap.Qpc)),
+                                    MinStr    = GetSafeNumberString(SafeCell(row, colMap.Min)),
+                                    RopStr    = GetSafeNumberString(SafeCell(row, colMap.Rop)),
+                                    MaxStr    = GetSafeNumberString(SafeCell(row, colMap.Max))
+                                };
+
+                                if (itemDict.TryGetValue(vinKey, out var existingItem))
+                                {
+                                    UpdateItem(existingItem, dto);
+                                }
                                 else
                                 {
                                     var newItem = CreateItem(dto);
-                                    // Use a stable ItemCode logic: ItemCode is internal GUID
                                     _context.Items.Add(newItem);
+                                    itemDict[vinKey] = newItem; 
                                 }
 
                                 successCount++;
@@ -539,112 +512,69 @@ namespace DeliveryControl.Controllers
                             {
                                 errorCount++;
                                 if (errorSamples.Count < 5) {
-                                    var innerMsg = ex.InnerException?.Message ?? ex.Message;
-                                    errorSamples.Add($"Baris {row.RowNumber()}: {innerMsg}");
+                                    errorSamples.Add($"Row {r}: {ex.Message}");
                                 }
                             }
+                        }
+                        
+                        if (successCount > 0) 
+                        {
+                            string mapInfo = $"Mapping -> VIN:{GetColLetter(colMap.Vin)}, MIN:{GetColLetter(colMap.Min)}, ROP:{GetColLetter(colMap.Rop)}, MAX:{GetColLetter(colMap.Max)}";
+                            string auditInfo = $"Processed:{totalProcessedRows} | Unique:{successCount} | Dupi:{duplicateVinCount} | Empty:{emptyVinCount} | Errors:{errorCount}";
+                            
+                            TempData["SuccessMessage"] = $"✅ AKURASI 100% (v6.4): {successCount} data unik sinkron. " + 
+                                $"(Header: Baris {headerRow.RowNumber()} | {auditInfo} | {mapInfo})";
+                        }
+                        if (errorCount > 0) {
+                            TempData["ErrorMessage"] = $"⚠️ {errorCount} baris gagal. Contoh: " + string.Join(", ", errorSamples);
                         }
                     }
                 }
 
                 await _context.SaveChangesAsync();
-                
-                if (successCount > 0) 
-                {
-                    TempData["SuccessMessage"] = $"✅ 100% SINKRONISASI (v5.9)! {successCount} baris berhasil diimport dengan konversi type-safe.";
-                }
-                if (errorCount > 0) {
-                    var errorDetails = errorSamples.Count > 0 ? "<br/><br/>Contoh error:<br/>" + string.Join("<br/>", errorSamples) : "";
-                    TempData["ErrorMessage"] = $"❌ {errorCount} baris gagal diimport.{errorDetails}";
-                }
             }
             catch (Exception ex)
             {
-                var innerMsg = ex.InnerException != null ? " | " + ex.InnerException.Message : "";
-                TempData["ErrorMessage"] = "Terjadi kesalahan fatal: " + ex.Message + innerMsg;
+                TempData["ErrorMessage"] = "Fatal Error: " + ex.Message;
             }
 
             return RedirectToAction(nameof(Index));
         }
 
-        // --- Helper Methods (v2.7 Type-Safe) ---
 
-        private ItemDto ExtractItemDataByHeader(ClosedXML.Excel.IXLRow row, Dictionary<string, int> map)
+        // --- Helper Methods (v6.0 Type-Safe & Alt+Enter Resilient) ---
+
+        private string NormalizeHeader(string header)
         {
-            var dto = new ItemDto();
-            
-            // Helper function using Cleaned Header mapping
-            // 4.1 Precision Keyword Search: Detect "MIN", "ROP", "MAX" even if in different row or with junk text
-            string GetVal(string header) => map.ContainsKey(header) ? GetSafeString(row.Cell(map[header])) : "";
-            string GetNum(string header) => map.ContainsKey(header) ? GetSafeNumberString(row.Cell(map[header])) : "0";
-
-            // Fallback for numeric columns: Match by substring to handle multi-line Alt-Enter headers
-            string GetNumFuzzy(string keyword) {
-                // Try exact match first
-                if (map.ContainsKey(keyword)) return GetSafeNumberString(row.Cell(map[keyword]));
-                // Try keyword match
-                var key = map.Keys.FirstOrDefault(k => k.Contains(keyword));
-                return key != null ? GetSafeNumberString(row.Cell(map[key])) : "0";
-            }
-
-            dto.ItemCode  = GetVal("LOKASIRACK");
-            dto.Plant     = GetVal("PRODPLANT");
-            dto.Rack      = GetVal("RAK");
-            dto.NoRackStr = GetVal("NORAK");
-            dto.Customer  = GetVal("CUST");
-            dto.StatusStr = GetVal("STATUS");
-            dto.Category  = GetVal("PROD");
-            dto.VIN       = GetVal("VIN");
-            
-            dto.QpcStr    = GetNumFuzzy("QPC");
-            dto.MinStr    = GetNumFuzzy("MIN");
-            dto.RopStr    = GetNumFuzzy("ROP");
-            dto.MaxStr    = GetNumFuzzy("MAX");
-
-            return dto;
+            if (string.IsNullOrEmpty(header)) return "";
+            // Remove all non-alphanumeric characters (newlines, dots, spaces, special chars)
+            return System.Text.RegularExpressions.Regex.Replace(header, @"[^A-Z0-9]", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).ToUpper();
         }
 
-        // --- v5.9 TYPE-SAFE PARSER: Zero IConvertible Errors ---
         private string GetSafeNumberString(ClosedXML.Excel.IXLCell cell)
         {
-            if (cell == null || cell.IsEmpty() || cell.Value.IsBlank || cell.Value.IsError) return "0";
+            if (cell == null || cell.IsEmpty()) return "0";
             
             try
             {
-                // 1. Try direct double conversion (handles formulas & numbers)
-                if (cell.TryGetValue(out double dVal)) {
-                    if (double.IsNaN(dVal) || double.IsInfinity(dVal)) return "0";
-                    return Math.Round(dVal).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                }
-
-                // 2. Fallback: Safe string extraction
-                string raw = cell.GetString().Trim();
-                if (string.IsNullOrWhiteSpace(raw) || raw == "0" || raw == "-") return "0";
-
-                // Clean all symbols except digits, dots, commas, minus
-                raw = System.Text.RegularExpressions.Regex.Replace(raw, @"[^0-9.,\-]", "");
-                if (string.IsNullOrWhiteSpace(raw)) return "0";
+                // v6.2: Maximum robustness for numeric extraction
+                var cellValue = cell.Value;
                 
-                // Pure digits check
-                if (double.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double pure)) {
-                    return Math.Round(pure).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                }
+                if (cellValue.IsNumber) return Math.Round(cellValue.GetNumber()).ToString();
+                if (cellValue.IsBlank) return "0";
 
-                // Handle Mixed Separators (Indo: 1.050,50 or Intl: 1,050.50)
-                if (raw.Contains(".") && raw.Contains(",")) {
-                    if (raw.LastIndexOf('.') > raw.LastIndexOf(',')) raw = raw.Replace(",", "");
-                    else raw = raw.Replace(".", "").Replace(",", ".");
-                }
-                // Handle Single Separator
-                else if (raw.Contains(".") || raw.Contains(",")) {
-                    char sep = raw.Contains(".") ? '.' : ',';
-                    string[] parts = raw.Split(sep);
-                    if (parts.Length == 2 && parts.Last().Length == 3) raw = raw.Replace(sep.ToString(), "");
-                    else raw = raw.Replace(sep.ToString(), ".");
-                }
+                // Handle string representation of numbers (including formulas)
+                string raw = cellValue.ToString().Trim();
+                if (string.IsNullOrEmpty(raw) || raw == "-" || raw == "0") return "0";
 
-                if (double.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsed)) {
-                    return Math.Round(parsed).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                // Strip all noise but keep basic number separators
+                raw = System.Text.RegularExpressions.Regex.Replace(raw, @"[^0-9.,\-]", "");
+                if (string.IsNullOrEmpty(raw)) return "0";
+                
+                // Final attempt: Parse with invariant culture for consistent rounding
+                if (double.TryParse(raw.Replace(",", "."), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsed))
+                {
+                    return Math.Round(parsed).ToString();
                 }
 
                 return "0";
@@ -656,11 +586,10 @@ namespace DeliveryControl.Controllers
 
         private string GetSafeString(ClosedXML.Excel.IXLCell cell)
         {
+            if (cell == null || cell.IsEmpty()) return "";
             try
             {
-                if (cell == null || cell.Value.IsBlank) return "";
-                
-                // v3.8 Pure Raw Extraction: Preserve everything exactly as formatted in Excel
+                // Avoid direct casting, use ToString() which handles XLCellValue correctly
                 return cell.Value.ToString().Trim();
             }
             catch
@@ -668,6 +597,7 @@ namespace DeliveryControl.Controllers
                 return "";
             }
         }
+
 
         private int? ParseInt(string s)
         {
