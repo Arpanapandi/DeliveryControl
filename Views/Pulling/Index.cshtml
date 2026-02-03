@@ -26,12 +26,12 @@
 
                     <!-- Tag Input Group -->
                     <div class="mb-4">
-                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input TAG (LOKASI RACK) <span class="text-danger">*</span></label>
+                    <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input VIN (TAG MASTER) <span class="text-danger">*</span></label>
                         <div class="custom-cyber-input-group" id="tagGroup">
                             <div class="input-icon-left">
                                 <i class="bi bi-tag-fill"></i>
                             </div>
-                            <input type="text" class="form-control cyber-field" id="tagInput" placeholder="Scan Tag Rak...">
+                            <input type="text" class="form-control cyber-field" id="tagInput" placeholder="Scan VIN...">
                             <button type="button" class="btn-scan-trigger" data-target="tagInput" title="Start Scanning">
                                 <i class="bi bi-qr-code-scan"></i>
                             </button>
@@ -232,9 +232,9 @@
                     if (currentId === 'tagInput') {
                         // Automation for Label will be handled inside lookupItem success
                     } else if (currentId === 'labelInput') {
-                        // After scan Label, automatically submit
+                        // After scan Label, focus on Save button instead of auto submit
                         setTimeout(() => {
-                            $('#btnSavePulling').click();
+                            $('#btnSavePulling').focus();
                         }, 600);
                     }
                 }
@@ -287,9 +287,9 @@
             }
 
             function showPartDetails(data) {
-                $('#valLocation').text(data.itemName);
+                $('#valLocation').text(data.rack + "." + data.noRack); // Lokasi Rack derived from Rack.NoRack
                 $('#valPlant').text(data.plant);
-                $('#valRackInfo').text(data.rack + "." + data.noRack);
+                $('#valRackInfo').text(data.rack);
                 $('#valCustomer').text(data.customer);
                 $('#valCategory').text(data.category);
                 $('#valVinQpc').text(data.vin + " / " + data.qtyLot);
@@ -391,7 +391,7 @@
             $('#labelInput').on('keypress', function(e) {
                 if (e.which == 13) {
                     e.preventDefault();
-                    $('#btnSavePulling').click();
+                    $('#btnSavePulling').focus();
                 }
             });
 

@@ -130,8 +130,8 @@
                             <th>Stok</th>
                             <th>Tag</th>
                             <th>Label</th>
-                            <th>Item Name</th>
-                            <th>Operator</th>
+                            <th>Rak & No Rak</th>
+                            <th>User</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -142,7 +142,9 @@
                                 <td><span class="badge bg-dark border border-primary text-primary">1 Box</span></td>
                                 <td><span class="text-primary fw-bold">@record.Tag</span></td>
                                 <td>@record.Label</td>
-                                <td class="small text-truncate" style="max-width: 150px;">@(record.Item?.ItemName ?? "N/A")</td>
+                                <td class="small text-truncate" style="max-width: 150px;">
+                                    @((record.Rack ?? "-") + "." + record.Column)
+                                </td>
                                 <td class="smaller">@record.CreatedBy</td>
                             </tr>
                         }
@@ -171,7 +173,7 @@
                             <th>Tag</th>
                             <th>Label</th>
                             <th>Kanban</th>
-                            <th>Operator</th>
+                            <th>User</th>
                         </tr>
                     </thead>
                     <tbody>

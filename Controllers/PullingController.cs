@@ -10,11 +10,15 @@ namespace DeliveryControl.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly Microsoft.AspNetCore.SignalR.IHubContext<DeliveryControl.Hubs.StockHub> _hubContext;
+        private readonly DeliveryControl.Services.ActivityLogService _activityLogService;
 
-        public PullingController(ApplicationDbContext context, Microsoft.AspNetCore.SignalR.IHubContext<DeliveryControl.Hubs.StockHub> hubContext)
+        public PullingController(ApplicationDbContext context, 
+            Microsoft.AspNetCore.SignalR.IHubContext<DeliveryControl.Hubs.StockHub> hubContext,
+            DeliveryControl.Services.ActivityLogService activityLogService)
         {
             _context = context;
             _hubContext = hubContext;
+            _activityLogService = activityLogService;
         }
 
         public IActionResult Index()
@@ -29,13 +33,14 @@ namespace DeliveryControl.Controllers
 
             tag = tag.Trim();
 
-            // Lookup by ItemName (LOKASI RACK/TAG) - as requested by user
+            // Lookup by VIN (Tag input) - as requested by user
+            // User inputs Tag which maps to VIN
             var item = await _context.Items
-                .FirstOrDefaultAsync(i => i.ItemName == tag);
+                .FirstOrDefaultAsync(i => i.VIN == tag);
 
             if (item == null)
             {
-                return Json(new { success = false, message = "Item (LOKASI RACK) tidak ditemukan." });
+                return Json(new { success = false, message = $"Item dengan VIN '{tag}' tidak ditemukan." });
             }
 
             // Calculate current stock for status
@@ -48,17 +53,28 @@ namespace DeliveryControl.Controllers
 
             return Json(new { 
                 success = true, 
+                // Return ALL master item properties for dashboard display
+                itemId = item.ItemId,
+                itemCode = item.ItemCode,
                 itemName = item.ItemName,
-                plant = item.Plant ?? "Unknown",
+                description = item.Description ?? "-",
+                unit = item.Unit ?? "-",
+                
+                // Location & Mapping Info
+                plant = item.Plant ?? "-",
                 rack = item.Rack ?? "-",
-                noRack = item.NoRack ?? 0,
+                noRack = item.NoRack,
                 customer = item.Customer ?? "-",
                 category = item.Category ?? "-",
                 vin = item.VIN ?? "-",
                 qtyLot = item.QtyLot ?? 0,
+                
+                // Limits
                 rackMin = item.RackMin ?? 0,
                 rop = item.ROP ?? 0,
                 rackMax = item.RackMax ?? 0,
+                
+                // Status
                 status = status,
                 currentStock = inStockCount
             });
@@ -87,9 +103,9 @@ namespace DeliveryControl.Controllers
                     return Json(new { success = false, message = "LABEL DUPLIKAT! Label ini sudah pernah digunakan." });
                 }
 
-                // 2. Lookup Item Master - Using ItemName (LOKASI RACK) as Tag
+                // 2. Lookup Item Master - Using VIN as Tag
                 Item? item = await _context.Items
-                    .FirstOrDefaultAsync(i => i.ItemName == record.Tag);
+                    .FirstOrDefaultAsync(i => i.VIN == record.Tag);
                 
                 if (item != null)
                 {
@@ -103,7 +119,7 @@ namespace DeliveryControl.Controllers
                 else
                 {
                     // Item not found in master
-                    return Json(new { success = false, message = $"Tag (LOKASI RACK) '{record.Tag}' tidak ditemukan di Master Data." });
+                    return Json(new { success = false, message = $"VIN '{record.Tag}' tidak ditemukan di Master Data." });
                 }
 
                 record.CreatedDate = DateTime.Now;
@@ -111,6 +127,16 @@ namespace DeliveryControl.Controllers
                 
                 _context.PullingRecords.Add(record);
                 await _context.SaveChangesAsync();
+
+                // Log Activity per Plant as requested
+                await _activityLogService.LogActivity(
+                    module: "Pulling",
+                    action: "Create",
+                    entityName: item.ItemName + " (" + item.VIN + ")",
+                    entityId: record.PullingId,
+                    description: $"Plant: {record.Plant}, Rack: {record.Rack}, Label: {record.Label}",
+                    performedBy: record.CreatedBy
+                );
 
                 // Notify all clients via SignalR
                 await _hubContext.Clients.All.SendAsync("UpdateStock");
