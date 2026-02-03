@@ -22,7 +22,7 @@
             <a asp-controller="Stock" asp-action="Targets" class="premium-btn btn-dark-blue shadow-sm">
                 <i class="bi bi-bullseye me-1"></i> Stock Targets
             </a>
-            <form asp-action="BulkDeleteAll" method="post" class="d-inline" onsubmit="return confirm('APAKAH ANDA YAKIN? Tindakan ini akan MENGHAPUS SELURUH DATA MASTER ITEM DAN SEMUA TRANSAKSI TERKAIT (Pooling, Delivery, Preparation). Tindakan ini tidak dapat dibatalkan!')">
+            <form asp-action="BulkDeleteAll" method="post" class="d-inline" onsubmit="return confirm('APAKAH ANDA YAKIN? Tindakan ini akan MENGHAPUS SELURUH DATA MASTER ITEM DAN SEMUA TRANSAKSI TERKAIT (Pulling, Delivery, Preparation). Tindakan ini tidak dapat dibatalkan!')">
                 @Html.AntiForgeryToken()
                 <button type="submit" class="premium-btn btn-glass-danger shadow-sm">
                     <i class="bi bi-trash-fill me-1"></i> Hapus Semua Data

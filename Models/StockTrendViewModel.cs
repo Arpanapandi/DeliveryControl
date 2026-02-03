@@ -33,7 +33,7 @@ namespace DeliveryControl.Models
     public class TrendDataPoint
     {
         public string Label { get; set; } = string.Empty; // Hour, Date, or Month
-        public int PoolingCount { get; set; }
+        public int PullingCount { get; set; }
         public int PreparationCount { get; set; }
     }
 

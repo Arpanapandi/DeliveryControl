@@ -3,10 +3,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DeliveryControl.Models
 {
-    public class PoolingRecord
+    [Table("PoolingRecords")]
+    public class PullingRecord
     {
         [Key]
-        public int PoolingId { get; set; }
+        [Column("PoolingId")]
+        public int PullingId { get; set; }
 
         [StringLength(20)]
         public string Plant { get; set; } = string.Empty; // Molded, Hose, RVI

@@ -162,10 +162,6 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSXRlbXNcSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/DeliveryControl/DeliveryControl/Views/Pooling/Index.cshtml]
-build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUG9vbGluZ1xJbmRleC5jc2h0bWw=
-build_metadata.AdditionalFiles.CssScope = 
-
 [C:/DeliveryControl/DeliveryControl/Views/PreparationWorkflow/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJlcGFyYXRpb25Xb3JrZmxvd1xJbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
@@ -180,6 +176,10 @@ build_metadata.AdditionalFiles.CssScope =
 
 [C:/DeliveryControl/DeliveryControl/Views/Preparation/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJlcGFyYXRpb25cSW5kZXguY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/DeliveryControl/DeliveryControl/Views/Pulling/Index.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHVsbGluZ1xJbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
 [C:/DeliveryControl/DeliveryControl/Views/Settings/Index.cshtml]

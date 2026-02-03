@@ -1,10 +1,10 @@
 @{
-    ViewData["Title"] = "Pooling Process";
+    ViewData["Title"] = "Pulling Process";
 }
 
 <div class="row mb-4">
     <div class="col-12 text-center">
-        <h2 class="mb-1"><i class="bi bi-arrow-down-square text-primary"></i> Pooling Finish Good</h2>
+        <h2 class="mb-1"><i class="bi bi-arrow-down-square text-primary"></i> Pulling Finish Good</h2>
         <p class="text-muted">Proses penyimpanan barang dari line produksi ke rak Rak Finish Good.</p>
     </div>
 </div>
@@ -13,7 +13,7 @@
     <!-- Single Full-Width Card -->
     <div class="col-12">
         <div class="cyber-card p-4">
-            <h5 class="mb-4 fw-bold border-bottom pb-2"><i class="bi bi-pencil-square me-2"></i> Form Input Pooling</h5>
+            <h5 class="mb-4 fw-bold border-bottom pb-2"><i class="bi bi-pencil-square me-2"></i> Form Input Pulling</h5>
             
             <div class="mx-auto" style="max-width: 800px;">
                 <!-- 1. Identifikasi Produk (Tag & Label) -->
@@ -21,42 +21,93 @@
                     <label class="form-label fw-bold text-primary mb-3 text-center d-block fs-4"><i class="bi bi-qr-code-scan me-2"></i> Identifikasi Produk</label>
                     
                     <div class="alert alert-info border-0 bg-primary bg-opacity-10 text-center mb-4">
-                        <small><i class="bi bi-info-circle me-1"></i> Lokasi rak akan ditentukan otomatis berdasarkan pemetaan <strong>Mapping FG</strong>.</small>
+                        <small><i class="bi bi-info-circle me-1"></i> Scan <strong>Tag/VIN</strong> untuk menampilkan detail item sebelum scan <strong>Label</strong>.</small>
                     </div>
 
                     <!-- Tag Input Group -->
                     <div class="mb-4">
-                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input Tag <span class="text-danger">*</span></label>
-                        <div class="custom-cyber-input-group">
+                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input TAG (LOKASI RACK) <span class="text-danger">*</span></label>
+                        <div class="custom-cyber-input-group" id="tagGroup">
                             <div class="input-icon-left">
-                                <i class="bi bi-pencil"></i>
+                                <i class="bi bi-tag-fill"></i>
                             </div>
-                            <input type="text" class="form-control cyber-field" id="tagInput" placeholder="Ketik manual atau scan...">
+                            <input type="text" class="form-control cyber-field" id="tagInput" placeholder="Scan Tag Rak...">
                             <button type="button" class="btn-scan-trigger" data-target="tagInput" title="Start Scanning">
                                 <i class="bi bi-qr-code-scan"></i>
                             </button>
                         </div>
                     </div>
 
+                    <!-- Part Detail Card (Hidden by default) -->
+                    <div id="partDetailContainer" style="display: none;" class="mb-4">
+                        <div class="card bg-dark bg-opacity-50 border-primary border-opacity-25 rounded-3">
+                            <div class="card-body p-3">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <h6 class="text-primary fw-bold mb-0"><i class="bi bi-info-circle-fill me-2"></i> PART DETAIL</h6>
+                                    <span id="badgeStatus" class="badge rounded-pill">Status: -</span>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="detail-item">
+                                            <span class="label">Lokasi Rack</span>
+                                            <span class="value" id="valLocation">-</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Prod. Plant</span>
+                                            <span class="value" id="valPlant">-</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Rak / No Rak</span>
+                                            <span class="value" id="valRackInfo">-</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Customer</span>
+                                            <span class="value" id="valCustomer">-</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="detail-item">
+                                            <span class="label">Prod (Category)</span>
+                                            <span class="value" id="valCategory">-</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">VIN / QPC (Lot)</span>
+                                            <span class="value" id="valVinQpc">-</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Stock Limits (MIN/ROP/MAX)</span>
+                                            <span class="value" id="valLimits">-</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Current Stock</span>
+                                            <span class="value fw-bold text-info" id="valCurrentStock">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Label Input Group -->
                     <div class="mb-4">
-                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input Label <span class="text-danger">*</span></label>
-                        <div class="custom-cyber-input-group">
+                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input Label (Unique) <span class="text-danger">*</span></label>
+                        <div class="custom-cyber-input-group" id="labelGroup">
                             <div class="input-icon-left">
-                                <i class="bi bi-pencil"></i>
+                                <i class="bi bi-upc-scan"></i>
                             </div>
-                            <input type="text" class="form-control cyber-field" id="labelInput" placeholder="Ketik manual atau scan...">
-                            <button type="button" class="btn-scan-trigger" data-target="labelInput" title="Start Scanning">
+                            <input type="text" class="form-control cyber-field" id="labelInput" placeholder="Scan Label unik..." disabled>
+                            <button type="button" class="btn-scan-trigger" data-target="labelInput" title="Start Scanning" disabled>
                                 <i class="bi bi-qr-code-scan"></i>
                             </button>
                         </div>
+                        <small class="text-warning mt-1 d-block" id="labelHint" style="display: none;"><i class="bi bi-check2-circle"></i> Tag valid! Silakan scan Label.</small>
                     </div>
 
                 </div>
 
                 <div class="mt-5">
-                    <button type="button" class="btn btn-neon-success w-100 py-4 shadow-lg fs-5" id="btnSavePooling">
-                        <i class="bi bi-cloud-arrow-up-fill me-2"></i> SIMPAN DATA POOLING
+                    <button type="button" class="btn btn-neon-success w-100 py-4 shadow-lg fs-5" id="btnSavePulling">
+                        <i class="bi bi-cloud-arrow-up-fill me-2"></i> SIMPAN DATA PULLING
                     </button>
                 </div>
             </div>
@@ -168,20 +219,22 @@
                 if (activeInputId) {
                     const currentId = activeInputId;
                     $(`#${currentId}`).val(code).addClass('active-scan');
-                    setTimeout(() => $(`#${currentId}`).removeClass('active-scan'), 500);
                     
+                    if (currentId === 'tagInput') {
+                        // Trigger item info lookup immediately after scan
+                        lookupItem(code);
+                    }
+                    
+                    setTimeout(() => $(`#${currentId}`).removeClass('active-scan'), 500);
                     scannerModal.hide();
 
                     // Workflow Automation
                     if (currentId === 'tagInput') {
-                        // After scan Tag, automatically open scanner for Label
-                        setTimeout(() => {
-                            $('.btn-scan-trigger[data-target="labelInput"]').click();
-                        }, 600);
+                        // Automation for Label will be handled inside lookupItem success
                     } else if (currentId === 'labelInput') {
                         // After scan Label, automatically submit
                         setTimeout(() => {
-                            $('#btnSavePooling').click();
+                            $('#btnSavePulling').click();
                         }, 600);
                     }
                 }
@@ -197,8 +250,90 @@
                 }
             }
 
+            // --- ITEM LOOKUP LOGIC ---
+            let isItemValid = false;
+
+            function lookupItem(tag) {
+                if (!tag) return;
+
+                $.ajax({
+                    url: '/Pulling/GetItemInfo',
+                    type: 'GET',
+                    data: { tag: tag },
+                    success: function(response) {
+                        if (response.success) {
+                            isItemValid = true;
+                            showPartDetails(response);
+                            enableLabelInput();
+                            
+                            // Workflow: Automatically focus/trigger scanner for Label
+                            setTimeout(() => {
+                                if (!$('#scannerModal').is(':visible')) {
+                                    $('.btn-scan-trigger[data-target="labelInput"]').click();
+                                }
+                            }, 800);
+                        } else {
+                            isItemValid = false;
+                            hidePartDetails();
+                            disableLabelInput();
+                            alert("ERROR: " + (response.message || "Item tidak ditemukan."));
+                            $('#tagInput').val('').focus();
+                        }
+                    },
+                    error: function() {
+                        alert("Gagal menghubungi server untuk lookup item.");
+                    }
+                });
+            }
+
+            function showPartDetails(data) {
+                $('#valLocation').text(data.itemName);
+                $('#valPlant').text(data.plant);
+                $('#valRackInfo').text(data.rack + "." + data.noRack);
+                $('#valCustomer').text(data.customer);
+                $('#valCategory').text(data.category);
+                $('#valVinQpc').text(data.vin + " / " + data.qtyLot);
+                $('#valLimits').text(data.rackMin + " / " + data.rop + " / " + data.rackMax);
+                $('#valCurrentStock').text(data.currentStock + " BOX");
+
+                // Badge Status
+                const $badge = $('#badgeStatus');
+                $badge.removeClass('bg-success bg-warning bg-danger').text('Status: ' + data.status.toUpperCase());
+                if (data.status === 'Normal') $badge.addClass('bg-success');
+                else if (data.status === 'Shortage') $badge.addClass('bg-danger');
+                else $badge.addClass('bg-warning text-dark');
+
+                $('#partDetailContainer').slideDown();
+            }
+
+            function hidePartDetails() {
+                $('#partDetailContainer').slideUp();
+            }
+
+            function enableLabelInput() {
+                $('#labelInput, .btn-scan-trigger[data-target="labelInput"]').prop('disabled', false);
+                $('#labelHint').fadeIn();
+                $('#labelInput').focus();
+            }
+
+            function disableLabelInput() {
+                $('#labelInput, .btn-scan-trigger[data-target="labelInput"]').prop('disabled', true);
+                $('#labelHint').fadeOut();
+                $('#labelInput').val('');
+            }
+
+            $('#tagInput').on('change', function() {
+                lookupItem($(this).val());
+            }).on('input', function() {
+                if ($(this).val() === "") {
+                    isItemValid = false;
+                    hidePartDetails();
+                    disableLabelInput();
+                }
+            });
+
             // Save Data (AJAX)
-            $('#btnSavePooling').click(function () {
+            $('#btnSavePulling').click(function () {
                 const tag = $('#tagInput').val();
                 const label = $('#labelInput').val();
 
@@ -219,7 +354,7 @@
                 $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Menyimpan...');
 
                 $.ajax({
-                    url: '/Pooling/Save',
+                    url: '/Pulling/Save',
                     type: 'POST',
                     contentType: 'application/json',
                     data: JSON.stringify(data),
@@ -229,6 +364,8 @@
                             // For now, keep alert but reset focus
                             alert('SUKSES: ' + response.message);
                             $('#tagInput, #labelInput').val('');
+                            hidePartDetails();
+                            disableLabelInput();
                             $('#tagInput').focus(); // Ready for next scan
                         } else {
                             alert('GAGAL: ' + response.message);
@@ -238,7 +375,7 @@
                         alert('Terjadi kesalahan koneksi ke server.');
                     },
                     complete: function() {
-                        $btn.prop('disabled', false).html('<i class="bi bi-cloud-arrow-up-fill me-2"></i> SIMPAN DATA POOLING');
+                        $btn.prop('disabled', false).html('<i class="bi bi-cloud-arrow-up-fill me-2"></i> SIMPAN DATA PULLING');
                     }
                 });
             });
@@ -254,7 +391,7 @@
             $('#labelInput').on('keypress', function(e) {
                 if (e.which == 13) {
                     e.preventDefault();
-                    $('#btnSavePooling').click();
+                    $('#btnSavePulling').click();
                 }
             });
 
@@ -271,6 +408,33 @@
         border-radius: 12px;
         overflow: hidden;
         width: 100%;
+    }
+
+    .detail-item {
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .detail-item:last-child {
+        border-bottom: none;
+    }
+
+    .detail-item .label {
+        display: block;
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: rgba(255, 255, 255, 0.4);
+        margin-bottom: 2px;
+        font-weight: 700;
+    }
+
+    .detail-item .value {
+        display: block;
+        font-size: 0.95rem;
+        color: #f1f5f9;
+        font-weight: 600;
     }
 
     .rack-segment {

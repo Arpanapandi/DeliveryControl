@@ -5,7 +5,7 @@ namespace DeliveryControl.Models
     public class StockDashboardViewModel
     {
         public string PlantName { get; set; } = string.Empty;
-        public List<PoolingRecord> RecentPooling { get; set; } = new List<PoolingRecord>();
+        public List<PullingRecord> RecentPulling { get; set; } = new List<PullingRecord>();
         public List<PreparationRecord> RecentPreparation { get; set; } = new List<PreparationRecord>();
         
         public List<StockItemDetail> StockDetails { get; set; } = new List<StockItemDetail>();
@@ -14,7 +14,7 @@ namespace DeliveryControl.Models
         public int NormalCount { get; set; }
         public int OverCount { get; set; }
 
-        public int TotalPoolingToday { get; set; }
+        public int TotalPullingToday { get; set; }
         public int TotalPreparationToday { get; set; }
         public DateTime? SearchDate { get; set; }
         public string Period { get; set; } = "Day";
@@ -32,8 +32,14 @@ namespace DeliveryControl.Models
         public string Date { get; set; } = string.Empty;
         public string Location { get; set; } = string.Empty;
         public string Plant { get; set; } = string.Empty;
+        public string RackInfo { get; set; } = string.Empty;
+        public string Customer { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+        public string VIN { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
         public int? QtyLot { get; set; }
         public int? Min { get; set; }
+        public int? Rop { get; set; }
         public int? Max { get; set; }
         public decimal CurrentStock { get; set; }
         public decimal LevelStock { get; set; }

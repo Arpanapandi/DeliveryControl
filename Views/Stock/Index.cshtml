@@ -133,39 +133,43 @@
                     </div>
                 </div>
                 <div class="table-responsive main-stock-container">
-                    <table class="table table-hover mb-0" id="stockDetailTable">
+                    <table class="table table-hover mb-0" id="stockDetailTable" style="border-collapse: separate; border-spacing: 0;">
                         <thead>
-                            <tr>
-                                <th>No</th>
-                                <th>Plant</th>
-                                <th>Tag</th>
-                                <th>Label</th>
-                                <th>Nama Item</th>
-                                <th>Stock</th>
-                                <th>Min</th>
-                                <th>Max</th>
-                                <th class="text-nowrap">Level Stock</th>
-                                <th class="text-center">Location</th>
+                            <tr style="height: 50px;">
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 50px;">NO</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 120px;">LOKASI RAK</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 100px;">PROD. PLANT</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 80px;">RAK</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 120px;">LABEL</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 80px;">STOCK</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 150px;">LEVEL STOCK</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 100px;">CUST</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 100px;">STATUS</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 100px;">PROD</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 120px;">VIN</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 60px;">QPC</th>
+                                <th class="bg-red text-white text-center" style="min-width: 80px;">MIN 1D</th>
+                                <th class="bg-yellow text-dark text-center" style="min-width: 80px;">ROP 2D</th>
+                                <th class="bg-info text-white text-center" style="min-width: 80px;">MAX 3D</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 60px;">ACT</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach (var record in Model.StockDetails)
                             {
                                 <tr class="stock-row" data-status="@record.Status">
-                                    <td>@record.No</td>
-                                    <td><span class="badge @(record.Plant == "Molded" ? "bg-primary" : record.Plant == "Hose" ? "bg-info text-dark" : "bg-warning text-dark") smaller">@record.Plant</span></td>
-                                    <td><span class="text-primary fw-bold">@record.Tag</span></td>
-                                    <td>@record.Label</td>
-                                    <td class="small">@record.ItemName</td>
-                                    <td>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <span class="fw-bold @(record.Status == "Shortage" ? "text-danger" : record.Status == "Over" ? "text-info" : "text-success")">@record.CurrentStock.ToString("G29")</span>
+                                    <td class="text-center">@record.No</td>
+                                    <td class="fw-bold text-primary">@record.ItemName</td>
+                                    <td class="text-center"><span class="badge @(record.Plant == "Molded" ? "bg-primary" : record.Plant == "Hose" ? "bg-info text-dark" : "bg-warning text-dark") smaller">@record.Plant</span></td>
+                                    <td class="text-center fw-bold">@record.RackInfo</td>
+                                    <td class="text-center"><span class="text-primary fw-bold" style="font-size: 0.8rem;">@record.Label</span></td>
+                                    <td class="text-center">
+                                        <div class="d-flex flex-column align-items-center">
+                                            <span class="fw-bold @(record.Status == "Shortage" ? "text-danger" : record.Status == "Over" ? "text-info" : "text-success")" style="font-size: 1.1rem;">@record.CurrentStock.ToString("G29")</span>
                                             <small class="text-muted" style="font-size: 0.6rem;">BOX</small>
                                         </div>
                                     </td>
-                                    <td><span class="text-muted smaller">@(record.Min?.ToString() ?? "-")</span></td>
-                                    <td><span class="text-muted smaller">@(record.Max?.ToString() ?? "-")</span></td>
-                                     <td>
+                                    <td class="text-center">
                                          @if (record.LevelStock < 1.0m)
                                          {
                                              <span class="stock-badge stock-level-red px-2 py-1">
@@ -196,13 +200,32 @@
                                                  <i class="bi bi-star-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
                                              </span>
                                          }
-                                     </td>
-                                     <td class="text-center"><span class="badge bg-dark border border-primary text-white">@record.Location</span></td>
+                                    </td>
+                                    <td class="text-center">@record.Customer</td>
+                                    <td class="text-center">
+                                        @if (record.IsActive)
+                                        {
+                                            <span class="badge bg-success opacity-75 smaller">Active</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger opacity-75 smaller">Inactive</span>
+                                        }
+                                    </td>
+                                    <td class="text-center small">@record.Category</td>
+                                    <td class="text-center" style="font-size: 0.8rem;">@record.VIN</td>
+                                    <td class="text-center fw-bold text-info">@(record.QtyLot?.ToString() ?? "-")</td>
+                                    <td class="text-center fw-bold text-danger">@(record.Min?.ToString() ?? "-")</td>
+                                    <td class="text-center fw-bold text-warning">@(record.Rop?.ToString() ?? "-")</td>
+                                    <td class="text-center fw-bold text-success">@(record.Max?.ToString() ?? "-")</td>
+                                    <td class="text-center">
+                                        <a href="#" class="text-info"><i class="bi bi-eye"></i></a>
+                                    </td>
                                 </tr>
                             }
                             @if (!Model.StockDetails.Any())
                             {
-                                <tr><td colspan="9" class="text-center py-5 text-muted small">Tidak ada data barang dalam stok.</td></tr>
+                                <tr><td colspan="16" class="text-center py-5 text-muted small">Tidak ada data barang dalam stok.</td></tr>
                             }
                         </tbody>
                     </table>
@@ -303,12 +326,12 @@
 
                 $('.stock-row').each(function() {
                     const rowStatus = $(this).data('status');
-                    const tag = $(this).find('td:nth-child(3)').text().toLowerCase(); // td 3 = Tag
-                    const label = $(this).find('td:nth-child(4)').text().toLowerCase(); // td 4 = Label
-                    const itemName = $(this).find('td:nth-child(5)').text().toLowerCase(); // td 5 = Item Name
+                    const itemName = $(this).find('td:nth-child(2)').text().toLowerCase(); 
+                    const label    = $(this).find('td:nth-child(5)').text().toLowerCase(); 
+                    const vin      = $(this).find('td:nth-child(11)').text().toLowerCase();
                     
                     const matchesStatus = (currentStatusFilter === 'All' || rowStatus === currentStatusFilter);
-                    const matchesSearch = (tag.includes(searchText) || label.includes(searchText) || itemName.includes(searchText));
+                    const matchesSearch = (itemName.includes(searchText) || label.includes(searchText) || vin.includes(searchText));
                     
                     if (matchesStatus && matchesSearch) {
                         $(this).show();
@@ -445,6 +468,10 @@
 
     .smaller { font-size: 0.75rem; }
     .btn-xs { padding: 0.1rem 0.3rem; font-size: 0.7rem; }
+    
+    .bg-dark-blue { background: #0f172a !important; }
+    .bg-red { background: #dc3545 !important; } /* Bootstrap Danger Red */
+    .bg-yellow { background: #ffc107 !important; } /* Bootstrap Warning Yellow */
     
     .status-indicator-live {
         width: 8px;

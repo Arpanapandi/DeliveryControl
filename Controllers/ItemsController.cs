@@ -182,7 +182,7 @@ namespace DeliveryControl.Controllers
         {
             var item = await _context.Items
                 .Include(i => i.DeliveryItems)
-                .Include(i => i.PoolingRecords)
+                .Include(i => i.PullingRecords)
                 .FirstOrDefaultAsync(i => i.ItemId == id);
 
             if (item != null)
@@ -236,7 +236,7 @@ namespace DeliveryControl.Controllers
             var ids = selectedIds.Split(',').Select(int.Parse).ToList();
             var itemsToDelete = await _context.Items
                 .Include(i => i.DeliveryItems)
-                .Include(i => i.PoolingRecords)
+                .Include(i => i.PullingRecords)
                 .Where(i => ids.Contains(i.ItemId))
                 .ToListAsync();
 
@@ -280,7 +280,7 @@ namespace DeliveryControl.Controllers
             try
             {
                 // Deleting all transactions first
-                _context.PoolingRecords.RemoveRange(_context.PoolingRecords);
+                _context.PullingRecords.RemoveRange(_context.PullingRecords);
                 _context.PreparationRecords.RemoveRange(_context.PreparationRecords);
                 _context.DeliveryItems.RemoveRange(_context.DeliveryItems);
                 
@@ -380,12 +380,10 @@ namespace DeliveryControl.Controllers
 
             try
             {
-                // 1. Pre-load ALL existing items into memory for 100% accurate & fast sync
+                // 1. Pre-load ALL existing items into memory with COMPOSITE KEY (v9.0)
                 var existingItems = await _context.Items.ToListAsync();
                 var itemDict = existingItems
-                    .Where(i => !string.IsNullOrEmpty(i.VIN))
-                    .GroupBy(i => i.VIN.Trim().ToUpper())
-                    .ToDictionary(g => g.Key, g => g.First());
+                    .ToDictionary(i => $"{NormalizeKey(i.VIN)}|{NormalizeKey(i.ItemName)}|{NormalizeKey(i.Plant)}|{NormalizeKey(i.Rack)}|{NormalizeKey(i.NoRack?.ToString())}|{NormalizeKey(i.Customer)}", i => i);
 
                 using (var stream = new MemoryStream())
                 {
@@ -436,9 +434,8 @@ namespace DeliveryControl.Controllers
                             return -1;
                         }
 
-                        // Helper for safe cell access
-                        ClosedXML.Excel.IXLCell SafeCell(ClosedXML.Excel.IXLRow r, int idx) => idx > 0 ? r.Cell(idx) : null;
-                        string GetColLetter(int idx) => idx > 0 ? worksheet.Column(idx).ColumnLetter() : "MISSING";
+                        // Get Column Letter for Auditor Report
+                        string GetColLetter(int colIndex) => colIndex != -1 ? worksheet.Column(colIndex).ColumnLetter() : "?";
                         
                         var colMap = new {
                             Lokasi   = FindCol("LOKASI RACK", "LOKASIRACK", "LOKASI"),
@@ -455,47 +452,70 @@ namespace DeliveryControl.Controllers
                             Max      = FindCol("MAX3D", "MAX")
                         };
 
-                        // --- AUDITOR MODE 6.4: Zero-Tolerance Tracking ---
-                        var processedVinsInThisExcel = new HashSet<string>();
-                        int duplicateVinCount = 0;
-                        int emptyVinCount = 0;
-                        int totalProcessedRows = 0;
+                        if (colMap.Vin == -1) {
+                            TempData["ErrorMessage"] = "Header 'VIN' tidak ditemukan. Pastikan file Excel sesuai template.";
+                            return RedirectToAction(nameof(Index));
+                        }
 
-                        int lastRow = worksheet.LastRowUsed().RowNumber();
-                        for (int r = headerRow.RowNumber() + 1; r <= lastRow; r++)
+                        // --- SHERLOCK MODE (v7.0): Deep Diagnostics ---
+                        var excelVins = new HashSet<string>();
+                        var duplicateSamples = new List<string>();
+                        var sampleVins = new List<string>();
+                        var sampleMins = new List<string>();
+                        
+                        int duplicateInExcelCount = 0;
+                        int rowProcessCount = 0;
+
+                        // --- FIX v6.3: Ensure we start EXACTLY after the header row ---
+                        var rows = worksheet.RowsUsed().Where(r => r.RowNumber() > headerRow.RowNumber());
+                        foreach (var row in rows)
                         {
-                            var row = worksheet.Row(r);
                             if (row.IsEmpty()) continue;
-                            
-                            totalProcessedRows++;
+                            rowProcessCount++;
                             try
                             {
-                                string vin = GetSafeString(SafeCell(row, colMap.Vin)).Trim();
-                                if (string.IsNullOrEmpty(vin)) {
-                                    emptyVinCount++;
-                                    continue;
+                                string vin  = GetSafeString(row.Cell(colMap.Vin)).Trim();
+                                string lok  = GetSafeString(row.Cell(colMap.Lokasi)).Trim();
+                                string plt  = GetSafeString(row.Cell(colMap.Plant)).Trim();
+                                string rak  = GetSafeString(row.Cell(colMap.Rak)).Trim();
+                                string nrk  = GetSafeString(row.Cell(colMap.NoRak)).Trim();
+                                string cst  = GetSafeString(row.Cell(colMap.Cust)).Trim();
+
+                                if (string.IsNullOrEmpty(vin)) continue;
+
+                                // v9.0 Composite Key Construction
+                                string compositeKey = $"{NormalizeKey(vin)}|{NormalizeKey(lok)}|{NormalizeKey(plt)}|{NormalizeKey(rak)}|{NormalizeKey(nrk)}|{NormalizeKey(cst)}";
+                                
+                                // Capture Samples (First 3 rows)
+                                if (sampleVins.Count < 3) {
+                                    sampleVins.Add(vin);
+                                    sampleMins.Add(GetSafeString(row.Cell(colMap.Min))); 
                                 }
 
-                                string vinKey = vin.ToUpper();
-                                if (processedVinsInThisExcel.Contains(vinKey)) duplicateVinCount++;
-                                processedVinsInThisExcel.Add(vinKey);
+                                // --- v7.0 DUPLICATE STRATEGY: KEEP FIRST ---
+                                if (excelVins.Contains(compositeKey)) {
+                                    duplicateInExcelCount++;
+                                    if (duplicateSamples.Count < 3) duplicateSamples.Add(vin);
+                                    continue; 
+                                }
+                                excelVins.Add(compositeKey);
 
                                 var dto = new ItemDto {
-                                    ItemCode  = GetSafeString(SafeCell(row, colMap.Lokasi)),
-                                    Plant     = GetSafeString(SafeCell(row, colMap.Plant)),
-                                    Rack      = GetSafeString(SafeCell(row, colMap.Rak)),
-                                    NoRackStr = GetSafeString(SafeCell(row, colMap.NoRak)),
-                                    Customer  = GetSafeString(SafeCell(row, colMap.Cust)),
-                                    StatusStr = GetSafeString(SafeCell(row, colMap.Status)),
-                                    Category  = GetSafeString(SafeCell(row, colMap.Prod)),
+                                    ItemCode  = lok, // LOKASI RACK maps to ItemName
+                                    Plant     = plt,
+                                    Rack      = rak,
+                                    NoRackStr = nrk,
+                                    Customer  = cst,
+                                    StatusStr = GetSafeString(row.Cell(colMap.Status)),
+                                    Category  = GetSafeString(row.Cell(colMap.Prod)),
                                     VIN       = vin,
-                                    QpcStr    = GetSafeNumberString(SafeCell(row, colMap.Qpc)),
-                                    MinStr    = GetSafeNumberString(SafeCell(row, colMap.Min)),
-                                    RopStr    = GetSafeNumberString(SafeCell(row, colMap.Rop)),
-                                    MaxStr    = GetSafeNumberString(SafeCell(row, colMap.Max))
+                                    QpcStr    = GetSafeNumberString(row.Cell(colMap.Qpc)),
+                                    MinStr    = GetSafeNumberString(row.Cell(colMap.Min)),
+                                    RopStr    = GetSafeNumberString(row.Cell(colMap.Rop)),
+                                    MaxStr    = GetSafeNumberString(row.Cell(colMap.Max))
                                 };
 
-                                if (itemDict.TryGetValue(vinKey, out var existingItem))
+                                if (itemDict.TryGetValue(compositeKey, out var existingItem))
                                 {
                                     UpdateItem(existingItem, dto);
                                 }
@@ -503,7 +523,7 @@ namespace DeliveryControl.Controllers
                                 {
                                     var newItem = CreateItem(dto);
                                     _context.Items.Add(newItem);
-                                    itemDict[vinKey] = newItem; 
+                                    itemDict[compositeKey] = newItem; 
                                 }
 
                                 successCount++;
@@ -512,18 +532,19 @@ namespace DeliveryControl.Controllers
                             {
                                 errorCount++;
                                 if (errorSamples.Count < 5) {
-                                    errorSamples.Add($"Row {r}: {ex.Message}");
+                                    errorSamples.Add($"Baris {row.RowNumber()}: {ex.Message}");
                                 }
                             }
                         }
                         
                         if (successCount > 0) 
                         {
-                            string mapInfo = $"Mapping -> VIN:{GetColLetter(colMap.Vin)}, MIN:{GetColLetter(colMap.Min)}, ROP:{GetColLetter(colMap.Rop)}, MAX:{GetColLetter(colMap.Max)}";
-                            string auditInfo = $"Processed:{totalProcessedRows} | Unique:{successCount} | Dupi:{duplicateVinCount} | Empty:{emptyVinCount} | Errors:{errorCount}";
+                            string colAudit = $"[KOLOM -> VIN:{GetColLetter(colMap.Vin)}, MIN:{GetColLetter(colMap.Min)}, ROP:{GetColLetter(colMap.Rop)}, MAX:{GetColLetter(colMap.Max)}]";
+                            string dupAudit = duplicateInExcelCount > 0 ? $" | ⚠️ Di-Skip {duplicateInExcelCount} Duplikat (Cth: {string.Join(",", duplicateSamples)})" : "";
+                            string sampleAudit = $" | Sample Data: VIN={string.Join(",", sampleVins)}, MIN={string.Join(",", sampleMins)}";
                             
-                            TempData["SuccessMessage"] = $"✅ AKURASI 100% (v6.4): {successCount} data unik sinkron. " + 
-                                $"(Header: Baris {headerRow.RowNumber()} | {auditInfo} | {mapInfo})";
+                            TempData["SuccessMessage"] = $"✅ BERHASIL 100% (v9.0 Composite): {successCount} data unik. " + 
+                                $"(Total Baris Excel: {rowProcessCount} {dupAudit} {sampleAudit} {colAudit})";
                         }
                         if (errorCount > 0) {
                             TempData["ErrorMessage"] = $"⚠️ {errorCount} baris gagal. Contoh: " + string.Join(", ", errorSamples);
@@ -542,6 +563,11 @@ namespace DeliveryControl.Controllers
         }
 
 
+        private string NormalizeKey(string val)
+        {
+            return (val ?? "").Trim().ToUpper();
+        }
+
         // --- Helper Methods (v6.0 Type-Safe & Alt+Enter Resilient) ---
 
         private string NormalizeHeader(string header)
@@ -557,24 +583,42 @@ namespace DeliveryControl.Controllers
             
             try
             {
-                // v6.2: Maximum robustness for numeric extraction
-                var cellValue = cell.Value;
+                // v8.0: "UNIVERSAL STRING PARSING" - Force Teks-ke-Angka
+                // Kita tidak lagi mengandalkan IsNumber karena user konfirmasi Excel adalah kolom TEKS.
+                string raw = "";
                 
-                if (cellValue.IsNumber) return Math.Round(cellValue.GetNumber()).ToString();
-                if (cellValue.IsBlank) return "0";
+                if (cell.HasFormula) {
+                    try { raw = cell.CachedValue.ToString(); } catch { raw = cell.Value.ToString(); }
+                } else {
+                    // Ambil sebagai string mentah, abaikan format sel murni angka/teks
+                    raw = cell.Value.ToString();
+                }
 
-                // Handle string representation of numbers (including formulas)
-                string raw = cellValue.ToString().Trim();
-                if (string.IsNullOrEmpty(raw) || raw == "-" || raw == "0") return "0";
+                if (string.IsNullOrWhiteSpace(raw) || raw == "-" || raw.Equals("null", StringComparison.OrdinalIgnoreCase)) return "0";
 
-                // Strip all noise but keep basic number separators
-                raw = System.Text.RegularExpressions.Regex.Replace(raw, @"[^0-9.,\-]", "");
-                if (string.IsNullOrEmpty(raw)) return "0";
+                // Regex Extraction: Cari urutan angka pertama (integer atau desimal)
+                var match = System.Text.RegularExpressions.Regex.Match(raw, @"[0-9]+([.,][0-9]+)?");
                 
-                // Final attempt: Parse with invariant culture for consistent rounding
-                if (double.TryParse(raw.Replace(",", "."), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsed))
+                if (match.Success)
                 {
-                    return Math.Round(parsed).ToString();
+                    string cleanNumber = match.Value;
+                    
+                    // Logika Thousand Separator (Misal: 5.000 -> 5000)
+                    if (cleanNumber.Contains(".") && !cleanNumber.Contains(",")) {
+                        var parts = cleanNumber.Split('.');
+                        if (parts.Length > 1 && parts[parts.Length-1].Length == 3) {
+                             cleanNumber = cleanNumber.Replace(".", "");
+                        }
+                    } 
+                    // Logika Desimal Komma (Misal: 5,5 -> 5.5)
+                    else if (cleanNumber.Contains(",")) {
+                        cleanNumber = cleanNumber.Replace(".", "").Replace(",", ".");
+                    }
+
+                    if (double.TryParse(cleanNumber, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsed))
+                    {
+                        return Math.Round(parsed).ToString();
+                    }
                 }
 
                 return "0";

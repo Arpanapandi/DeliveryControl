@@ -21,7 +21,7 @@ namespace DeliveryControl.Data
         public DbSet<User> Users { get; set; }
         public DbSet<SystemSetting> SystemSettings { get; set; }
         public DbSet<ActivityLog> ActivityLogs { get; set; }
-        public DbSet<PoolingRecord> PoolingRecords { get; set; }
+        public DbSet<PullingRecord> PullingRecords { get; set; }
         public DbSet<PreparationRecord> PreparationRecords { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -84,11 +84,11 @@ namespace DeliveryControl.Data
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // Configure PoolingRecord
-            modelBuilder.Entity<PoolingRecord>(entity =>
+            // Configure PullingRecord
+            modelBuilder.Entity<PullingRecord>(entity =>
             {
                 entity.HasOne(pr => pr.Item)
-                    .WithMany(i => i.PoolingRecords)
+                    .WithMany(i => i.PullingRecords)
                     .HasForeignKey(pr => pr.ItemId)
                     .OnDelete(DeleteBehavior.Cascade);
             });

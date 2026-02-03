@@ -108,7 +108,7 @@ namespace DeliveryControl.Controllers
                 _ => today // Default to "Day"
             };
 
-            viewModel.TotalFGStock = await _context.PoolingRecords
+            viewModel.TotalFGStock = await _context.PullingRecords
                 .CountAsync(r => activePlants.Contains(r.Plant) && r.CreatedDate >= filterStartDate);
 
             if (mode == "Level")
@@ -121,27 +121,27 @@ namespace DeliveryControl.Controllers
             var hoseStockVM = await GetStockViewModel("Hose");
             var rviStockVM = await GetStockViewModel("RVI");
 
-            // Fetch pooling records based on the selected period for each plant
-            var moldedPooling = await _context.PoolingRecords
+            // Fetch pulling records based on the selected period for each plant
+            var moldedPulling = await _context.PullingRecords
                 .Where(r => r.Plant == "Molded" && r.CreatedDate >= filterStartDate)
                 .Include(r => r.Item)
                 .OrderByDescending(r => r.CreatedDate)
                 .ToListAsync();
 
-            var hosePooling = await _context.PoolingRecords
+            var hosePulling = await _context.PullingRecords
                 .Where(r => r.Plant == "Hose" && r.CreatedDate >= filterStartDate)
                 .Include(r => r.Item)
                 .OrderByDescending(r => r.CreatedDate)
                 .ToListAsync();
 
-            var rviPooling = await _context.PoolingRecords
+            var rviPulling = await _context.PullingRecords
                 .Where(r => r.Plant == "RVI" && r.CreatedDate >= filterStartDate)
                 .Include(r => r.Item)
                 .OrderByDescending(r => r.CreatedDate)
                 .ToListAsync();
 
             // Map to StockItemDetail for the view
-            viewModel.RecentMolded = moldedPooling.Select(p => new StockItemDetail {
+            viewModel.RecentMolded = moldedPulling.Select(p => new StockItemDetail {
                 ItemName = p.Item?.ItemName ?? "N/A",
                 LevelStock = p.Item != null && moldedStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
                                 ? moldedStockVM.StockDetails.First(d => d.Tag == p.Tag).LevelStock : 0,
@@ -149,7 +149,7 @@ namespace DeliveryControl.Controllers
                                 ? moldedStockVM.StockDetails.First(d => d.Tag == p.Tag).Status : "Normal"
             }).ToList();
 
-            viewModel.RecentHose = hosePooling.Select(p => new StockItemDetail {
+            viewModel.RecentHose = hosePulling.Select(p => new StockItemDetail {
                 ItemName = p.Item?.ItemName ?? "N/A",
                 LevelStock = p.Item != null && hoseStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
                                 ? hoseStockVM.StockDetails.First(d => d.Tag == p.Tag).LevelStock : 0,
@@ -157,7 +157,7 @@ namespace DeliveryControl.Controllers
                                 ? hoseStockVM.StockDetails.First(d => d.Tag == p.Tag).Status : "Normal"
             }).ToList();
 
-            viewModel.RecentRVI = rviPooling.Select(p => new StockItemDetail {
+            viewModel.RecentRVI = rviPulling.Select(p => new StockItemDetail {
                 ItemName = p.Item?.ItemName ?? "N/A",
                 LevelStock = p.Item != null && rviStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
                                 ? rviStockVM.StockDetails.First(d => d.Tag == p.Tag).LevelStock : 0,
@@ -169,38 +169,38 @@ namespace DeliveryControl.Controllers
             foreach (var plant in activePlants)
             {
                 var plantTrend = new PlantTrendData { PlantName = plant.ToUpper() };
-                var poolingQuery = _context.PoolingRecords.Where(r => r.Plant == plant);
+                var pullingQuery = _context.PullingRecords.Where(r => r.Plant == plant);
                 var preparationQuery = _context.PreparationRecords.Where(r => r.Plant == plant);
-                plantTrend.TotalStock = await poolingQuery.CountAsync(r => r.CreatedDate >= filterStartDate);
+                plantTrend.TotalStock = await pullingQuery.CountAsync(r => r.CreatedDate >= filterStartDate);
 
                 if (period == "Day")
                 {
-                    var poolingData = await poolingQuery.Where(r => r.CreatedDate >= today).GroupBy(r => r.CreatedDate.Hour).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+                    var pullingData = await pullingQuery.Where(r => r.CreatedDate >= today).GroupBy(r => r.CreatedDate.Hour).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
                     var preparationData = await preparationQuery.Where(r => r.CreatedDate >= today).GroupBy(r => r.CreatedDate.Hour).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
                     for (int i = 0; i < 24; i++) {
-                        plantTrend.DataPoints.Add(new TrendDataPoint { Label = $"{i:D2}:00", PoolingCount = poolingData.GetValueOrDefault(i, 0), PreparationCount = preparationData.GetValueOrDefault(i, 0) });
+                        plantTrend.DataPoints.Add(new TrendDataPoint { Label = $"{i:D2}:00", PullingCount = pullingData.GetValueOrDefault(i, 0), PreparationCount = preparationData.GetValueOrDefault(i, 0) });
                     }
                 }
                 else if (period == "Month")
                 {
                     var daysInMonth = DateTime.DaysInMonth(now.Year, now.Month);
-                    var poolingData = await poolingQuery.Where(r => r.CreatedDate >= startOfMonth).GroupBy(r => r.CreatedDate.Day).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+                    var pullingData = await pullingQuery.Where(r => r.CreatedDate >= startOfMonth).GroupBy(r => r.CreatedDate.Day).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
                     var preparationData = await preparationQuery.Where(r => r.CreatedDate >= startOfMonth).GroupBy(r => r.CreatedDate.Day).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
                     for (int i = 1; i <= daysInMonth; i++) {
-                        plantTrend.DataPoints.Add(new TrendDataPoint { Label = i.ToString(), PoolingCount = poolingData.GetValueOrDefault(i, 0), PreparationCount = preparationData.GetValueOrDefault(i, 0) });
+                        plantTrend.DataPoints.Add(new TrendDataPoint { Label = i.ToString(), PullingCount = pullingData.GetValueOrDefault(i, 0), PreparationCount = preparationData.GetValueOrDefault(i, 0) });
                     }
                 }
                 else // Year
                 {
-                    var poolingData = await poolingQuery.Where(r => r.CreatedDate >= startOfYear).GroupBy(r => r.CreatedDate.Month).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+                    var pullingData = await pullingQuery.Where(r => r.CreatedDate >= startOfYear).GroupBy(r => r.CreatedDate.Month).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
                     var preparationData = await preparationQuery.Where(r => r.CreatedDate >= startOfYear).GroupBy(r => r.CreatedDate.Month).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
                     for (int i = 1; i <= 12; i++) {
-                        plantTrend.DataPoints.Add(new TrendDataPoint { Label = new DateTime(now.Year, i, 1).ToString("MMM"), PoolingCount = poolingData.GetValueOrDefault(i, 0), PreparationCount = preparationData.GetValueOrDefault(i, 0) });
+                        plantTrend.DataPoints.Add(new TrendDataPoint { Label = new DateTime(now.Year, i, 1).ToString("MMM"), PullingCount = pullingData.GetValueOrDefault(i, 0), PreparationCount = preparationData.GetValueOrDefault(i, 0) });
                     }
                 }
 
                 if (plantTrend.DataPoints.Any()) {
-                    plantTrend.PeakActivity = plantTrend.DataPoints.Max(p => Math.Max(p.PoolingCount, p.PreparationCount));
+                    plantTrend.PeakActivity = plantTrend.DataPoints.Max(p => Math.Max(p.PullingCount, p.PreparationCount));
                 }
                 viewModel.PlantTrends.Add(plantTrend);
             }
@@ -213,7 +213,7 @@ namespace DeliveryControl.Controllers
                 {
                     var point = new TrendDataPoint { Label = viewModel.PlantTrends[0].DataPoints[i].Label };
                     foreach (var pt in viewModel.PlantTrends) {
-                        point.PoolingCount += pt.DataPoints[i].PoolingCount;
+                        point.PullingCount += pt.DataPoints[i].PullingCount;
                         point.PreparationCount += pt.DataPoints[i].PreparationCount;
                     }
                     viewModel.OverallTrend.Add(point);
@@ -221,7 +221,7 @@ namespace DeliveryControl.Controllers
             }
             
             if (viewModel.OverallTrend.Any()) {
-                viewModel.HighestActivityTarget = viewModel.OverallTrend.Max(p => Math.Max(p.PoolingCount, p.PreparationCount));
+                viewModel.HighestActivityTarget = viewModel.OverallTrend.Max(p => Math.Max(p.PullingCount, p.PreparationCount));
             }
 
             return View(viewModel);
@@ -276,12 +276,12 @@ namespace DeliveryControl.Controllers
             var isFilteredByDate = searchDate.HasValue;
             var filterDate = searchDate ?? today;
 
-            var poolingQuery = _context.PoolingRecords.Include(r => r.Item).AsQueryable();
+            var pullingQuery = _context.PullingRecords.Include(r => r.Item).AsQueryable();
             var preparationQuery = _context.PreparationRecords.AsQueryable();
 
             if (plant != "Overall")
             {
-                poolingQuery = poolingQuery.Where(r => r.Plant == plant);
+                pullingQuery = pullingQuery.Where(r => r.Plant == plant);
                 preparationQuery = preparationQuery.Where(r => r.Plant == plant);
             }
 
@@ -307,24 +307,24 @@ namespace DeliveryControl.Controllers
                 endDate = startDate.AddDays(1).AddSeconds(-1);
             }
 
-            poolingQuery = poolingQuery.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
+            pullingQuery = pullingQuery.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
             preparationQuery = preparationQuery.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
 
-            var allPooling = await poolingQuery.OrderBy(r => r.CreatedDate).ToListAsync();
+            var allPulling = await pullingQuery.OrderBy(r => r.CreatedDate).ToListAsync();
             var allPreparation = await preparationQuery.OrderBy(r => r.CreatedDate).ToListAsync();
 
-            var inStockPieces = new List<PoolingRecord>();
-            var consumedPoolingIds = new HashSet<int>();
+            var inStockPieces = new List<PullingRecord>();
+            var consumedPullingIds = new HashSet<int>();
 
             foreach (var prep in allPreparation)
             {
                 var prepTag = (prep.Tag ?? "").Trim().ToUpper();
                 var prepLabel = (prep.Label ?? "").Trim().ToUpper();
-                var match = allPooling.FirstOrDefault(p => !consumedPoolingIds.Contains(p.PoolingId) && (p.Tag ?? "").Trim().ToUpper() == prepTag && (p.Label ?? "").Trim().ToUpper() == prepLabel && p.CreatedDate <= prep.CreatedDate.AddSeconds(5));
-                if (match != null) consumedPoolingIds.Add(match.PoolingId);
+                var match = allPulling.FirstOrDefault(p => !consumedPullingIds.Contains(p.PullingId) && (p.Tag ?? "").Trim().ToUpper() == prepTag && (p.Label ?? "").Trim().ToUpper() == prepLabel && p.CreatedDate <= prep.CreatedDate.AddSeconds(5));
+                if (match != null) consumedPullingIds.Add(match.PullingId);
             }
 
-            inStockPieces = allPooling.Where(p => !consumedPoolingIds.Contains(p.PoolingId)).ToList();
+            inStockPieces = allPulling.Where(p => !consumedPullingIds.Contains(p.PullingId)).ToList();
             var allItems = await _context.Items.ToListAsync();
             var itemStatuses = new Dictionary<int, string>();
             var piecesByItem = inStockPieces.Where(p => p.ItemId.HasValue).GroupBy(p => p.ItemId!.Value).ToDictionary(g => g.Key, g => (decimal)g.Count());
@@ -350,7 +350,15 @@ namespace DeliveryControl.Controllers
                 {
                     Tag = piece.Tag, Label = piece.Label, ItemName = piece.Item?.ItemName ?? "N/A", Time = piece.CreatedDate.ToString("HH:mm:ss"), Date = piece.CreatedDate.ToString("dd-MM-yyyy"),
                     Location = piece.Item != null ? $"{piece.Item.Rack}.{piece.Item.NoRack}" : $"{piece.Rack}.{piece.Column}", Plant = piece.Plant ?? string.Empty, QtyLot = piece.Item?.QtyLot,
-                    Min = piece.Item?.RackMin ?? 5, Max = piece.Item?.RackMax ?? 20, CurrentStock = currentStock,
+                    RackInfo = piece.Item != null ? $"{piece.Item.Rack}.{piece.Item.NoRack}" : "-",
+                    Customer = piece.Item?.Customer ?? "-",
+                    Category = piece.Item?.Category ?? "-",
+                    VIN = piece.Item?.VIN ?? "-",
+                    IsActive = piece.Item?.IsActive ?? true,
+                    Min = piece.Item?.RackMin ?? 5, 
+                    Rop = piece.Item?.ROP ?? 0,
+                    Max = piece.Item?.RackMax ?? 20, 
+                    CurrentStock = currentStock,
                     LevelStock = (piece.Item?.RackMin ?? 5) > 0 ? currentStock / (piece.Item?.RackMin ?? 5) : 0, Operator = piece.CreatedBy ?? "-", Status = status
                 });
             }
@@ -360,9 +368,9 @@ namespace DeliveryControl.Controllers
             return new StockDashboardViewModel
             {
                 PlantName = plant, StockDetails = stockDetails, ShortageCount = shortageCount, NormalCount = normalCount, OverCount = overCount, SearchDate = searchDate,
-                RecentPooling = isFilteredByDate ? inStockPieces.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ToList() : inStockPieces.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
+                RecentPulling = isFilteredByDate ? inStockPieces.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ToList() : inStockPieces.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
                 RecentPreparation = isFilteredByDate ? allPreparation.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ToList() : allPreparation.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
-                TotalPoolingToday = await _context.PoolingRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= startDate && r.CreatedDate <= endDate),
+                TotalPullingToday = await _context.PullingRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= startDate && r.CreatedDate <= endDate),
                 TotalPreparationToday = await _context.PreparationRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= startDate && r.CreatedDate <= endDate),
                 Period = period
             };
@@ -466,11 +474,11 @@ namespace DeliveryControl.Controllers
         private async Task<List<DaySnapshot>> GetHistoricalCategorySnapshots(DateTime start, DateTime end, string period = "Month")
         {
             var items = await _context.Items.ToListAsync();
-            var poolings = await _context.PoolingRecords.Where(p => p.CreatedDate <= end).OrderBy(p => p.CreatedDate).ToListAsync();
+            var pullings = await _context.PullingRecords.Where(p => p.CreatedDate <= end).OrderBy(p => p.CreatedDate).ToListAsync();
             var preps = await _context.PreparationRecords.Where(p => p.CreatedDate <= end).OrderBy(p => p.CreatedDate).ToListAsync();
 
             var snapshots = new List<DaySnapshot>();
-            var availablePoolings = new List<PoolingRecord>();
+            var availablePullings = new List<PullingRecord>();
             int pIdx = 0, rIdx = 0;
 
             var intervalEnds = new List<DateTime>();
@@ -486,27 +494,27 @@ namespace DeliveryControl.Controllers
 
             foreach (var tEnd in intervalEnds)
             {
-                while (pIdx < poolings.Count && poolings[pIdx].CreatedDate <= tEnd) { availablePoolings.Add(poolings[pIdx]); pIdx++; }
+                while (pIdx < pullings.Count && pullings[pIdx].CreatedDate <= tEnd) { availablePullings.Add(pullings[pIdx]); pIdx++; }
                 while (rIdx < preps.Count && preps[rIdx].CreatedDate <= tEnd)
                 {
                     var prep = preps[rIdx];
                     var tag = (prep.Tag ?? "").Trim().ToUpper();
                     var lbl = (prep.Label ?? "").Trim().ToUpper();
-                    var match = availablePoolings.FirstOrDefault(p => 
+                    var match = availablePullings.FirstOrDefault(p => 
                         (p.Tag ?? "").Trim().ToUpper() == tag && (p.Label ?? "").Trim().ToUpper() == lbl && p.CreatedDate <= prep.CreatedDate.AddSeconds(5));
-                    if (match != null) availablePoolings.Remove(match);
+                    if (match != null) availablePullings.Remove(match);
                     rIdx++;
                 }
 
                 var snapshot = new DaySnapshot { Date = tEnd, Label = period == "Day" ? $"{tEnd.Hour-1:D2}:00" : period == "Month" ? tEnd.Day.ToString() : tEnd.ToString("MMM") };
-                var stockByItem = availablePoolings.Where(p => p.ItemId.HasValue).GroupBy(p => p.ItemId!.Value).ToDictionary(g => g.Key, g => (decimal)g.Count());
+                var stockByItem = availablePullings.Where(p => p.ItemId.HasValue).GroupBy(p => p.ItemId!.Value).ToDictionary(g => g.Key, g => (decimal)g.Count());
                 
                 foreach (var item in items)
                 {
                     var stock = stockByItem.GetValueOrDefault(item.ItemId, 0);
                     var min = (decimal)(item.RackMin ?? 5);
                     var level = min > 0 ? stock / min : 0;
-                    var plant = (availablePoolings.FirstOrDefault(p => p.ItemId == item.ItemId)?.Plant ?? "Unknown").ToUpper();
+                    var plant = (availablePullings.FirstOrDefault(p => p.ItemId == item.ItemId)?.Plant ?? "Unknown").ToUpper();
 
                     var stats = snapshot.PlantStats.GetOrAdd(plant, () => new CategoryStats());
                     UpdateStats(stats, level);
