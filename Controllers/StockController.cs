@@ -122,6 +122,7 @@ namespace DeliveryControl.Controllers
             var rviStockVM = await GetStockViewModel("RVI");
 
             // Fetch pulling records based on the selected period for each plant
+            // Fetch pulling records based on the selected period for each plant
             var moldedPulling = await _context.PullingRecords
                 .Where(r => r.Plant == "Molded" && r.CreatedDate >= filterStartDate)
                 .Include(r => r.Item)
@@ -143,6 +144,7 @@ namespace DeliveryControl.Controllers
             // Map to StockItemDetail for the view
             viewModel.RecentMolded = moldedPulling.Select(p => new StockItemDetail {
                 ItemName = p.Item?.ItemName ?? "N/A",
+                VIN = p.Item?.VIN ?? "-",
                 LevelStock = p.Item != null && moldedStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
                                 ? moldedStockVM.StockDetails.First(d => d.Tag == p.Tag).LevelStock : 0,
                 Status = p.Item != null && moldedStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
@@ -151,6 +153,7 @@ namespace DeliveryControl.Controllers
 
             viewModel.RecentHose = hosePulling.Select(p => new StockItemDetail {
                 ItemName = p.Item?.ItemName ?? "N/A",
+                VIN = p.Item?.VIN ?? "-",
                 LevelStock = p.Item != null && hoseStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
                                 ? hoseStockVM.StockDetails.First(d => d.Tag == p.Tag).LevelStock : 0,
                 Status = p.Item != null && hoseStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
@@ -159,6 +162,7 @@ namespace DeliveryControl.Controllers
 
             viewModel.RecentRVI = rviPulling.Select(p => new StockItemDetail {
                 ItemName = p.Item?.ItemName ?? "N/A",
+                VIN = p.Item?.VIN ?? "-",
                 LevelStock = p.Item != null && rviStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
                                 ? rviStockVM.StockDetails.First(d => d.Tag == p.Tag).LevelStock : 0,
                 Status = p.Item != null && rviStockVM.StockDetails.Any(d => d.Tag == p.Tag) 

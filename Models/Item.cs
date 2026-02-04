@@ -63,6 +63,12 @@ namespace DeliveryControl.Models
 
         public int? RackMax { get; set; } // Mapping to MAX 3D
 
+        [StringLength(50)]
+        public string? CustomerPartNumber { get; set; } // Mapping to CUST NO ex: 12343CD
+
+        [StringLength(50)]
+        public string? KanbanType { get; set; } // Mapping to KANBAN ex: E-KANBAN
+
         public bool IsActive { get; set; } = true;
 
         public DateTime CreatedDate { get; set; } = DateTime.Now;

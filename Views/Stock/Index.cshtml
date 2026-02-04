@@ -142,6 +142,7 @@
                                 <th class="bg-dark-blue text-white text-center" style="min-width: 80px;">RAK</th>
                                 <th class="bg-dark-blue text-white text-center" style="min-width: 120px;">LABEL</th>
                                 <th class="bg-dark-blue text-white text-center" style="min-width: 80px;">STOCK</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 60px;">ACT</th>
                                 <th class="bg-dark-blue text-white text-center" style="min-width: 150px;">LEVEL STOCK</th>
                                 <th class="bg-dark-blue text-white text-center" style="min-width: 100px;">CUST</th>
                                 <th class="bg-dark-blue text-white text-center" style="min-width: 100px;">STATUS</th>
@@ -151,7 +152,6 @@
                                 <th class="bg-red text-white text-center" style="min-width: 80px;">MIN 1D</th>
                                 <th class="bg-yellow text-dark text-center" style="min-width: 80px;">ROP 2D</th>
                                 <th class="bg-info text-white text-center" style="min-width: 80px;">MAX 3D</th>
-                                <th class="bg-dark-blue text-white text-center" style="min-width: 60px;">ACT</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -166,6 +166,12 @@
                                     <td class="text-center">
                                         <div class="d-flex flex-column align-items-center">
                                             <span class="fw-bold @(record.Status == "Shortage" ? "text-danger" : record.Status == "Over" ? "text-info" : "text-success")" style="font-size: 1.1rem;">@record.CurrentStock.ToString("G29")</span>
+                                            <small class="text-muted" style="font-size: 0.6rem;">BOX</small>
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="d-flex flex-column align-items-center">
+                                            <span class="fw-bold text-info" style="font-size: 1.1rem;">@record.CurrentStock.ToString("G29")</span>
                                             <small class="text-muted" style="font-size: 0.6rem;">BOX</small>
                                         </div>
                                     </td>
@@ -218,9 +224,6 @@
                                     <td class="text-center fw-bold text-danger">@(record.Min?.ToString() ?? "-")</td>
                                     <td class="text-center fw-bold text-warning">@(record.Rop?.ToString() ?? "-")</td>
                                     <td class="text-center fw-bold text-success">@(record.Max?.ToString() ?? "-")</td>
-                                    <td class="text-center">
-                                        <a href="#" class="text-info"><i class="bi bi-eye"></i></a>
-                                    </td>
                                 </tr>
                             }
                             @if (!Model.StockDetails.Any())
@@ -328,7 +331,7 @@
                     const rowStatus = $(this).data('status');
                     const itemName = $(this).find('td:nth-child(2)').text().toLowerCase(); 
                     const label    = $(this).find('td:nth-child(5)').text().toLowerCase(); 
-                    const vin      = $(this).find('td:nth-child(11)').text().toLowerCase();
+                    const vin      = $(this).find('td:nth-child(12)').text().toLowerCase();
                     
                     const matchesStatus = (currentStatusFilter === 'All' || rowStatus === currentStatusFilter);
                     const matchesSearch = (itemName.includes(searchText) || label.includes(searchText) || vin.includes(searchText));

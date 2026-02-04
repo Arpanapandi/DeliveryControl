@@ -56,10 +56,10 @@ namespace DeliveryControl.Models
 
         // Navigation properties
         [ForeignKey("ScheduleId")]
-        public virtual DeliverySchedule DeliverySchedule { get; set; } = null!;
+        public virtual DeliverySchedule? DeliverySchedule { get; set; }
 
         [ForeignKey("ItemId")]
-        public virtual Item Item { get; set; } = null!;
+        public virtual Item? Item { get; set; }
     }
 }
 

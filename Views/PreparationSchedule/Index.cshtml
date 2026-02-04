@@ -1,0 +1,172 @@
+@model IEnumerable<DeliveryControl.Models.DeliverySchedule>
+
+@{
+    ViewData["Title"] = "Jadwal Preparation";
+}
+
+<div class="container-fluid pt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+             <h4 class="mb-1 text-white fw-bold"><i class="bi bi-calendar-check me-2"></i> Jadwal Preparation</h4>
+             <p class="text-secondary mb-0">List jadwal pengiriman yang perlu diproses.</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <!-- Download Template Button -->
+            <a asp-action="DownloadTemplate" class="btn btn-sm btn-secondary d-flex align-items-center shadow-sm">
+                <i class="bi bi-download me-2"></i> <span>Download Template</span>
+            </a>
+            <!-- Import Button triggers Modal -->
+            <button type="button" class="btn btn-sm btn-success d-flex align-items-center shadow-sm" data-bs-toggle="modal" data-bs-target="#importModal">
+                <i class="bi bi-file-earmark-excel me-2"></i> <span>Import Excel</span>
+            </button>
+            <a asp-action="BulkCreate" class="btn btn-sm btn-info d-flex align-items-center shadow-sm text-dark">
+                <i class="bi bi-calendar-check me-2"></i> <span>Buat Schedule (Bulk)</span>
+            </a>
+            <a asp-action="Create" class="btn btn-sm btn-primary d-flex align-items-center shadow-sm">
+                <i class="bi bi-plus-circle me-2"></i> <span>Tambah Schedule</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Table Container -->
+    <div class="cyber-card">
+        <div class="table-responsive">
+            <table class="table table-dark table-hover mb-0 align-middle">
+                <thead>
+                    <tr class="text-uppercase text-secondary small">
+                        <th>MANIFESTING</th>
+                        <th>DOCK</th>
+                        <th>KODE CUSTOMER</th>
+                        <th>NAMA CUSTOMER</th>
+                        <th>ROUTE</th>
+                        <th>CYCLE</th>
+                        <th>ITEM / PART NO</th>
+                        <th class="text-center">QTY/LOT</th>
+                        <th class="text-center">QTY</th>
+                        <th class="text-center">KANBAN</th>
+                        <th class="text-center">ACTION</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var schedule in Model)
+                    {
+                        foreach (var item in schedule.DeliveryItems)
+                        {
+                            <tr>
+                                <td class="fw-bold text-info">@schedule.ScheduleNumber</td>
+                                <td><span class="badge bg-secondary">@(schedule.Customer?.Docking ?? "-")</span></td>
+                                <td>@(schedule.Customer?.CustomerCode ?? "-")</td>
+                                <td>@(schedule.Customer?.CustomerName ?? "-")</td>
+                                <td>@(schedule.Route ?? "-")</td>
+                                <td>@(schedule.Cycle ?? "-")</td>
+                                <td>
+                                    <div class="d-flex flex-column">
+                                        <span class="text-info fw-bold">@item.Item.VIN</span>
+                                        @if (!string.IsNullOrEmpty(@item.Item.CustomerPartNumber))
+                                        {
+                                            <small class="text-white-50">Part No: @item.Item.CustomerPartNumber</small>
+                                        }
+                                        else
+                                        {
+                                            <small class="text-secondary opacity-75">Translate VIN: @item.Item.VIN</small>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="text-center"><span class="badge bg-dark border">@item.Item.QtyLot</span></td>
+                                <td class="text-center fw-bold fs-5 text-warning">
+                                    <span class="text-info">@(item.ActualQuantity?.ToString("G29") ?? "0")</span>
+                                    <span class="text-secondary small">/ @item.Quantity.ToString("G29")</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-info text-dark">@(item.Item.KanbanType ?? "MANUAL")</span>
+                                </td>
+                                <td class="text-center">
+                                    <div class="d-flex justify-content-center gap-1">
+                                        <a asp-controller="PreparationWorkflow" asp-action="Index" class="btn btn-sm btn-primary" title="Process Scan">
+                                            <i class="bi bi-box-seam"></i> 
+                                        </a>
+                                        <form asp-action="Delete" asp-route-id="@schedule.ScheduleId" method="post" onsubmit="return confirm('Yakin ingin menghapus schedule ini?');" style="display:inline;">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Delete">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="importModalLabel"><i class="bi bi-file-earmark-excel"></i> Import Excel</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form asp-action="ImportExcel" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="excelFile" class="form-label">Pilih File Excel</label>
+                        <input type="file" class="form-control bg-secondary text-white border-0" id="excelFile" name="file" accept=".xlsx,.xls" required />
+                        <div class="form-text text-muted">Format file: .xlsx atau .xls (Max 5MB)</div>
+                    </div>
+                    
+                    <div class="alert alert-info bg-opacity-10 border-info text-info rounded-3 small">
+                        <i class="bi bi-info-circle me-1"></i> Pastikan format file sesuai template.
+                        <a asp-action="DownloadTemplate" class="text-info fw-bold text-decoration-underline ms-1">Download Template</a>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-success"><i class="bi bi-upload"></i> Upload & Import</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/lib/microsoft/signalr/dist/browser/signalr.js"></script>
+    <script>
+        $(document).ready(function () {
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/deliveryHub")
+                .build();
+
+            connection.on("DeliveryUpdated", function (data) {
+                console.log("Prep update received", data);
+                // Simple reload for now to ensure all totals are correct
+                setTimeout(() => location.reload(), 1000);
+            });
+
+            async function start() {
+                try {
+                    await connection.start();
+                    console.log("Prep SignalR Connected");
+                } catch (err) {
+                    console.log(err);
+                    setTimeout(start, 5000);
+                }
+            };
+
+            start();
+        });
+    </script>
+}
+
+<style>
+    .cyber-card {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+</style>

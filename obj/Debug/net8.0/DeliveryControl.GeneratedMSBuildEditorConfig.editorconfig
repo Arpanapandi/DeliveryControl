@@ -166,6 +166,22 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSXRlbXNcSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
+[C:/DeliveryControl/DeliveryControl/Views/PreparationSchedule/BulkCreate.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJlcGFyYXRpb25TY2hlZHVsZVxCdWxrQ3JlYXRlLmNzaHRtbA==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/DeliveryControl/DeliveryControl/Views/PreparationSchedule/Create.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJlcGFyYXRpb25TY2hlZHVsZVxDcmVhdGUuY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/DeliveryControl/DeliveryControl/Views/PreparationSchedule/Index.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJlcGFyYXRpb25TY2hlZHVsZVxJbmRleC5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/DeliveryControl/DeliveryControl/Views/PreparationSchedule/Process.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJlcGFyYXRpb25TY2hlZHVsZVxQcm9jZXNzLmNzaHRtbA==
+build_metadata.AdditionalFiles.CssScope = 
+
 [C:/DeliveryControl/DeliveryControl/Views/PreparationWorkflow/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJlcGFyYXRpb25Xb3JrZmxvd1xJbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 

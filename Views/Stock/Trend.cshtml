@@ -249,7 +249,7 @@
                                     @foreach (var item in p.Data)
                                     {
                                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-                                            <td class="p-2 ps-4 fw-medium text-light-emphasis text-truncate" style="font-size: 0.75rem; background: transparent;" title="@item.ItemName">@item.ItemName</td>
+                                            <td class="p-2 ps-4 fw-medium text-light-emphasis text-truncate" style="font-size: 0.75rem; background: transparent;" title="@item.ItemName">@item.VIN</td>
                                              <td class="p-2 text-center" style="background: transparent;">
                                                  @{
                                                      var stockClass = item.LevelStock < 1.0m ? "stock-level-red" :

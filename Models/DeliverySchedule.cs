@@ -11,10 +11,9 @@ namespace DeliveryControl.Models
         [Key]
         public int ScheduleId { get; set; }
 
-        [Required(ErrorMessage = "Nomor schedule wajib diisi")]
         [StringLength(50)]
         [Display(Name = "Schedule Number")]
-        public string ScheduleNumber { get; set; } = string.Empty;
+        public string? ScheduleNumber { get; set; } = string.Empty;
 
         // CUST - Customer
         [Required(ErrorMessage = "Customer wajib dipilih")]
@@ -91,7 +90,7 @@ namespace DeliveryControl.Models
 
         [StringLength(20)]
         [Display(Name = "Status")]
-        public string Status { get; set; } = "Scheduled"; // Scheduled, In Progress, Completed, Cancelled, Delayed
+        public string? Status { get; set; } = "Scheduled"; // Scheduled, In Progress, Completed, Cancelled, Delayed
 
         [StringLength(100)]
         [Display(Name = "Vehicle Number")]
@@ -148,7 +147,7 @@ namespace DeliveryControl.Models
 
         // Navigation properties
         [ForeignKey("CustomerId")]
-        public virtual Customer Customer { get; set; } = null!;
+        public virtual Customer? Customer { get; set; }
 
         public virtual ICollection<DeliveryItem> DeliveryItems { get; set; } = new List<DeliveryItem>();
 

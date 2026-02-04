@@ -8,7 +8,6 @@ namespace DeliveryControl.Models
         [Key]
         public int PreparationId { get; set; }
 
-        [Required]
         [StringLength(20)]
         public string Plant { get; set; } = string.Empty;
 

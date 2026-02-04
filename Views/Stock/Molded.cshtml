@@ -21,19 +21,17 @@
                 <form method="get" class="d-flex gap-2 align-items-center">
                     <div class="filter-group">
                         <span class="filter-label">Tanggal:</span>
-                        <input type="date" name="date" class="custom-date-input" value="@selectedDate" />
+                        <input type="date" name="date" class="custom-date-input" value="@selectedDate" onchange="this.form.submit()" />
                     </div>
                     <div class="filter-group">
                         <span class="filter-label">Periode:</span>
-                        <select name="period" class="custom-select-input">
+                        <select name="period" class="custom-select-input" onchange="this.form.submit()">
                             <option value="Day" selected='@(ViewBag.SelectedPeriod == "Day")'>Day</option>
                             <option value="Week" selected='@(ViewBag.SelectedPeriod == "Week")'>Week</option>
                             <option value="Month" selected='@(ViewBag.SelectedPeriod == "Month")'>Month</option>
                             <option value="Year" selected='@(ViewBag.SelectedPeriod == "Year")'>Year</option>
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm px-3" style="height: 30px; display: flex; align-items: center; font-size: 0.75rem;">Filter</button>
-                    <a asp-action="@Model.PlantName" class="btn btn-outline-secondary btn-sm px-3" style="height: 30px; display: flex; align-items: center; font-size: 0.75rem;">Reset</a>
                 </form>
             </div>
         </div>

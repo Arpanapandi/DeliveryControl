@@ -449,7 +449,9 @@ namespace DeliveryControl.Controllers
                             Qpc      = FindCol("QPC"),
                             Min      = FindCol("MIN1D", "MIN"),
                             Rop      = FindCol("ROP2D", "ROP"),
-                            Max      = FindCol("MAX3D", "MAX")
+                            Max      = FindCol("MAX3D", "MAX"),
+                            PartNo   = FindCol("CUST NO", "PART NO", "CUST PART NO"),
+                            Kanban   = FindCol("KANBAN")
                         };
 
                         if (colMap.Vin == -1) {
@@ -512,7 +514,9 @@ namespace DeliveryControl.Controllers
                                     QpcStr    = GetSafeNumberString(row.Cell(colMap.Qpc)),
                                     MinStr    = GetSafeNumberString(row.Cell(colMap.Min)),
                                     RopStr    = GetSafeNumberString(row.Cell(colMap.Rop)),
-                                    MaxStr    = GetSafeNumberString(row.Cell(colMap.Max))
+                                    MaxStr    = GetSafeNumberString(row.Cell(colMap.Max)),
+                                    PartNoStr = GetSafeString(row.Cell(colMap.PartNo)),
+                                    KanbanStr = GetSafeString(row.Cell(colMap.Kanban))
                                 };
 
                                 if (itemDict.TryGetValue(compositeKey, out var existingItem))
@@ -563,7 +567,7 @@ namespace DeliveryControl.Controllers
         }
 
 
-        private string NormalizeKey(string val)
+        private string NormalizeKey(string? val)
         {
             return (val ?? "").Trim().ToUpper();
         }
@@ -665,6 +669,8 @@ namespace DeliveryControl.Controllers
             item.RackMin  = ParseInt(data.MinStr);
             item.ROP      = ParseInt(data.RopStr);
             item.RackMax  = ParseInt(data.MaxStr);
+            item.CustomerPartNumber = data.PartNoStr;
+            item.KanbanType = data.KanbanStr;
             item.IsActive = !data.StatusStr.Equals("Tidak Aktif", StringComparison.OrdinalIgnoreCase);
             item.UpdatedDate = DateTime.Now;
         }
@@ -685,6 +691,8 @@ namespace DeliveryControl.Controllers
                 RackMin     = ParseInt(data.MinStr),
                 ROP         = ParseInt(data.RopStr),
                 RackMax     = ParseInt(data.MaxStr),
+                CustomerPartNumber = data.PartNoStr,
+                KanbanType  = data.KanbanStr,
                 IsActive    = !data.StatusStr.Equals("Tidak Aktif", StringComparison.OrdinalIgnoreCase),
                 CreatedDate = DateTime.Now
             };
@@ -704,6 +712,8 @@ namespace DeliveryControl.Controllers
             public string MinStr { get; set; } = "";
             public string RopStr { get; set; } = "";
             public string MaxStr { get; set; } = "";
+            public string PartNoStr { get; set; } = "";
+            public string KanbanStr { get; set; } = "";
         }
 
         // Helper for PartNumber lookup

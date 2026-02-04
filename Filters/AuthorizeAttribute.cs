@@ -7,6 +7,13 @@ namespace DeliveryControl.Filters
     {
         public override void OnActionExecuting(ActionExecutingContext context)
         {
+            // Skip check for AccountController (Login/Logout)
+            var controllerName = context.RouteData.Values["controller"]?.ToString();
+            if (string.Equals(controllerName, "Account", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             var session = context.HttpContext.Session;
             var userId = session.GetString("UserId");
 
