@@ -141,7 +141,11 @@ namespace DeliveryControl.Controllers
                 // Notify all clients via SignalR
                 await _hubContext.Clients.All.SendAsync("UpdateStock");
                 
-                return Json(new { success = true, message = $"Data {item.ItemName} berhasil disimpan!" });
+                // Get updated stock for feedback
+                var updatedStockCount = await _context.PullingRecords
+                    .CountAsync(r => r.ItemId == item.ItemId && !_context.PreparationRecords.Any(p => p.Tag == r.Tag && p.Label == r.Label));
+
+                return Json(new { success = true, message = $"Data {item.ItemName} berhasil disimpan!", newStock = updatedStockCount });
             }
             return Json(new { success = false, message = "Data tidak valid." });
         }

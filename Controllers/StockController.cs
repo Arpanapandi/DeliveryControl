@@ -280,15 +280,6 @@ namespace DeliveryControl.Controllers
             var isFilteredByDate = searchDate.HasValue;
             var filterDate = searchDate ?? today;
 
-            var pullingQuery = _context.PullingRecords.Include(r => r.Item).AsQueryable();
-            var preparationQuery = _context.PreparationRecords.AsQueryable();
-
-            if (plant != "Overall")
-            {
-                pullingQuery = pullingQuery.Where(r => r.Plant == plant);
-                preparationQuery = preparationQuery.Where(r => r.Plant == plant);
-            }
-
             DateTime startDate, endDate;
             if (period == "Week")
             {
@@ -311,24 +302,42 @@ namespace DeliveryControl.Controllers
                 endDate = startDate.AddDays(1).AddSeconds(-1);
             }
 
-            pullingQuery = pullingQuery.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
-            preparationQuery = preparationQuery.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
+            // STOCK CALCULATION LOGIC (FIFO)
+            // 1. Pulling: Ambil SEMUA data historis (Tanpa batas waktu) untuk pencocokan FIFO yang akurat
+            //    Karena barang yang ditarik 1 bulan lalu bisa saja baru disiapkan hari ini.
+            var pullingQueryAll = _context.PullingRecords.Include(r => r.Item).AsQueryable();
+            if (plant != "Overall") pullingQueryAll = pullingQueryAll.Where(r => r.Plant == plant);
+            
+            // 2. Preparation: Tetap filter berdasarkan tanggal/periode dashboard untuk performance
+            var preparationQueryFiltered = _context.PreparationRecords.AsQueryable();
+            if (plant != "Overall") preparationQueryFiltered = preparationQueryFiltered.Where(r => r.Plant == plant);
+            preparationQueryFiltered = preparationQueryFiltered.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
 
-            var allPulling = await pullingQuery.OrderBy(r => r.CreatedDate).ToListAsync();
-            var allPreparation = await preparationQuery.OrderBy(r => r.CreatedDate).ToListAsync();
+            var allPullingPotential = await pullingQueryAll.OrderBy(r => r.CreatedDate).ToListAsync();
+            var allPreparationInRange = await preparationQueryFiltered.OrderBy(r => r.CreatedDate).ToListAsync();
 
-            var inStockPieces = new List<PullingRecord>();
             var consumedPullingIds = new HashSet<int>();
 
-            foreach (var prep in allPreparation)
+            // Pencocokan FIFO: Untuk setiap Preparation, cari Pulling tertua yang belum terpakai
+            foreach (var prep in allPreparationInRange)
             {
                 var prepTag = (prep.Tag ?? "").Trim().ToUpper();
                 var prepLabel = (prep.Label ?? "").Trim().ToUpper();
-                var match = allPulling.FirstOrDefault(p => !consumedPullingIds.Contains(p.PullingId) && (p.Tag ?? "").Trim().ToUpper() == prepTag && (p.Label ?? "").Trim().ToUpper() == prepLabel && p.CreatedDate <= prep.CreatedDate.AddSeconds(5));
+
+                // Cari kecocokan Pulling TERTUA (FIFO)
+                // Syarat: Tag & Label sama, Id belum terpakai, dan waktu Pulling <= waktu Preparation
+                var match = allPullingPotential.FirstOrDefault(p => 
+                    !consumedPullingIds.Contains(p.PullingId) && 
+                    (p.Tag ?? "").Trim().ToUpper() == prepTag && 
+                    (p.Label ?? "").Trim().ToUpper() == prepLabel && 
+                    p.CreatedDate <= prep.CreatedDate.AddSeconds(10)); // Tolerance for sync delays
+
                 if (match != null) consumedPullingIds.Add(match.PullingId);
             }
 
-            inStockPieces = allPulling.Where(p => !consumedPullingIds.Contains(p.PullingId)).ToList();
+            // Stok yang MASIH ADA = Semua Pulling historis - Pulling yang sudah dikonsumsi oleh Preparation mana pun
+            // Untuk dashboard view, kita mungkin hanya ingin menampilkan item yang masih di rak.
+            var inStockPieces = allPullingPotential.Where(p => !consumedPullingIds.Contains(p.PullingId)).ToList();
             var allItems = await _context.Items.ToListAsync();
             var itemStatuses = new Dictionary<int, string>();
             var piecesByItem = inStockPieces.Where(p => p.ItemId.HasValue).GroupBy(p => p.ItemId!.Value).ToDictionary(g => g.Key, g => (decimal)g.Count());
@@ -373,7 +382,7 @@ namespace DeliveryControl.Controllers
             {
                 PlantName = plant, StockDetails = stockDetails, ShortageCount = shortageCount, NormalCount = normalCount, OverCount = overCount, SearchDate = searchDate,
                 RecentPulling = isFilteredByDate ? inStockPieces.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ToList() : inStockPieces.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
-                RecentPreparation = isFilteredByDate ? allPreparation.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ToList() : allPreparation.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
+                RecentPreparation = isFilteredByDate ? allPreparationInRange.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ToList() : allPreparationInRange.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
                 TotalPullingToday = await _context.PullingRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= startDate && r.CreatedDate <= endDate),
                 TotalPreparationToday = await _context.PreparationRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= startDate && r.CreatedDate <= endDate),
                 Period = period

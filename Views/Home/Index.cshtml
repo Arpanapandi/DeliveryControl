@@ -98,6 +98,7 @@
     var inProgress = (int?)ViewBag.InProgressCount ?? 0;
     var delayPickup = (int?)ViewBag.DelayPickupCount ?? 0;
     var notArrived = (int?)ViewBag.NotArrivedCount ?? 0;
+    var prepared = (int?)ViewBag.PreparedCount ?? 0;
 
     // Jumlah order yang seharusnya sudah delivered berdasarkan ETD sampai jam sekarang
     var now = DateTime.Now;
@@ -220,6 +221,33 @@
                 </div>
                 <div class="progress mt-3" style="height: 4px; background: rgba(255, 255, 255, 0.3);">
                     <div class="progress-bar" role="progressbar" style="width: @notArrivedPct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%; background: white;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PREPARED CARD -->
+    <div class="col-xl col-md-4 col-sm-6">
+        <div class="cyber-card stat-card stat-card-blue h-100 filter-card" data-filter="prepared" onclick="filterSchedules('prepared')" style="cursor: pointer; border: 2px solid #10b981; background: rgba(16, 185, 129, 0.05);">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-muted mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px;">
+                            <i class="bi bi-patch-check-fill text-success"></i> Siap Kirim
+                        </p>
+                        <h2 class="fw-bold mb-0" style="font-size: 2.5rem; color: #10b981;">
+                            <span id="preparedStatValue">@(ViewBag.PreparedCount ?? 0)</span> <span class="stat-unit">ORDER</span>
+                        </h2>
+                        <small class="text-muted">
+                            <i class="bi bi-check-circle-fill text-success"></i> Prepared
+                        </small>
+                    </div>
+                    <div class="stat-icon" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">
+                        <i class="bi bi-patch-check-fill"></i>
+                    </div>
+                </div>
+                <div class="progress mt-3" style="height: 4px; background: rgba(16, 185, 129, 0.2);">
+                    <div class="progress-bar bg-success" role="progressbar" style="width: @SafePercent(prepared, totalToday).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%;"></div>
                 </div>
             </div>
         </div>
@@ -882,6 +910,8 @@
                 shouldShow = isDelayPickup;
             } else if (filter === 'delayprepare' || filter === 'notarrived') {
                 shouldShow = isDelayPrepare === true; // Filter untuk Delay Prepare
+            } else if (filter === 'prepared') {
+                shouldShow = row.getAttribute('data-prepared') === 'true';
             }
 
             if (shouldShow) {
@@ -1063,6 +1093,9 @@
                 $('#completedStatValue').text(completedDisplay);
                 $('#delayPickupStatValue').text(data.delayPickupCount);
                 $('#delayPrepareStatValue').text(data.notArrivedCount);
+                if ($('#preparedStatValue').length) {
+                    $('#preparedStatValue').text(data.preparedCount);
+                }
             },
             error: function(err) {
                 console.error("❌ Failed to update statistics:", err);

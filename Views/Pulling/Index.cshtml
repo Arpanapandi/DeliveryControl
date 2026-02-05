@@ -192,9 +192,15 @@
                 }
 
                 const config = { 
-                    fps: 20, 
+                    fps: 25, 
                     aspectRatio: 1.0,
-                    showTorchButtonIfSupported: true
+                    qrbox: { width: 300, height: 150 }, // Rectangular for 1D barcodes
+                    showTorchButtonIfSupported: true,
+                    videoConstraints: {
+                        facingMode: "environment",
+                        width: { min: 640, ideal: 1280, max: 1920 },
+                        height: { min: 480, ideal: 720, max: 1080 }
+                    }
                 };
 
                 if (!html5QrCode) {

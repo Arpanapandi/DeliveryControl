@@ -224,6 +224,12 @@ else
                                                 @dateLabel - @schedule.PickupTime.Value.ToString("HH:mm")
                                             </span>
                                         </div>
+                                        @if (schedule.PreparationStatus == "Prepared")
+                                        {
+                                            <div class="mt-2 text-center p-1" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; border-radius: 4px; color: #10b981; font-weight: bold; font-size: 0.8rem;">
+                                                <i class="bi bi-patch-check-fill"></i> BARANG SUDAH SIAP (READY FOR PICKUP)
+                                            </div>
+                                        }
                                     </div>
                                 }
                                 
@@ -295,7 +301,8 @@ else
                                         <small><i class="bi bi-check-circle-fill"></i> <strong>Keberangkatan:</strong></small>
                                         <div><strong>@schedule.ActualEndTime!.Value.ToString("HH:mm")</strong></div>
                                         @{
-                                            var duration = schedule.ActualEndTime.Value - schedule.ActualStartTime!.Value;
+                                            var startTime = schedule.ActualStartTime ?? schedule.ActualEndTime.Value;
+                                            var duration = schedule.ActualEndTime.Value - startTime;
                                             var durationText = duration.TotalHours >= 1 
                                                 ? $"{(int)duration.TotalHours}j {duration.Minutes}m"
                                                 : $"{(int)duration.TotalMinutes}m";
@@ -497,7 +504,8 @@ else
                                 <small><i class="bi bi-check-circle-fill"></i> <strong>Keberangkatan:</strong></small>
                                 <div><strong>@schedule.ActualEndTime!.Value.ToString("HH:mm")</strong></div>
                                 @{
-                                    var duration = schedule.ActualEndTime.Value - schedule.ActualStartTime!.Value;
+                                    var startTime = schedule.ActualStartTime ?? schedule.ActualEndTime.Value;
+                                    var duration = schedule.ActualEndTime.Value - startTime;
                                     var durationText = duration.TotalHours >= 1 
                                         ? $"{(int)duration.TotalHours}j {duration.Minutes}m"
                                         : $"{(int)duration.TotalMinutes}m";
@@ -569,19 +577,11 @@ else
     <script>
         // Pastikan form submit dengan benar dan mempertahankan nilai
         document.addEventListener('DOMContentLoaded', function() {
-            var statusSelect = document.getElementById('statusSelect');
             var filterForm = document.getElementById('filterForm');
             
-            if (statusSelect && filterForm) {
-                // Pastikan onchange bekerja dengan benar
-                statusSelect.addEventListener('change', function() {
-                    // Pastikan nilai yang dipilih tersimpan
-                    var selectedValue = this.value;
-                    console.log('Status selected:', selectedValue);
-                    
-                    // Submit form
-                    filterForm.submit();
-                });
+            if (filterForm) {
+                // Form automatic submission for other inputs is already handled by inline onchange
+                console.log('Driver Portal Filter Form initialized');
             }
         });
 

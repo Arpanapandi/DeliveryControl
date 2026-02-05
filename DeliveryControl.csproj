@@ -21,4 +21,11 @@
     </PackageReference>
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="DataDumper\**" />
+    <Content Remove="DataDumper\**" />
+    <EmbeddedResource Remove="DataDumper\**" />
+    <None Remove="DataDumper\**" />
+  </ItemGroup>
+
 </Project>

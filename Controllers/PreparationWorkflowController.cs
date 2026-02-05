@@ -23,12 +23,32 @@ namespace DeliveryControl.Controllers
             _deliveryHubContext = deliveryHubContext;
         }
 
-        public async Task<IActionResult> Index()
+        public async Task<IActionResult> Index(DateTime? filterDate)
         {
-            var schedules = await _context.DeliverySchedules
+            var today = DateTime.Today;
+            var query = _context.DeliverySchedules
                 .Include(s => s.Customer)
-                .Where(s => s.Status != "Cancelled" && s.Status != "Completed")
-                .OrderByDescending(s => s.ScheduledDate)
+                .Include(s => s.DeliveryItems)
+                    .ThenInclude(di => di.Item)
+                .Where(s => s.Status != "Cancelled" && s.Status != "Completed");
+
+            if (filterDate.HasValue)
+            {
+                query = query.Where(s => s.ScheduledDate.Date == filterDate.Value.Date);
+                ViewData["CurrentFilterDate"] = filterDate.Value.ToString("yyyy-MM-dd");
+                ViewData["FilterTitle"] = "Jadwal Tanggal " + filterDate.Value.ToString("dd MMM yyyy");
+            }
+            else
+            {
+                // Default: Today and Tomorrow
+                var tomorrow = today.AddDays(1);
+                query = query.Where(s => s.ScheduledDate.Date >= today && s.ScheduledDate.Date <= tomorrow);
+                ViewData["CurrentFilterDate"] = "";
+                ViewData["FilterTitle"] = "Jadwal Hari Ini & Besok";
+            }
+
+            var schedules = await query
+                .OrderBy(s => s.ScheduledDate)
                 .ThenBy(s => s.ScheduleNumber)
                 .ToListAsync();
             
@@ -36,54 +56,160 @@ namespace DeliveryControl.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> LookupSchedule(string tag)
+        public async Task<IActionResult> LookupSchedule(string tag, string? label, string? kanban)
         {
             if (string.IsNullOrWhiteSpace(tag)) return Json(new { success = false });
 
             try
             {
                 tag = tag.Trim();
-                // 1. Find Item
-                var item = await _context.Items.FirstOrDefaultAsync(i => i.VIN == tag || i.ItemCode == tag);
-                if (item == null)
+                label = (label ?? "").Trim();
+                kanban = (kanban ?? "").Trim();
+
+                // 1. Find ALL Items by Tag (Internal)
+                var items = await _context.Items
+                    .Where(i => i.VIN == tag || i.ItemCode == tag)
+                    .ToListAsync();
+                
+                if (!items.Any())
                 {
-                    // Try pulling records
-                    var pulling = await _context.PullingRecords.OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.Tag == tag);
-                    if (pulling != null) item = await _context.Items.FindAsync(pulling.ItemId);
+                    // Fallback to pulling records
+                    var pulling = await _context.PullingRecords
+                        .OrderByDescending(p => p.CreatedDate)
+                        .FirstOrDefaultAsync(p => p.Tag == tag);
+                    if (pulling != null)
+                    {
+                        var pItem = await _context.Items.FindAsync(pulling.ItemId);
+                        if (pItem != null) items.Add(pItem);
+                    }
                 }
 
-                if (item == null) return Json(new { success = false, message = "Tag tidak dikenali di Database (Item/Stock)." });
+                if (!items.Any()) return Json(new { success = false, message = "Tag internal tidak dikenali." });
 
-                // 2. Find FIFO Schedule
-                var schedule = await _context.DeliverySchedules
-                    .Include(s => s.Customer)
-                    .Include(s => s.DeliveryItems)
-                    .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
-                                 s.DeliveryItems.Any(di => di.ItemId == item.ItemId))
-                    .OrderBy(s => s.ScheduledDate)
-                    .ThenBy(s => s.ScheduleNumber)
-                    .FirstOrDefaultAsync();
+                // 2. Filter Items by active Schedules
+                var activeScheduleItemIds = await _context.DeliverySchedules
+                    .Where(s => s.Status == "Scheduled" || s.Status == "In Progress")
+                    .SelectMany(s => s.DeliveryItems)
+                    .Select(di => di.ItemId)
+                    .Distinct()
+                    .ToListAsync();
 
-                if (schedule == null)
-                {
-                    return Json(new { 
-                        success = true, 
-                        found = false, 
-                        item = new { item.ItemName, item.VIN, item.CustomerPartNumber, item.Plant },
-                        message = "Item dikenali, tapi tidak ada jadwal aktif yang membutuhkan ini." 
-                    });
-                }
+                var itemsInSchedule = items.Where(i => activeScheduleItemIds.Contains(i.ItemId)).ToList();
+                
+                // If NO items in schedule, pick the first one just to show info/metadata
+                var targetItem = itemsInSchedule.FirstOrDefault() ?? items.First();
+
+        DeliverySchedule? schedule = null;
+
+        // 3. Validation and Disambiguation
+        if (!string.IsNullOrEmpty(kanban))
+        {
+            string kanbanUpper = kanban.ToUpper();
+            schedule = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
+                .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
+                             s.ScheduleNumber.ToUpper() == kanbanUpper &&
+                             s.DeliveryItems.Any(di => di.ItemId == targetItem.ItemId))
+                .FirstOrDefaultAsync();
+
+            if (schedule == null) 
+            {
+                return Json(new { 
+                    success = true, 
+                    found = false, 
+                    step = "kanban",
+                    item = new { 
+                        itemName = targetItem.ItemName, 
+                        vin = targetItem.VIN, 
+                        customerPartNumber = targetItem.CustomerPartNumber 
+                    },
+                    message = $"Kanban (Manifest) '{kanban}' tidak cocok dengan jadwal aktif untuk item ini!" 
+                });
+            }
+        }
+
+        if (!string.IsNullOrEmpty(label))
+        {
+            string vin = (targetItem.VIN ?? "").ToUpper();
+            string partNo = (targetItem.CustomerPartNumber ?? "").ToUpper();
+            string labelUpper = label.ToUpper();
+            
+            if (!labelUpper.Contains(vin) && (string.IsNullOrEmpty(partNo) || !labelUpper.Contains(partNo)))
+            {
+                return Json(new { 
+                    success = true, 
+                    found = false, 
+                    step = "label",
+                    item = new { 
+                        itemName = targetItem.ItemName, 
+                        vin = targetItem.VIN, 
+                        customerPartNumber = targetItem.CustomerPartNumber 
+                    },
+                    message = "Label tidak sesuai dengan Tag produk!" 
+                });
+            }
+        }
+
+        // If not all 3 are provided, we don't look for schedule yet
+        if (string.IsNullOrEmpty(label) || string.IsNullOrEmpty(kanban))
+        {
+            return Json(new { 
+                success = true, 
+                found = false, 
+                step = "partial",
+                item = new { 
+                    itemName = targetItem.ItemName, 
+                    vin = targetItem.VIN, 
+                    customerPartNumber = targetItem.CustomerPartNumber 
+                },
+                message = "Dilanjutkan ke scan berikutnya..." 
+            });
+        }
+
+        // 4. Find FIFO Schedule if not already found via Kanban
+        if (schedule == null)
+        {
+            schedule = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
+                .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
+                             s.DeliveryItems.Any(di => di.ItemId == targetItem.ItemId))
+                .OrderBy(s => s.ScheduledDate)
+                .ThenBy(s => s.ScheduleNumber)
+                .FirstOrDefaultAsync();
+        }
+
+        if (schedule == null)
+        {
+            return Json(new { 
+                success = true, 
+                found = false, 
+                step = "final",
+                item = new { 
+                    itemName = targetItem.ItemName, 
+                    vin = targetItem.VIN, 
+                    customerPartNumber = targetItem.CustomerPartNumber 
+                },
+                message = $"Item valid untuk {targetItem.Customer}, tapi tidak ada jadwal aktif saat ini." 
+            });
+        }
+
+                var deliveryItem = schedule.DeliveryItems.FirstOrDefault(di => di.ItemId == targetItem.ItemId);
 
                 return Json(new { 
                     success = true, 
                     found = true,
-                    item = new { item.ItemName, item.VIN, item.CustomerPartNumber, item.Plant, TargetPartNo = !string.IsNullOrEmpty(item.CustomerPartNumber) ? item.CustomerPartNumber : item.VIN },
+                    step = "complete",
+                    item = new { targetItem.ItemName, targetItem.VIN, targetItem.CustomerPartNumber, TargetPartNo = !string.IsNullOrEmpty(targetItem.CustomerPartNumber) ? targetItem.CustomerPartNumber : targetItem.VIN },
                     schedule = new { 
                         schedule.ScheduleId, 
                         schedule.ScheduleNumber, 
                         CustomerName = schedule.Customer?.CustomerName,
                         Dock = schedule.Customer?.Docking,
-                        Date = schedule.ScheduledDate.ToString("dd MMM yyyy")
+                        Date = schedule.ScheduledDate.ToString("dd MMM yyyy"),
+                        TargetQty = deliveryItem?.Quantity ?? 0,
+                        ActualQty = deliveryItem?.ActualQuantity ?? 0
                     }
                 });
             }
@@ -96,110 +222,170 @@ namespace DeliveryControl.Controllers
         [HttpPost]
         public async Task<IActionResult> Save([FromBody] PreparationRecord record)
         {
-            if (record == null)
-            {
-                return Json(new { success = false, message = "Data kosong." });
-            }
+            if (record == null) return Json(new { success = false, message = "Data kosong." });
 
-            if (string.IsNullOrWhiteSpace(record.Tag) || string.IsNullOrWhiteSpace(record.Label))
+            if (string.IsNullOrWhiteSpace(record.Tag) || string.IsNullOrWhiteSpace(record.Label) || string.IsNullOrWhiteSpace(record.Kanban))
             {
-                return Json(new { success = false, message = "Tag dan Label wajib diisi." });
+                return Json(new { success = false, message = "Tag, Label, dan Kanban wajib diisi!" });
             }
 
             try 
             {
                 record.Tag = record.Tag.Trim();
                 record.Label = record.Label.Trim();
-                record.Kanban = (record.Kanban ?? "").Trim();
+                record.Kanban = record.Kanban.Trim();
                 record.CreatedDate = DateTime.Now;
                 record.CreatedBy = HttpContext.Session.GetString("FullName") ?? "Operator";
 
-                // 1. Identification
-                var item = await _context.Items.FirstOrDefaultAsync(i => i.VIN == record.Tag || i.ItemCode == record.Tag);
-                if (item == null)
+                // 1. Identification & Disambiguation
+                var items = await _context.Items
+                    .Where(i => i.VIN == record.Tag || i.ItemCode == record.Tag)
+                    .ToListAsync();
+                
+                if (!items.Any())
                 {
                     var pulling = await _context.PullingRecords.OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.Tag == record.Tag);
-                    if (pulling != null) item = await _context.Items.FindAsync(pulling.ItemId);
+                    if (pulling != null)
+                    {
+                        var pItem = await _context.Items.FindAsync(pulling.ItemId);
+                        if (pItem != null) items.Add(pItem);
+                    }
                 }
 
-                if (item == null) return Json(new { success = false, message = "Tag tidak dikenali." });
+        if (!items.Any()) return Json(new { success = false, message = "Tag tidak dikenali." });
 
-                record.Plant = item.Plant ?? "-";
+        // For now, assume the first item match is the target (usually VIN is unique)
+        var item = items.First();
 
-                // 2. Validation (Customer Part Number / VIN Translation)
-                // Logic: Compare Customer Label with Part Number, OR translate to VIN if Part Number is empty.
-                string partNo = item.CustomerPartNumber ?? "";
-                string vin = item.VIN ?? "";
-                
-                bool isValid = false;
-                string requiredCode = "";
+        // 2. Final Schedule Matching using Kanban (Manifest)
+        string kanbanSaveUpper = record.Kanban.ToUpper();
+        var schedule = await _context.DeliverySchedules
+            .Include(s => s.Customer)
+            .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
+            .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
+                         s.ScheduleNumber.ToUpper() == kanbanSaveUpper &&
+                         s.DeliveryItems.Any(di => di.ItemId == item.ItemId))
+            .OrderBy(s => s.ScheduledDate)
+            .ThenBy(s => s.ScheduleNumber)
+            .FirstOrDefaultAsync();
 
-                if (!string.IsNullOrEmpty(partNo))
-                {
-                    requiredCode = partNo;
-                    if (record.Label.Contains(partNo) || record.Kanban.Contains(partNo))
-                        isValid = true;
-                }
-                else if (!string.IsNullOrEmpty(vin))
-                {
-                    // TRANSLATION LOGIC: Fallback to VIN if Part Number is not available
-                    requiredCode = vin;
-                    if (record.Label.Contains(vin) || record.Kanban.Contains(vin))
-                        isValid = true;
-                }
-                else
-                {
-                    // No part number and no VIN? Skip validation but log success for now
-                    isValid = true; 
-                }
+        if (schedule == null) 
+        {
+            return Json(new { success = false, message = $"Validasi Gagal! Kanban (Manifest) '{record.Kanban}' tidak ditemukan untuk item ini." });
+        }
 
-                if (!isValid)
-                {
-                    return Json(new { success = false, message = $"VALIDASI GAGAL: Barcode Customer tidak mengandung '{requiredCode}'!" });
-                }
-                // 3. FIFO Schedule Matching
-                var schedule = await _context.DeliverySchedules
-                    .Include(s => s.DeliveryItems)
-                    .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
-                                 s.DeliveryItems.Any(di => di.ItemId == item.ItemId))
-                    .OrderBy(s => s.ScheduledDate)
-                    .ThenBy(s => s.ScheduleNumber)
-                    .FirstOrDefaultAsync();
+        // --- VALIDASI 1: Cek apakah kebutuhan QTY sudah terpenuhi ---
+        var dItem = schedule.DeliveryItems.FirstOrDefault(di => di.ItemId == item.ItemId);
+        if (dItem != null && (dItem.ActualQuantity ?? 0) >= dItem.Quantity)
+        {
+            return Json(new { success = false, message = $"Kebutuhan item '{item.ItemName}' ({dItem.Quantity} pcs) sudah terpenuhi untuk jadwal ini!" });
+        }
 
-                if (schedule == null)
-                {
-                    return Json(new { success = false, message = "Tidak ada jadwal aktif untuk item ini." });
-                }
+        // --- VALIDASI 2: Cek Saldo Stok Riil (FIFO / Stock On Hand) ---
+        // Hitung saldo: Total Pulling (All Time) - Total Preparation (All Time) untuk Tag/Label ini
+        var totalPulled = await _context.PullingRecords
+            .CountAsync(p => p.Tag == record.Tag && p.Label == record.Label);
+        
+        var totalPrepared = await _context.PreparationRecords
+            .CountAsync(p => p.Tag == record.Tag && p.Label == record.Label);
+        
+        // Saldo riil di rak untuk fisik barang dengan label spesifik ini
+        int stockBalance = totalPulled - totalPrepared;
 
-                record.ScheduleId = schedule.ScheduleId;
+        if (stockBalance <= 0)
+        {
+            return Json(new { success = false, message = $"STOK HABIS! Barang dengan Label ini sudah pernah dipakai atau belum di-Pulling ke rak." });
+        }
 
-                // 4. Update Stats
+        // Double check label consistency
+        string partNo = (item.CustomerPartNumber ?? "").ToUpper();
+        string vin = (item.VIN ?? "").ToUpper();
+        string labelUpper = record.Label.ToUpper();
+        bool labelOk = labelUpper.Contains(vin) || (!string.IsNullOrEmpty(partNo) && labelUpper.Contains(partNo));
+        
+        if (!labelOk)
+        {
+            return Json(new { success = false, message = "Label tidak sesuai dengan produk internal!" });
+        }
+
+        record.Plant = item.Plant ?? "-";
+        record.ScheduleId = schedule.ScheduleId;
+
+                // 3. Update Stats
                 schedule.TotalActualQuantity += 1;
                 schedule.Status = "In Progress";
                 schedule.PreparationStatus = "In Progress";
                 schedule.UpdatedDate = DateTime.Now;
 
-                // Update specific item actual quantity if exists
-                var dItem = schedule.DeliveryItems.FirstOrDefault(di => di.ItemId == item.ItemId);
                 if (dItem != null)
                 {
                     dItem.ActualQuantity = (dItem.ActualQuantity ?? 0) + 1;
                     if (dItem.ActualQuantity >= dItem.Quantity) dItem.IsCompleted = true;
                 }
 
+                // Check if ALL items in this schedule are completed
+                bool allDone = schedule.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity);
+                if (allDone)
+                {
+                    schedule.PreparationStatus = "Prepared";
+                    schedule.Status = "In Progress"; // Keep general status In Progress until driver completes
+                }
+
                 _context.PreparationRecords.Add(record);
                 await _context.SaveChangesAsync();
                 
-                // Broadcast
                 await _deliveryHubContext.Clients.All.SendAsync("DeliveryUpdated", new { Action = "preparation", ScheduleNumber = schedule.ScheduleNumber });
                 await _stockHubContext.Clients.All.SendAsync("UpdateStock");
 
-                return Json(new { success = true, message = $"Berhasil! Item '{record.Tag}' masuk ke {schedule.ScheduleNumber}." });
+                // Return detailed info for the UI progress area
+                var totalTarget = schedule.DeliveryItems.Sum(di => di.Quantity);
+                var totalActual = schedule.DeliveryItems.Sum(di => di.ActualQuantity ?? 0);
+                var totalPercent = totalTarget > 0 ? ((double)totalActual / (double)totalTarget * 100) : 0;
+
+                var details = new
+                {
+                    schedule.ScheduleId,
+                    schedule.ScheduleNumber,
+                    CustomerName = schedule.Customer?.CustomerName,
+                    TotalPercent = totalPercent,
+                    Items = schedule.DeliveryItems.Select(di => {
+                        var qpc = (di.Item?.QtyLot > 0) ? di.Item.QtyLot.Value : 1;
+                        return new {
+                            ItemName = di.Item?.ItemName ?? "Unknown",
+                            VIN = di.Item?.VIN ?? "-",
+                            Target = di.Quantity,
+                            Actual = di.ActualQuantity ?? 0,
+                            TargetKanban = Math.Ceiling((double)di.Quantity / qpc),
+                            ActualKanban = ((double)(di.ActualQuantity ?? 0) / qpc)
+                        };
+                    }).ToList()
+                };
+
+                return Json(new { 
+                    success = true, 
+                    message = $"Berhasil! Persiapan tersimpan.",
+                    scheduleDetails = details
+                });
             }
             catch (Exception ex)
             {
                 return Json(new { success = false, message = "Error: " + ex.Message });
             }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> ConfirmSelesai(int id)
+        {
+            var schedule = await _context.DeliverySchedules.FindAsync(id);
+            if (schedule == null) return Json(new { success = false, message = "Jadwal tidak ditemukan." });
+
+            schedule.PreparationStatus = "Prepared";
+            schedule.UpdatedDate = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+            await _deliveryHubContext.Clients.All.SendAsync("DeliveryUpdated", new { Action = "preparation", ScheduleNumber = schedule.ScheduleNumber });
+
+            return Json(new { success = true });
         }
     }
 }

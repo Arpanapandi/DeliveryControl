@@ -42,7 +42,7 @@
                         <th>CYCLE</th>
                         <th>ITEM / PART NO</th>
                         <th class="text-center">QTY/LOT</th>
-                        <th class="text-center">QTY</th>
+                        <th class="text-center">QTY (PCS)</th>
                         <th class="text-center">KANBAN</th>
                         <th class="text-center">ACTION</th>
                     </tr>
@@ -74,11 +74,17 @@
                                 </td>
                                 <td class="text-center"><span class="badge bg-dark border">@item.Item.QtyLot</span></td>
                                 <td class="text-center fw-bold fs-5 text-warning">
-                                    <span class="text-info">@(item.ActualQuantity?.ToString("G29") ?? "0")</span>
-                                    <span class="text-secondary small">/ @item.Quantity.ToString("G29")</span>
+                                    @item.Quantity.ToString("G29") <small class="text-secondary">pcs</small>
                                 </td>
-                                <td class="text-center">
-                                    <span class="badge bg-info text-dark">@(item.Item.KanbanType ?? "MANUAL")</span>
+                                <td class="text-center fw-bold">
+                                    <span class="badge bg-info text-dark">
+                                        @{
+                                            var qpc = item.Item?.QtyLot ?? 1;
+                                            var kanbanTarget = Math.Ceiling((double)item.Quantity / (qpc > 0 ? qpc : 1));
+                                            var kanbanActual = (double)(item.ActualQuantity ?? 0) / (qpc > 0 ? qpc : 1);
+                                        }
+                                        @kanbanActual.ToString("0.##") / @kanbanTarget
+                                    </span>
                                 </td>
                                 <td class="text-center">
                                     <div class="d-flex justify-content-center gap-1">

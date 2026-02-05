@@ -18,9 +18,11 @@ builder.Services.AddSignalR();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
-    options.IdleTimeout = TimeSpan.FromMinutes(30);
+    options.IdleTimeout = TimeSpan.FromDays(30); // Sesi bertahan 30 hari idle
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
+    options.Cookie.Name = ".DeliveryControl.Session";
+    options.Cookie.MaxAge = TimeSpan.FromDays(30); // Membuat cookie persistent (tahan banting setelah browser ditutup)
 });
 
 // Add DbContext

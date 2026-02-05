@@ -1,573 +1,360 @@
 @model IEnumerable<DeliveryControl.Models.DeliverySchedule>
 
 @{
-    ViewData["Title"] = "Portal Preparation - Konfirmasi Masuk Dock";
+    ViewData["Title"] = "Portal Preparation - Overview Detail";
     var selectedDate = ViewData["SelectedDate"]?.ToString() ?? DateTime.Today.ToString("yyyy-MM-dd");
     var dayName = ViewData["DayName"]?.ToString() ?? "";
-    var selectedStatus = ViewData["SelectedStatus"]?.ToString() ?? "";
 }
 
-@* Hidden form for anti-forgery token *@
-<form id="hiddenTokenForm" style="display:none;">
-</form>
+<style>
+    :root {
+        --cyber-yellow: #facc15;
+        --cyber-bg: #0f172a;
+        --cyber-card-bg: #1e293b;
+        --cyber-border: #334155;
+        --cyber-text-muted: #94a3b8;
+    }
 
-<div class="row mb-4">
-    <div class="col-12">
-        <h2><i class="bi bi-box-seam"></i> Portal Preparation - Konfirmasi Masuk Dock</h2>
-        <p class="text-muted">Konfirmasi waktu masuk dock untuk persiapan loading - Filter berdasarkan tanggal Enter Dock</p>
+    body {
+        background-color: var(--cyber-bg);
+        color: white;
+    }
+
+    .gallery-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1.5rem;
+        padding: 1rem 0;
+    }
+
+    .prep-card {
+        background: var(--cyber-card-bg);
+        border: 2px solid var(--cyber-border);
+        border-radius: 8px;
+        overflow: hidden;
+        transition: transform 0.2s, box-shadow 0.2s;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+    }
+
+    .prep-card:hover {
+        transform: translateY(-5px);
+        border-color: var(--cyber-yellow);
+        box-shadow: 0 0 20px rgba(250, 204, 21, 0.2);
+    }
+
+    .prep-card-header {
+        background: var(--cyber-yellow);
+        padding: 8px 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #000;
+        font-weight: 800;
+    }
+
+    .prep-card-body {
+        padding: 15px;
+        flex-grow: 1;
+        color: white;
+    }
+
+    .customer-name {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-transform: uppercase;
+    }
+
+    .detail-row {
+        display: flex;
+        margin-bottom: 6px;
+        font-size: 0.85rem;
+    }
+
+    .detail-label {
+        color: var(--cyber-text-muted);
+        width: 140px;
+        flex-shrink: 0;
+    }
+
+    .detail-value {
+        font-weight: 600;
+    }
+
+    .icon-spacing {
+        width: 20px;
+        display: inline-block;
+        text-align: center;
+        margin-right: 5px;
+    }
+
+    .prep-card-footer {
+        padding: 12px 15px;
+        background: rgba(0,0,0,0.2);
+        border-top: 1px solid var(--cyber-border);
+    }
+
+    .btn-dock {
+        background: var(--cyber-yellow);
+        border: none;
+        color: black;
+        font-weight: 700;
+        width: 100%;
+        padding: 10px;
+        border-radius: 4px;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        display: block;
+        text-align: center;
+        text-decoration: none;
+        transition: 0.3s;
+    }
+
+    .btn-dock:hover {
+        background: #eab308;
+        color: #000;
+    }
+
+    .quick-status {
+        font-size: 0.75rem;
+        color: var(--cyber-yellow);
+        text-align: center;
+        margin-top: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        background: transparent;
+        border: none;
+        width: 100%;
+    }
+
+    .badge-status {
+        background: white;
+        color: #1e293b;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: 700;
+    }
+
+    .card-items-list {
+        margin-top: 15px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        padding-top: 10px;
+    }
+
+    .card-item-progress {
+        margin-bottom: 10px;
+    }
+
+    .item-info {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        margin-bottom: 2px;
+    }
+
+    .item-vin {
+        color: var(--cyber-yellow);
+        font-weight: 600;
+    }
+
+    .item-progress-val {
+        font-weight: 700;
+    }
+
+    .progress-mini {
+        height: 6px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 3px;
+    }
+
+    .filter-bar {
+        background: var(--cyber-card-bg);
+        border: 1px solid var(--cyber-border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .cyber-input {
+        background: rgba(15, 23, 42, 0.6) !important;
+        border: 1px solid var(--cyber-border) !important;
+        color: white !important;
+    }
+
+    .btn-cyber-outline {
+        border: 1px solid var(--cyber-yellow);
+        color: var(--cyber-yellow);
+        transition: 0.3s;
+    }
+
+    .btn-cyber-outline:hover {
+        background: var(--cyber-yellow);
+        color: black;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="text-white fw-bold mb-1"><i class="bi bi-box-seam me-2 text-warning"></i> Portal Preparation</h2>
+            <p class="text-secondary mb-0">Rangkuman detail item dan konfirmasi masuk dock.</p>
+        </div>
+        <div class="text-end">
+            <h5 class="text-yellow mb-0">@dayName</h5>
+            <small class="text-white-50">@DateTime.Now.ToString("HH:mm:ss")</small>
+        </div>
     </div>
-</div>
 
-<!-- Filter -->
-<div class="card mb-4">
-    <div class="card-body">
-        <form id="filterForm" asp-controller="Preparation" asp-action="Index" method="get" class="row g-3 align-items-end">
+    <!-- Filter Bar -->
+    <div class="filter-bar shadow-sm">
+        <form asp-action="Index" method="get" class="row g-3 align-items-end">
             <div class="col-md-3">
-                <label class="form-label" for="selectedDate"><i class="bi bi-calendar"></i> Pilih Tanggal</label>
-                <input type="date" 
-                       class="form-control" 
-                       name="selectedDate" 
-                       id="selectedDate"
-                       value="@selectedDate"
-                       onchange="this.form.submit()" />
+                <label class="form-label text-white-50 small fw-bold">PILIH TANGGAL</label>
+                <input type="date" name="selectedDate" value="@selectedDate" class="form-control cyber-input" onchange="this.form.submit()" />
             </div>
             <div class="col-md-3">
-                <label class="form-label" for="customerId"><i class="bi bi-building"></i> Nama Customer</label>
-                <select class="form-select" name="customerId" id="customerId" onchange="this.form.submit()">
+                <label class="form-label text-white-50 small fw-bold">CUSTOMER</label>
+                <select name="customerId" class="form-select cyber-input" onchange="this.form.submit()">
                     <option value="">Semua Customer</option>
                     @if (ViewBag.Customers != null)
                     {
-                        @foreach (var customer in ViewBag.Customers)
+                        foreach (var c in ViewBag.Customers)
                         {
-                            var isSelected = ViewData["SelectedCustomerId"]?.ToString() == customer.CustomerId.ToString();
-                            @if (isSelected)
-                            {
-                                <option value="@customer.CustomerId" selected>@customer.CustomerName</option>
-                            }
-                            else
-                            {
-                                <option value="@customer.CustomerId">@customer.CustomerName</option>
-                            }
+                            bool isSel = ViewData["SelectedCustomerId"]?.ToString() == c.CustomerId.ToString();
+                            <option value="@c.CustomerId" selected="@isSel">@c.CustomerName</option>
                         }
                     }
                 </select>
             </div>
             <div class="col-md-2">
-                <label class="form-label" for="cycleFilter"><i class="bi bi-arrow-repeat"></i> Cycle</label>
-                <select class="form-select" name="cycle" id="cycleFilter" onchange="this.form.submit()">
-                    @{
-                        var selectedCycle = ViewData["SelectedCycle"]?.ToString() ?? "";
-                        var cycles = ViewBag.Cycles as List<string> ?? new List<string>();
-                    }
-                    <option value="">Semua Cycle</option>
-                    @foreach (var cy in cycles)
+                <label class="form-label text-white-50 small fw-bold">CYCLE</label>
+                <select name="cycle" class="form-select cyber-input" onchange="this.form.submit()">
+                    <option value="">Semua</option>
+                    @if (ViewBag.Cycles != null)
                     {
-                        var isSelectedCycle = string.Equals(selectedCycle, cy, StringComparison.OrdinalIgnoreCase);
-                        if (isSelectedCycle)
+                        foreach (var cy in ViewBag.Cycles)
                         {
-                            <option value="@cy" selected>@cy</option>
-                        }
-                        else
-                        {
-                            <option value="@cy">@cy</option>
+                            bool isSel = ViewData["SelectedCycle"]?.ToString() == cy;
+                            <option value="@cy" selected="@isSel">@cy</option>
                         }
                     }
                 </select>
             </div>
-            <div class="col-md-3">
-                <label class="form-label"><i class="bi bi-funnel"></i> Status</label>
-                @{
-                    var normStatus = selectedStatus?.Trim();
-
-                    bool isScheduled = string.Equals(normStatus, "Scheduled", StringComparison.OrdinalIgnoreCase);
-                    bool isInProgress = string.Equals(normStatus, "In Progress", StringComparison.OrdinalIgnoreCase);
-                    bool isCompleted = string.Equals(normStatus, "Completed", StringComparison.OrdinalIgnoreCase);
-
-                    var scheduledClass = (isScheduled ? "btn-warning text-dark" : "btn-outline-warning text-warning") + " btn btn-sm flex-fill fw-semibold";
-                    var inProgressClass = (isInProgress ? "btn-info text-dark" : "btn-outline-info text-info") + " btn btn-sm flex-fill fw-semibold";
-                    var completedClass = (isCompleted ? "btn-success" : "btn-outline-success text-success") + " btn btn-sm flex-fill fw-semibold";
-                }
-                <div class="d-flex flex-wrap gap-2 w-100">
-                    <button type="submit"
-                            name="status"
-                            value="Scheduled"
-                            class="@scheduledClass">
-                        Scheduled
-                    </button>
-                    <button type="submit"
-                            name="status"
-                            value="In Progress"
-                            class="@inProgressClass">
-                        In&nbsp;Progress
-                    </button>
-                    <button type="submit"
-                            name="status"
-                            value="Completed"
-                            class="@completedClass">
-                        Completed
-                    </button>
-                </div>
-            </div>
-            <div class="col-md-1">
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="bi bi-search"></i> Filter
-                </button>
-            </div>
-            <div class="col-md-2">
-                <a asp-controller="Preparation" asp-action="Index" class="btn btn-secondary w-100">
-                    <i class="bi bi-arrow-counterclockwise"></i> Reset
-                </a>
+            <div class="col-md-2 offset-md-2 d-flex gap-2">
+                <a asp-action="Index" class="btn btn-secondary flex-grow-1">Reset</a>
             </div>
         </form>
     </div>
-</div>
 
-@{
-    var needAction = ViewBag.NeedActionSchedules as List<DeliveryControl.Models.DeliverySchedule> ?? new List<DeliveryControl.Models.DeliverySchedule>();
-    var completed = ViewBag.CompletedSchedules as List<DeliveryControl.Models.DeliverySchedule> ?? new List<DeliveryControl.Models.DeliverySchedule>();
-}
-
-<!-- Schedule List -->
-@if (!needAction.Any() && !completed.Any())
-{
-    <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i> Tidak ada jadwal delivery untuk tanggal ini.
-    </div>
-}
-else
-{
-    <!-- SECTION: BUTUH AKSI PREPARATION (BELUM MASUK DOCK) -->
-    <div class="mb-3">
-        <h4 class="mb-3">
-            <i class="bi bi-exclamation-circle text-warning"></i> BUTUH AKSI PREPARATION (BELUM MASUK DOCK)
-        </h4>
-
-        @if (!needAction.Any())
-        {
-            <div class="alert alert-success">
-                <i class="bi bi-check-circle"></i> Tidak ada jadwal yang butuh aksi preparation.
-            </div>
-        }
-        else
-        {
-            <div class="row">
-                @foreach (var schedule in needAction)
-                {
-                    var hasEnteredDock = schedule.ActualEnterDockTime.HasValue;
-                    var displayStatus = schedule.PreparationStatus ?? schedule.Status;
-                    var statusBadge = displayStatus switch
-                    {
-                        "Scheduled" => "bg-warning",
-                        "In Progress" => "bg-info",
-                        "Completed" => "bg-success",
-                        "Cancelled" => "bg-danger",
-                        "Delayed" => "bg-danger",
-                        _ => "bg-secondary"
-                    };
-                    
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <div class="card h-100 @(hasEnteredDock ? "border-success" : "border-warning")">
-                            <div class="card-header @statusBadge text-white">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <strong>@schedule.ScheduleNumber</strong>
-                                    <span class="badge bg-white text-dark">@displayStatus</span>
-                                </div>
-                            </div>
-                            <div class="card-body">
-                                <h5 class="card-title">
-                                    <i class="bi bi-building"></i> @(schedule.Customer?.CustomerName ?? "-")
-                                </h5>
-                                
-                                <!-- INFO TANGGAL DELIVERY/PICKUP -->
-                                @if (schedule.PickupTime.HasValue)
-                                {
-                                    var pickupDate = schedule.PickupTime.Value.Date;
-                                    var isToday = pickupDate == DateTime.Today;
-                                    var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
-                                    var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
-                                    var badgeColor = isToday ? "bg-success" : (isTomorrow ? "bg-info" : "bg-secondary");
-                                    
-                                    <div class="alert alert-primary py-2 mb-3">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <small class="mb-0">
-                                                <i class="bi bi-calendar-check"></i> <strong>Tanggal Delivery:</strong>
-                                            </small>
-                                            <span class="badge @badgeColor">
-                                                @dateLabel - @schedule.PickupTime.Value.ToString("HH:mm")
-                                            </span>
-                                        </div>
-                                    </div>
-                                }
-                                
-                                <hr />
-                                
-                                <div class="mb-2">
-                                    <small class="text-muted">Cycle:</small>
-                                    <div class="fw-bold" style="font-size: 1.4rem;">
-                                        @{
-                                            var cycle = !string.IsNullOrWhiteSpace(schedule.Cycle)
-                                                ? schedule.Cycle
-                                                : (schedule.Customer?.Cycle ?? "-");
-                                        }
-                                        @cycle
-                                    </div>
-                                </div>
-
-                                @if (!string.IsNullOrWhiteSpace(schedule.Route))
-                                {
-                                    <div class="mb-2">
-                                        <small class="text-muted">Route:</small>
-                                        <div>@schedule.Route</div>
-                                    </div>
-                                }
-
-                                @if (!string.IsNullOrWhiteSpace(schedule.Area))
-                                {
-                                    <div class="mb-2">
-                                        <small class="text-muted">Area:</small>
-                                        <div><i class="bi bi-geo-alt"></i> @schedule.Area</div>
-                                    </div>
-                                }
-
-                                <hr />
-
-                                <!-- Enter Dock Time -->
-                                @if (schedule.EnterDockTime.HasValue)
-                                {
-                                    <div class="mb-2">
-                                        <small class="text-muted"><i class="bi bi-clock"></i> Enter Dock Time (Target):</small>
-                                        <div><strong>@schedule.EnterDockTime.Value.ToString("HH:mm")</strong></div>
-                                    </div>
-                                }
-
-                                <!-- Pickup Time -->
-                                @if (schedule.PickupTime.HasValue)
-                                {
-                                    <div class="mb-2">
-                                        <small class="text-muted"><i class="bi bi-clock"></i> Pickup Time (Target):</small>
-                                        <div><strong>@schedule.PickupTime.Value.ToString("HH:mm")</strong></div>
-                                    </div>
-                                }
-
-                                <!-- ETD -->
-                                @if (schedule.ETD.HasValue)
-                                {
-                                    <div class="mb-2">
-                                        <small class="text-muted"><i class="bi bi-arrow-right-circle"></i> ETD (Target):</small>
-                                        <div><strong>@schedule.ETD.Value.ToString("HH:mm")</strong></div>
-                                    </div>
-                                }
-
-                                <hr />
-
-                                <!-- Actual Enter Dock -->
-                                @if (hasEnteredDock)
-                                {
-                                    var isLate = false;
-                                    var delayMinutes = 0;
-                                    if (schedule.EnterDockTime.HasValue)
-                                    {
-                                        var delay = schedule.ActualEnterDockTime!.Value - schedule.EnterDockTime.Value;
-                                        if (delay.TotalMinutes > 0)
-                                        {
-                                            isLate = true;
-                                            delayMinutes = (int)delay.TotalMinutes;
-                                        }
-                                    }
-
-                                    <div class="alert @(isLate ? "alert-danger" : "alert-success") py-2 mb-2">
-                                        <small><i class="bi bi-check-circle"></i> <strong>Masuk Dock:</strong></small>
-                                        <div><strong>@schedule.ActualEnterDockTime!.Value.ToString("HH:mm")</strong></div>
-                                        @if (isLate)
-                                        {
-                                            <small class="text-danger">
-                                                <i class="bi bi-exclamation-triangle-fill"></i> Terlambat +@delayMinutes m
-                                            </small>
-                                        }
-                                        else
-                                        {
-                                            <small class="text-success">
-                                                <i class="bi bi-check-circle-fill"></i> On Time
-                                            </small>
-                                        }
-                                    </div>
-                                }
-
-                                @if (!string.IsNullOrWhiteSpace(schedule.DriverName))
-                                {
-                                    <div class="mt-2">
-                                        <small class="text-muted"><i class="bi bi-person"></i> Driver:</small>
-                                        <div><strong>@schedule.DriverName</strong></div>
-                                    </div>
-                                }
-                            </div>
-                            <div class="card-footer">
-                                @if (!hasEnteredDock)
-                                {
-                                    <!-- Belum konfirmasi masuk dock -->
-                                    <div class="d-grid gap-2">
-                                        <a asp-action="EnterDock" asp-route-id="@schedule.ScheduleId" class="btn btn-warning">
-                                            <i class="bi bi-box-arrow-in-right"></i> Konfirmasi Masuk Dock
-                                        </a>
-                                        <form asp-action="QuickEnterDock" asp-route-id="@schedule.ScheduleId" method="post" class="d-inline">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-outline-warning btn-sm w-100" 
-                                                    onclick="return confirm('Konfirmasi masuk dock SEKARANG?')">
-                                                <i class="bi bi-lightning-fill"></i> Quick - Masuk Dock Sekarang
-                                            </button>
-                                        </form>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <!-- Sudah masuk dock -->
-                                    <div class="d-grid">
-                                        <a asp-action="Details" asp-route-id="@schedule.ScheduleId" class="btn btn-success">
-                                            <i class="bi bi-check-circle-fill"></i> Sudah Masuk Dock - Lihat Detail
-                                        </a>
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-                }
-            </div>
-        }
-    </div>
-
-    <hr class="my-4" />
-
-    <!-- SECTION: SUDAH MASUK DOCK / TIDAK PERLU AKSI -->
-    <div class="mb-3">
-        <h4 class="mb-3">
-            <i class="bi bi-check2-circle text-success"></i> SUDAH MASUK DOCK / TIDAK PERLU AKSI
-        </h4>
-
-        @if (!completed.Any())
-        {
-            <div class="alert alert-secondary">
-                <i class="bi bi-info-circle"></i> Belum ada jadwal yang sudah masuk dock.
-            </div>
-        }
-        else
-        {
-            <div class="row">
-                @foreach (var schedule in completed)
-        {
-            var hasEnteredDock = schedule.ActualEnterDockTime.HasValue;
-            var displayStatus = schedule.PreparationStatus ?? schedule.Status;
-            var statusBadge = displayStatus switch
+    @if (!Model.Any())
+    {
+        <div class="alert bg-dark border-secondary text-info">
+            <i class="bi bi-info-circle me-2"></i> Tidak ada jadwal yang ditemukan untuk kriteria ini.
+        </div>
+    }
+    else
+    {
+        <div class="gallery-grid">
+            @foreach (var schedule in Model.OrderByDescending(s => s.DeliveryItems.Any(di => di.ActualQuantity > 0)))
             {
-                "Scheduled" => "bg-warning",
-                "In Progress" => "bg-info",
-                "Completed" => "bg-success",
-                "Cancelled" => "bg-danger",
-                "Delayed" => "bg-danger",
-                _ => "bg-secondary"
-            };
-            
-            <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card h-100 @(hasEnteredDock ? "border-success" : "border-warning")">
-                    <div class="card-header @statusBadge text-white">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <strong>@schedule.ScheduleNumber</strong>
-                            <span class="badge bg-white text-dark">@displayStatus</span>
-                        </div>
+                var hasEnteredDock = schedule.ActualEnterDockTime.HasValue;
+                
+                <div class="prep-card @(schedule.Status == "In Progress" ? "highlight-card" : "")" id="card-@schedule.ScheduleId">
+                    <div class="prep-card-header">
+                        <span>@schedule.ScheduleNumber</span>
+                        <span class="badge-status">@schedule.Status?.ToUpper()</span>
                     </div>
-                    <div class="card-body">
-                        <h5 class="card-title">
-                            <i class="bi bi-building"></i> @(schedule.Customer?.CustomerName ?? "-")
-                        </h5>
+                    <div class="prep-card-body">
+                        <div class="customer-name">
+                            <i class="bi bi-building"></i> @(schedule.Customer?.CustomerName ?? "Unknown")
+                        </div>
                         
-                        <!-- INFO TANGGAL DELIVERY/PICKUP -->
-                        @if (schedule.PickupTime.HasValue)
-                        {
-                            var pickupDate = schedule.PickupTime.Value.Date;
-                            var isToday = pickupDate == DateTime.Today;
-                            var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
-                            var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
-                            var badgeColor = isToday ? "bg-success" : (isTomorrow ? "bg-info" : "bg-secondary");
-                            
-                            <div class="alert alert-primary py-2 mb-3">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <small class="mb-0">
-                                        <i class="bi bi-calendar-check"></i> <strong>Tanggal Delivery:</strong>
-                                    </small>
-                                    <span class="badge @badgeColor">
-                                        @dateLabel - @schedule.PickupTime.Value.ToString("HH:mm")
-                                    </span>
-                                </div>
+                        <div class="detail-row">
+                            <div class="detail-label">Cycle:</div>
+                            <div class="detail-value">@schedule.Cycle</div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">Route:</div>
+                            <div class="detail-value text-info">@schedule.Route</div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label"><span class="icon-spacing"><i class="bi bi-geo-alt-fill"></i></span>Area:</div>
+                            <div class="detail-value">@schedule.Area</div>
+                        </div>
+                        
+                        <div class="mt-3 pt-2 border-top border-secondary border-opacity-25">
+                            <div class="detail-row">
+                                <div class="detail-label"><span class="icon-spacing"><i class="bi bi-box-arrow-in-right"></i></span>Enter Dock Time:</div>
+                                <div class="detail-value">@(schedule.EnterDockTime?.ToString("HH:mm") ?? "-")</div>
                             </div>
-                        }
-                        
-                        <hr />
-                        
-                        <div class="mb-2">
-                            <small class="text-muted">Cycle:</small>
-                            <div class="fw-bold" style="font-size: 1.4rem;">
-                                @{
-                                    var cycle = !string.IsNullOrWhiteSpace(schedule.Cycle)
-                                        ? schedule.Cycle
-                                        : (schedule.Customer?.Cycle ?? "-");
-                                }
-                                @cycle
+                            <div class="detail-row">
+                                <div class="detail-label"><span class="icon-spacing"><i class="bi bi-truck"></i></span>Pickup Time:</div>
+                                <div class="detail-value">@(schedule.PickupTime?.ToString("HH:mm") ?? "-")</div>
                             </div>
                         </div>
 
-                        @if (!string.IsNullOrWhiteSpace(schedule.Route))
-                        {
-                            <div class="mb-2">
-                                <small class="text-muted">Route:</small>
-                                <div>@schedule.Route</div>
-                            </div>
-                        }
-
-                        @if (!string.IsNullOrWhiteSpace(schedule.Area))
-                        {
-                            <div class="mb-2">
-                                <small class="text-muted">Area:</small>
-                                <div><i class="bi bi-geo-alt"></i> @schedule.Area</div>
-                            </div>
-                        }
-
-                        <hr />
-
-                        <!-- Enter Dock Time -->
-                        @if (schedule.EnterDockTime.HasValue)
-                        {
-                            <div class="mb-2">
-                                <small class="text-muted"><i class="bi bi-clock"></i> Enter Dock Time (Target):</small>
-                                <div><strong>@schedule.EnterDockTime.Value.ToString("HH:mm")</strong></div>
-                            </div>
-                        }
-
-                        <!-- Pickup Time -->
-                        @if (schedule.PickupTime.HasValue)
-                        {
-                            <div class="mb-2">
-                                <small class="text-muted"><i class="bi bi-clock"></i> Pickup Time (Target):</small>
-                                <div><strong>@schedule.PickupTime.Value.ToString("HH:mm")</strong></div>
-                            </div>
-                        }
-
-                        <!-- ETD -->
-                        @if (schedule.ETD.HasValue)
-                        {
-                            <div class="mb-2">
-                                <small class="text-muted"><i class="bi bi-arrow-right-circle"></i> ETD (Target):</small>
-                                <div><strong>@schedule.ETD.Value.ToString("HH:mm")</strong></div>
-                            </div>
-                        }
-
-                        <hr />
-
-                        <!-- Actual Enter Dock -->
-                        @if (hasEnteredDock)
-                        {
-                            var isLate = false;
-                            var delayMinutes = 0;
-                            if (schedule.EnterDockTime.HasValue)
+                        <!-- ITEMS & PROGRESS SECTION -->
+                        <div class="card-items-list">
+                            @foreach (var item in schedule.DeliveryItems)
                             {
-                                var delay = schedule.ActualEnterDockTime!.Value - schedule.EnterDockTime.Value;
-                                if (delay.TotalMinutes > 0)
-                                {
-                                    isLate = true;
-                                    delayMinutes = (int)delay.TotalMinutes;
-                                }
+                                var percent = (item.Quantity > 0) ? ((double)(item.ActualQuantity ?? 0) / (double)item.Quantity * 100) : 0;
+                                <div class="card-item-progress">
+                                    <div class="item-info">
+                                        <span class="item-vin">@item.Item?.VIN</span>
+                                        <span class="item-progress-val @(percent >= 100 ? "text-success" : "text-info")">
+                                            @((item.ActualQuantity ?? 0).ToString("G29")) / @item.Quantity.ToString("G29")
+                                        </span>
+                                    </div>
+                                    <div class="progress progress-mini">
+                                        <div class="progress-bar @(percent >= 100 ? "bg-success" : "bg-info")" 
+                                             role="progressbar" style="width: @percent%"></div>
+                                    </div>
+                                </div>
                             }
-
-                            <div class="alert @(isLate ? "alert-danger" : "alert-success") py-2 mb-2">
-                                <small><i class="bi bi-check-circle"></i> <strong>Masuk Dock:</strong></small>
-                                <div><strong>@schedule.ActualEnterDockTime!.Value.ToString("HH:mm")</strong></div>
-                                @if (isLate)
-                                {
-                                    <small class="text-danger">
-                                        <i class="bi bi-exclamation-triangle-fill"></i> Terlambat +@delayMinutes m
-                                    </small>
-                                }
-                                else
-                                {
-                                    <small class="text-success">
-                                        <i class="bi bi-check-circle-fill"></i> On Time
-                                    </small>
-                                }
-                            </div>
-                        }
-
-                        @if (!string.IsNullOrWhiteSpace(schedule.DriverName))
-                        {
-                            <div class="mt-2">
-                                <small class="text-muted"><i class="bi bi-person"></i> Driver:</small>
-                                <div><strong>@schedule.DriverName</strong></div>
-                            </div>
-                        }
+                        </div>
                     </div>
-                    <div class="card-footer">
+
+                    <div class="prep-card-footer">
                         @if (!hasEnteredDock)
                         {
-                            <!-- Belum konfirmasi masuk dock -->
-                            <div class="d-grid gap-2">
-                                <a asp-action="EnterDock" asp-route-id="@schedule.ScheduleId" class="btn btn-warning">
-                                    <i class="bi bi-box-arrow-in-right"></i> Konfirmasi Masuk Dock
-                                </a>
-                                <form asp-action="QuickEnterDock" asp-route-id="@schedule.ScheduleId" method="post" class="d-inline">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-outline-warning btn-sm w-100" 
-                                            onclick="return confirm('Konfirmasi masuk dock SEKARANG?')">
-                                        <i class="bi bi-lightning-fill"></i> Quick - Masuk Dock Sekarang
-                                    </button>
-                                </form>
-                            </div>
+                            <a asp-action="EnterDock" asp-route-id="@schedule.ScheduleId" class="btn-dock">
+                                <i class="bi bi-box-arrow-in-right me-1"></i> KONFIRMASI MASUK DOCK
+                            </a>
+                            
+                            <form asp-action="QuickEnterDock" asp-route-id="@schedule.ScheduleId" method="post">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="quick-status" onclick="return confirm('Masuk dock SEKARANG?')">
+                                    ⚡ QUICK - MASUK DOCK SEKARANG
+                                </button>
+                            </form>
                         }
                         else
                         {
-                            <!-- Sudah masuk dock -->
-                            <div class="d-grid">
-                                <a asp-action="Details" asp-route-id="@schedule.ScheduleId" class="btn btn-success">
-                                    <i class="bi bi-check-circle-fill"></i> Sudah Masuk Dock - Lihat Detail
-                                </a>
+                            <div class="text-center py-2">
+                                <span class="badge bg-success w-100 py-2">
+                                    <i class="bi bi-check-circle-fill me-1"></i> MASUK DOCK: @(schedule.ActualEnterDockTime?.ToString("HH:mm") ?? "-")
+                                </span>
                             </div>
                         }
                     </div>
                 </div>
-            </div>
-                }
-            </div>
-        }
-    </div>
-}
+            }
+        </div>
+    }
+</div>
 
 @section Scripts {
     <script>
-        // Pastikan form submit dengan benar dan mempertahankan nilai
-        document.addEventListener('DOMContentLoaded', function() {
-            var statusSelect = document.getElementById('statusSelect');
-            var filterForm = document.getElementById('filterForm');
-            
-            if (statusSelect && filterForm) {
-                // Pastikan onchange bekerja dengan benar
-                statusSelect.addEventListener('change', function() {
-                    // Pastikan nilai yang dipilih tersimpan
-                    var selectedValue = this.value;
-                    console.log('Status selected:', selectedValue);
-                    
-                    // Submit form
-                    filterForm.submit();
-                });
-            }
-        });
-
-        // Auto refresh setiap 60 detik
+        // Auto refresh
         setTimeout(function() {
             location.reload();
         }, 60000);
-        
-        // Highlight waktu real-time
-        setInterval(function() {
-            var now = new Date();
-            var timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-            document.title = timeStr + ' - Portal Preparation';
-        }, 1000);
     </script>
 }
-

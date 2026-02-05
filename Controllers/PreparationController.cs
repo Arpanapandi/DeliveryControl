@@ -43,17 +43,17 @@ namespace DeliveryControl.Controllers
             ViewData["DayName"] = enterDockDate.ToString("dddd, dd MMMM yyyy", new CultureInfo("id-ID"));
             ViewData["SelectedCycle"] = normalizedCycle;
 
-            // LOGIKA: Ambil schedule berdasarkan TANGGAL ENTER DOCK
-            // Schedule bisa dibuat untuk besok (H) tapi enter dock-nya hari ini (H-1)
+            // LOGIKA: Ambil SEMUA schedule aktif untuk hari ini dan besok
+            // Agar admin yang baru buat jadwal langsung muncul di Portal Preparation
             var allSchedules = await _context.DeliverySchedules
                 .Include(s => s.Customer)
-                .Where(s => s.EnterDockTime.HasValue)
                 .Where(s => s.Status != "Cancelled")
                 .ToListAsync();
             
-            // Filter berdasarkan tanggal Enter Dock (bukan ScheduledDate)
+            // Filter berdasarkan tanggal Enter Dock (jika ada) ATAU ScheduledDate
             var schedulesForToday = allSchedules
-                .Where(s => s.EnterDockTime!.Value.Date == enterDockDate.Date)
+                .Where(s => (s.EnterDockTime.HasValue && s.EnterDockTime.Value.Date == enterDockDate.Date) || 
+                            (!s.EnterDockTime.HasValue && s.ScheduledDate.Date == enterDockDate.Date))
                 .ToList();
             
             // Filter by customer jika ada
@@ -168,7 +168,7 @@ namespace DeliveryControl.Controllers
             try
             {
                 schedule.ActualEnterDockTime = enterDockTime;
-                schedule.PreparationStatus = "Completed";
+                schedule.PreparationStatus = "In Progress"; // Changed from Completed to In Progress to allow Scanning flow
                 schedule.UpdatedDate = DateTime.Now;
                 schedule.UpdatedBy = User.Identity?.Name ?? "Preparation";
                 
@@ -277,7 +277,7 @@ namespace DeliveryControl.Controllers
 
             var enterDockTime = DateTime.Now;
             schedule.ActualEnterDockTime = enterDockTime;
-            schedule.PreparationStatus = "Completed";
+            schedule.PreparationStatus = "In Progress"; // Changed from Completed to In Progress
             schedule.UpdatedDate = enterDockTime;
             schedule.UpdatedBy = User.Identity?.Name ?? "Preparation";
 

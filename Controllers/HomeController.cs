@@ -112,6 +112,9 @@ public class HomeController : Controller
         
         var delayPrepareCount = delayPrepareSchedules.Count;
         
+        // Count Prepared (Siap Kirim) - ALL ITEMS SCANNED
+        var preparedCount = activeSchedules.Count(s => s.PreparationStatus == "Prepared" && GetDisplayStatus(s) != "Completed");
+        
         // Log untuk debugging
         _logger.LogWarning("=== DASHBOARD STATISTICS ===");
         _logger.LogWarning($"Current Time: {now:yyyy-MM-dd HH:mm:ss}");
@@ -153,6 +156,7 @@ public class HomeController : Controller
         ViewBag.InProgressCount = inProgressCount;
         ViewBag.DelayPickupCount = delayPickupCount;
         ViewBag.NotArrivedCount = delayPrepareCount; // Delay Prepare count
+        ViewBag.PreparedCount = preparedCount;
         ViewBag.ShouldBeDeliveredCount = shouldBeDeliveredCount;
         
         // Gabungkan schedule hari ini + besok, dengan prioritas:
@@ -315,6 +319,8 @@ public class HomeController : Controller
                        s.EnterDockTime != null && 
                        now > s.EnterDockTime.Value &&
                        GetDisplayStatus(s) != "Completed");
+
+        var preparedCount = activeSchedules.Count(s => s.PreparationStatus == "Prepared" && GetDisplayStatus(s) != "Completed");
         
         return Json(new
         {
@@ -323,7 +329,8 @@ public class HomeController : Controller
             shouldBeDeliveredCount,
             inProgressCount,
             delayPickupCount,
-            notArrivedCount = delayPrepareCount // Delay Prepare count
+            notArrivedCount = delayPrepareCount, // Delay Prepare count
+            preparedCount
         });
     }
 
