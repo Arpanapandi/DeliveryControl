@@ -198,9 +198,22 @@
         background: var(--cyber-yellow);
         color: black;
     }
+
+    @@keyframes glow-pulse {
+        0% { box-shadow: 0 0 5px var(--cyber-yellow); border-color: var(--cyber-yellow); }
+        50% { box-shadow: 0 0 25px var(--cyber-yellow); border-color: #fff; transform: scale(1.02); }
+        100% { box-shadow: 0 0 5px var(--cyber-yellow); border-color: var(--cyber-yellow); }
+    }
+
+    .glow-active {
+        animation: glow-pulse 1.5s infinite;
+        z-index: 100;
+        border-color: var(--cyber-yellow) !important;
+    }
 </style>
 
 <div class="container-fluid py-4">
+    <!-- ... header content ... -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="text-white fw-bold mb-1"><i class="bi bi-box-seam me-2 text-warning"></i> Portal Preparation</h2>
@@ -240,7 +253,7 @@
                     @if (ViewBag.Cycles != null)
                     {
                         foreach (var cy in ViewBag.Cycles)
-                        {
+                    {
                             bool isSel = ViewData["SelectedCycle"]?.ToString() == cy;
                             <option value="@cy" selected="@isSel">@cy</option>
                         }
@@ -266,7 +279,9 @@
             {
                 var hasEnteredDock = schedule.ActualEnterDockTime.HasValue;
                 
-                <div class="prep-card @(schedule.Status == "In Progress" ? "highlight-card" : "")" id="card-@schedule.ScheduleId">
+                <div class="prep-card @(schedule.Status == "In Progress" ? "highlight-card" : "")" 
+                     id="card-@schedule.ScheduleId" 
+                     data-schedule-number="@schedule.ScheduleNumber">
                     <div class="prep-card-header">
                         <span>@schedule.ScheduleNumber</span>
                         <span class="badge-status">@schedule.Status?.ToUpper()</span>
@@ -351,8 +366,61 @@
 </div>
 
 @section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
     <script>
-        // Auto refresh
+        // SignalR Connection
+        var connection = new signalR.HubConnectionBuilder().withUrl("/deliveryHub").build();
+
+        connection.on("DeliveryUpdated", function (data) {
+            console.log("Update received:", data);
+            
+            // Normalize properties (handle both camelCase and PascalCase)
+            var action = data.action || data.Action;
+            var scheduleNum = data.scheduleNumber || data.ScheduleNumber;
+
+            // Check if action is 'preparation' (when operator inputs items)
+            if (action === "preparation" && scheduleNum) {
+                var card = document.querySelector(`.prep-card[data-schedule-number='${scheduleNum}']`);
+                
+                if (card) {
+                    // 1. Move to top
+                    var container = document.querySelector('.gallery-grid');
+                    container.prepend(card);
+                    
+                    // 2. Add glow effect
+                    card.classList.remove('glow-active'); // Reset if already active
+                    void card.offsetWidth; // Trigger reflow
+                    card.classList.add('glow-active');
+                    
+                    // 3. Scroll to view (optional, but good for visibility)
+                    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // 4. Remove glow after 30 seconds
+                    setTimeout(() => {
+                        card.classList.remove('glow-active');
+                    }, 30000);
+                    
+                    // 5. Reload page after short delay to update progress bars?
+                    // Or ideally we update progress bars via JS, but reload is safer for data consistency for now.
+                    // Delaying reload to let animation play a bit.
+                    setTimeout(() => {
+                       location.reload();
+                    }, 5000); // Reload after 5s to show updated numbers
+                } else {
+                    // New card? Reload to fetch
+                     location.reload();
+                }
+            } else {
+                // Other updates (enter dock, pickup) -> reload to show status change
+                location.reload();
+            }
+        });
+
+        connection.start().catch(function (err) {
+            return console.error(err.toString());
+        });
+
+        // Auto refresh fallback
         setTimeout(function() {
             location.reload();
         }, 60000);

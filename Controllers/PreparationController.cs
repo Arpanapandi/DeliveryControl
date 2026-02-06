@@ -168,7 +168,15 @@ namespace DeliveryControl.Controllers
             try
             {
                 schedule.ActualEnterDockTime = enterDockTime;
-                schedule.PreparationStatus = "In Progress"; // Changed from Completed to In Progress to allow Scanning flow
+                
+                // Jika Driver belum confirm arrival, otomatis set Arrival = Enter Dock
+                if (!schedule.ActualStartTime.HasValue)
+                {
+                    schedule.ActualStartTime = enterDockTime;
+                    schedule.DriverStatus = "In Progress"; 
+                }
+
+                schedule.PreparationStatus = "In Progress";
                 schedule.UpdatedDate = DateTime.Now;
                 schedule.UpdatedBy = User.Identity?.Name ?? "Preparation";
                 
@@ -277,7 +285,15 @@ namespace DeliveryControl.Controllers
 
             var enterDockTime = DateTime.Now;
             schedule.ActualEnterDockTime = enterDockTime;
-            schedule.PreparationStatus = "In Progress"; // Changed from Completed to In Progress
+            
+            // Jika Driver belum confirm arrival, otomatis set Arrival = Enter Dock
+            if (!schedule.ActualStartTime.HasValue)
+            {
+                schedule.ActualStartTime = enterDockTime;
+                schedule.DriverStatus = "In Progress";
+            }
+
+            schedule.PreparationStatus = "In Progress";
             schedule.UpdatedDate = enterDockTime;
             schedule.UpdatedBy = User.Identity?.Name ?? "Preparation";
 

@@ -398,49 +398,124 @@ namespace DeliveryControl.Controllers
             {
                 var worksheet = workbook.Worksheets.Add("Template Customer");
 
-                // Header (urutan sesuai tabel: CUST | ROUTE | CYCLE | DOCKING | PICKUP | ETD | SKID | AREA)
-                // Tanpa CUST karena auto-generate, tanpa Range karena auto-calculate
-                worksheet.Cell(1, 1).Value = "Nama Customer";
-                worksheet.Cell(1, 2).Value = "Route";
-                worksheet.Cell(1, 3).Value = "Cycle";
-                worksheet.Cell(1, 4).Value = "Docking";
-                worksheet.Cell(1, 5).Value = "Pickup";
-                worksheet.Cell(1, 6).Value = "ETD";
-                worksheet.Cell(1, 7).Value = "SKID";
-                worksheet.Cell(1, 8).Value = "Area";
+                // Header matches the application table
+                var headers = new[] { 
+                    "KODE CUSTOMER", "NAMA CUSTOMER", "ROUTE", "CYCLE", 
+                    "DOCKING", "PICKUP", "ETD", "RANGE", "SKID", "AREA" 
+                };
+
+                for (int i = 0; i < headers.Length; i++)
+                {
+                    worksheet.Cell(1, i + 1).Value = headers[i];
+                }
 
                 // Style header
-                var headerRange = worksheet.Range(1, 1, 1, 8);
+                var headerRange = worksheet.Range(1, 1, 1, headers.Length);
                 headerRange.Style.Font.Bold = true;
-                headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
+                headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#0f172a"); // Dark theme match
+                headerRange.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
                 headerRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+                headerRange.Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
 
-                // Contoh data (baris 2)
-                worksheet.Cell(2, 1).Value = "PT. ABC Indonesia";
-                worksheet.Cell(2, 2).Value = "Route A";
-                worksheet.Cell(2, 3).Value = "Cycle 1";
-                worksheet.Cell(2, 4).Value = "08:00";
-                worksheet.Cell(2, 5).Value = "10:00";
-                worksheet.Cell(2, 6).Value = "12:00";
-                worksheet.Cell(2, 7).Value = "10 SKID";
-                worksheet.Cell(2, 8).Value = "Jakarta";
+                // Example data (Row 2) - Use REAL DATA from Database
+                var sampleCustomer = _context.Customers.FirstOrDefault();
+                if (sampleCustomer != null)
+                {
+                    worksheet.Cell(2, 1).Value = sampleCustomer.CustomerCode;
+                    worksheet.Cell(2, 2).Value = sampleCustomer.CustomerName;
+                    worksheet.Cell(2, 3).Value = sampleCustomer.Route;
+                    worksheet.Cell(2, 4).Value = sampleCustomer.Cycle;
+                    worksheet.Cell(2, 5).Value = sampleCustomer.Docking;
+                    worksheet.Cell(2, 6).Value = sampleCustomer.Pickup;
+                    worksheet.Cell(2, 7).Value = sampleCustomer.ETD;
+                    // Range might be null or computed
+                    worksheet.Cell(2, 8).Value = sampleCustomer.Range ?? ""; 
+                    worksheet.Cell(2, 9).Value = sampleCustomer.SKID;
+                    worksheet.Cell(2, 10).Value = sampleCustomer.Area;
+                }
+                else
+                {
+                    // Fallback
+                    worksheet.Cell(2, 1).Value = "CUST001"; 
+                    worksheet.Cell(2, 2).Value = "PT. ORIGINAL EQUIPMENT";
+                    worksheet.Cell(2, 3).Value = "RC25";
+                    worksheet.Cell(2, 4).Value = "C1";
+                    worksheet.Cell(2, 5).Value = "21:00";
+                    worksheet.Cell(2, 6).Value = "04:00";
+                    worksheet.Cell(2, 7).Value = "04:30";
+                    worksheet.Cell(2, 8).Value = "30 Menit";
+                    worksheet.Cell(2, 9).Value = "4 - 8"; 
+                    worksheet.Cell(2, 10).Value = "A1-2"; 
+                }
 
-                // Catatan
-                worksheet.Cell(4, 1).Value = "Catatan:";
-                worksheet.Cell(5, 1).Value = "- Kode Customer akan di-generate otomatis (CUST001, CUST002, dst)";
-                worksheet.Cell(6, 1).Value = "- Range akan di-calculate otomatis dari ETD - Pickup";
-                worksheet.Cell(7, 1).Value = "- Nama Customer wajib diisi";
-                worksheet.Cell(8, 1).Value = "- Semua field lainnya boleh kosong";
-                worksheet.Cell(9, 1).Value = "- Format waktu untuk Docking, Pickup, ETD: HH:MM (contoh: 08:00, 10:30)";
+                // Instructions
+                worksheet.Cell(4, 2).Value = "CATATAN PENGISIAN UNTUK IMPORT BARU:"; 
+                worksheet.Cell(5, 2).Value = "• Gunakan template ini untuk MENAMBAH data baru.";
+                worksheet.Cell(6, 2).Value = "• KODE CUSTOMER: Boleh dikosongkan (Sistem akan generate otomatis)";
+                worksheet.Cell(7, 2).Value = "• NAMA CUSTOMER: Wajib diisi";
 
-                // Auto-fit columns
                 worksheet.Columns().AdjustToContents();
 
                 using (var stream = new MemoryStream())
                 {
                     workbook.SaveAs(stream);
                     var content = stream.ToArray();
-                    return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Template_Customer.xlsx");
+                    return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Template_Input_Customer.xlsx");
+                }
+            }
+        }
+
+        // Export All Data (For Backup/Reporting)
+        public async Task<IActionResult> ExportExcel()
+        {
+            var customers = await _context.Customers.OrderBy(c => c.CustomerCode).AsNoTracking().ToListAsync();
+
+            using (var workbook = new ClosedXML.Excel.XLWorkbook())
+            {
+                var worksheet = workbook.Worksheets.Add("Data Customer");
+
+                // Headers
+                var headers = new[] { 
+                    "KODE CUSTOMER", "NAMA CUSTOMER", "ROUTE", "CYCLE", 
+                    "DOCKING", "PICKUP", "ETD", "RANGE", "SKID", "AREA" 
+                };
+
+                for (int i = 0; i < headers.Length; i++)
+                {
+                    worksheet.Cell(1, i + 1).Value = headers[i];
+                }
+
+                // Header Style
+                var headerRange = worksheet.Range(1, 1, 1, headers.Length);
+                headerRange.Style.Font.Bold = true;
+                headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#15803d"); // Green for Export
+                headerRange.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+                headerRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+
+                // Data Rows
+                int row = 2;
+                foreach (var item in customers)
+                {
+                    worksheet.Cell(row, 1).Value = item.CustomerCode;
+                    worksheet.Cell(row, 2).Value = item.CustomerName;
+                    worksheet.Cell(row, 3).Value = item.Route;
+                    worksheet.Cell(row, 4).Value = item.Cycle;
+                    worksheet.Cell(row, 5).Value = item.Docking;
+                    worksheet.Cell(row, 6).Value = item.Pickup;
+                    worksheet.Cell(row, 7).Value = item.ETD;
+                    worksheet.Cell(row, 8).Value = item.Range;
+                    worksheet.Cell(row, 9).Value = item.SKID;
+                    worksheet.Cell(row, 10).Value = item.Area;
+                    row++;
+                }
+
+                worksheet.Columns().AdjustToContents();
+
+                using (var stream = new MemoryStream())
+                {
+                    workbook.SaveAs(stream);
+                    var content = stream.ToArray();
+                    return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Data_Customer_{DateTime.Now:yyyyMMdd}.xlsx");
                 }
             }
         }
@@ -499,26 +574,29 @@ namespace DeliveryControl.Controllers
                         {
                             try
                             {
-                                // Template urutan: Nama Customer | Route | Cycle | Docking | Pickup | ETD | SKID | Area
-                                // Range akan di-calculate otomatis
-                                // Column 1: CustomerName
-                                // Column 2: Route  
-                                // Column 3: Cycle
-                                // Column 4: Docking
-                                // Column 5: Pickup
-                                // Column 6: ETD
-                                // Column 7: SKID
-                                // Column 8: Area
-                                var customerName = row.Cell(1).GetString().Trim();
-                                var route = row.Cell(2).GetString().Trim();
-                                var cycle = row.Cell(3).GetString().Trim();
-                                var docking = row.Cell(4).GetString().Trim();
-                                var pickup = row.Cell(5).GetString().Trim();
-                                var etd = row.Cell(6).GetString().Trim();
-                                var skidStr = row.Cell(7).GetString().Trim();
-                                var area = row.Cell(8).GetString().Trim();
+                                // Updated Mapping (Matches User Request):
+                                // 1: KODE (Ignored/System Gen)
+                                // 2: NAMA CUSTOMER
+                                // 3: ROUTE
+                                // 4: CYCLE
+                                // 5: DOCKING
+                                // 6: PICKUP
+                                // 7: ETD
+                                // 8: RANGE (Ignored/Auto Calc)
+                                // 9: SKID
+                                // 10: AREA
 
-                                // Skip baris kosong atau baris catatan
+                                var customerName = row.Cell(2).GetString().Trim();
+                                var route = row.Cell(3).GetString().Trim();
+                                var cycle = row.Cell(4).GetString().Trim();
+                                var docking = row.Cell(5).GetString().Trim();
+                                var pickup = row.Cell(6).GetString().Trim();
+                                var etd = row.Cell(7).GetString().Trim();
+                                // Col 8 is Range
+                                var skidStr = row.Cell(9).GetString().Trim();
+                                var area = row.Cell(10).GetString().Trim();
+
+                                // Skip invalid rows
                                 if (string.IsNullOrWhiteSpace(customerName) || 
                                     customerName.StartsWith("Catatan", StringComparison.OrdinalIgnoreCase) ||
                                     customerName.StartsWith("-", StringComparison.OrdinalIgnoreCase))
@@ -526,15 +604,14 @@ namespace DeliveryControl.Controllers
                                     continue;
                                 }
 
-                                // Validasi required fields
                                 if (customerName.Length < 3)
                                 {
-                                    errorMessages.Add($"Baris {row.RowNumber()}: Nama customer terlalu pendek (min 3 karakter)");
+                                    errorMessages.Add($"Baris {row.RowNumber()}: Nama customer '{customerName}' terlalu pendek.");
                                     errorCount++;
                                     continue;
                                 }
 
-                                // Generate CustomerCode dengan increment
+                                // Generate CustomerCode
                                 var customerCode = $"CUST{currentNumber:D3}";
                                 currentNumber++;
 
@@ -572,19 +649,18 @@ namespace DeliveryControl.Controllers
                 {
                     _context.Customers.AddRange(customers);
                     await _context.SaveChangesAsync();
-                    TempData["SuccessMessage"] = $"✅ Berhasil import {successCount} customer dengan kode otomatis!";
+                    TempData["SuccessMessage"] = $"✅ Berhasil import {successCount} customer baru!";
                 }
                 else
                 {
-                    TempData["ErrorMessage"] = "Tidak ada data valid untuk diimport. Pastikan file Excel sudah diisi dengan benar.";
+                     if (errorCount == 0 && successCount == 0)
+                        TempData["ErrorMessage"] = "File kosong atau tidak ada data yang valid.";
                 }
 
                 if (errorCount > 0)
                 {
                     var errorDetail = string.Join("<br/>", errorMessages.Take(10));
-                    TempData["ErrorMessage"] = TempData["ErrorMessage"] != null 
-                        ? TempData["ErrorMessage"] + $"<br/><br/>{errorCount} baris gagal: <br/>{errorDetail}"
-                        : $"{errorCount} baris gagal diimport: <br/>{errorDetail}";
+                    TempData["WarningMessage"] = $"{errorCount} data gagal diimport.<br/><small>{errorDetail}</small>";
                 }
 
                 return RedirectToAction(nameof(Index));

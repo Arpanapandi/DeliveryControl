@@ -12,15 +12,18 @@ namespace DeliveryControl.Controllers
         private readonly ApplicationDbContext _context;
         private readonly IHubContext<StockHub> _stockHubContext;
         private readonly IHubContext<DeliveryHub> _deliveryHubContext;
+        private readonly DeliveryControl.Services.ActivityLogService _logService;
 
         public PreparationWorkflowController(
             ApplicationDbContext context, 
             IHubContext<StockHub> stockHubContext,
-            IHubContext<DeliveryHub> deliveryHubContext)
+            IHubContext<DeliveryHub> deliveryHubContext,
+             DeliveryControl.Services.ActivityLogService logService)
         {
             _context = context;
             _stockHubContext = stockHubContext;
             _deliveryHubContext = deliveryHubContext;
+            _logService = logService;
         }
 
         public async Task<IActionResult> Index(DateTime? filterDate)
@@ -137,17 +140,24 @@ namespace DeliveryControl.Controllers
             
             if (!labelUpper.Contains(vin) && (string.IsNullOrEmpty(partNo) || !labelUpper.Contains(partNo)))
             {
-                return Json(new { 
-                    success = true, 
-                    found = false, 
-                    step = "label",
-                    item = new { 
-                        itemName = targetItem.ItemName, 
-                        vin = targetItem.VIN, 
-                        customerPartNumber = targetItem.CustomerPartNumber 
-                    },
-                    message = "Label tidak sesuai dengan Tag produk!" 
-                });
+                // Fallback: Cek apakah kombinasi Tag & Label ini pernah di-scan di Pulling (Valid secara data historis)
+                bool existsInPulling = await _context.PullingRecords
+                    .AnyAsync(p => p.Tag == tag && p.Label == label);
+
+                if (!existsInPulling)
+                {
+                    return Json(new { 
+                        success = true, 
+                        found = false, 
+                        step = "label",
+                        item = new { 
+                            itemName = targetItem.ItemName, 
+                            vin = targetItem.VIN, 
+                            customerPartNumber = targetItem.CustomerPartNumber 
+                        },
+                        message = "Label tidak sesuai dengan Tag produk dan tidak ditemukan di stok!" 
+                    });
+                }
             }
         }
 
@@ -297,38 +307,76 @@ namespace DeliveryControl.Controllers
             return Json(new { success = false, message = $"STOK HABIS! Barang dengan Label ini sudah pernah dipakai atau belum di-Pulling ke rak." });
         }
 
-        // Double check label consistency
-        string partNo = (item.CustomerPartNumber ?? "").ToUpper();
-        string vin = (item.VIN ?? "").ToUpper();
-        string labelUpper = record.Label.ToUpper();
-        bool labelOk = labelUpper.Contains(vin) || (!string.IsNullOrEmpty(partNo) && labelUpper.Contains(partNo));
+        // Strict label string check removed.
+        // We rely on stockBalance check above to ensure the Tag+Label pair exists in inventory.
+        // bool labelOk = labelUpper.Contains(vin) || (!string.IsNullOrEmpty(partNo) && labelUpper.Contains(partNo));
         
-        if (!labelOk)
-        {
-            return Json(new { success = false, message = "Label tidak sesuai dengan produk internal!" });
-        }
+        // if (!labelOk)
+        // {
+        //    return Json(new { success = false, message = "Label tidak sesuai dengan produk internal!" });
+        // }
 
         record.Plant = item.Plant ?? "-";
         record.ScheduleId = schedule.ScheduleId;
 
                 // 3. Update Stats
-                schedule.TotalActualQuantity += 1;
+                // LOGIKA BARU: 1x Input = 1 Kanban (Box)
+                // Jadi Actual Qty bertambah sebesar QPC (Qty per Lot), bukan bertambah 1
+                int qpc = (item.QtyLot != null && item.QtyLot > 0) ? item.QtyLot.Value : 1;
+                
+                schedule.TotalActualQuantity += qpc;
                 schedule.Status = "In Progress";
                 schedule.PreparationStatus = "In Progress";
                 schedule.UpdatedDate = DateTime.Now;
 
                 if (dItem != null)
                 {
-                    dItem.ActualQuantity = (dItem.ActualQuantity ?? 0) + 1;
+                    dItem.ActualQuantity = (dItem.ActualQuantity ?? 0) + qpc;
                     if (dItem.ActualQuantity >= dItem.Quantity) dItem.IsCompleted = true;
                 }
 
                 // Check if ALL items in this schedule are completed
                 bool allDone = schedule.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity);
+
                 if (allDone)
                 {
                     schedule.PreparationStatus = "Prepared";
-                    schedule.Status = "In Progress"; // Keep general status In Progress until driver completes
+                    schedule.Status = "In Progress"; 
+
+                    // --- LOGIKA AUTO-CONFIRM ENTER DOCK ---
+                    // Jika preparation selesai, otomatis set status truk sudah masuk dock
+                    if (!schedule.ActualEnterDockTime.HasValue)
+                    {
+                        var now = DateTime.Now;
+                        schedule.ActualEnterDockTime = now;
+                        
+                        // Jika driver belum confirm arrival, otomatis set juga
+                        if (!schedule.ActualStartTime.HasValue)
+                        {
+                            schedule.ActualStartTime = now;
+                            schedule.DriverStatus = "In Progress";
+                        }
+                        
+                        schedule.UpdatedBy = "Auto-System";
+
+                        // Log Activity
+                        await _logService.LogConfirm(
+                            "System",
+                            schedule.ScheduleNumber,
+                            schedule.ScheduleId,
+                            $"Auto-Confirm: Preparation Selesai -> Otomatis Set Masuk Dock pada {now:HH:mm}",
+                            "System"
+                        );
+
+                        // Broadcast EXTRA notification for Enter Dock
+                        await _deliveryHubContext.Clients.All.SendAsync("DeliveryUpdated", new { 
+                            Action = "enterDock", 
+                            ScheduleNumber = schedule.ScheduleNumber,
+                            Message = $"[AUTO] Persiapan Selesai! Truk masuk dock untuk {schedule.Customer?.CustomerName}",
+                            Timestamp = now
+                        });
+                    }
+                    // ---------------------------------------
                 }
 
                 _context.PreparationRecords.Add(record);

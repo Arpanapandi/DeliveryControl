@@ -44,6 +44,7 @@
                         <th class="text-center">QTY/LOT</th>
                         <th class="text-center">QTY (PCS)</th>
                         <th class="text-center">KANBAN</th>
+                        <th class="text-center">STATUS</th>
                         <th class="text-center">ACTION</th>
                     </tr>
                 </thead>
@@ -68,7 +69,7 @@
                                         }
                                         else
                                         {
-                                            <small class="text-secondary opacity-75">Translate VIN: @item.Item.VIN</small>
+                                            <small class="text-secondary opacity-75">@item.Item.VIN</small>
                                         }
                                     </div>
                                 </td>
@@ -85,6 +86,25 @@
                                         }
                                         @kanbanActual.ToString("0.##") / @kanbanTarget
                                     </span>
+                                </td>
+                                <td class="text-center">
+                                    @{
+                                        var pct = (item.Quantity > 0) ? ((double)(item.ActualQuantity ?? 0) / (double)item.Quantity * 100) : 0;
+                                        string statusBadgeClass = "bg-secondary";
+                                        string statusText = "Waiting";
+
+                                        if (item.ActualQuantity >= item.Quantity)
+                                        {
+                                            statusBadgeClass = "bg-success";
+                                            statusText = "Completed";
+                                        }
+                                        else if (item.ActualQuantity > 0)
+                                        {
+                                            statusBadgeClass = "bg-warning text-dark";
+                                            statusText = "In Progress";
+                                        }
+                                    }
+                                    <span class="badge @statusBadgeClass">@statusText</span>
                                 </td>
                                 <td class="text-center">
                                     <div class="d-flex justify-content-center gap-1">
@@ -139,7 +159,7 @@
 </div>
 
 @section Scripts {
-    <script src="~/lib/microsoft/signalr/dist/browser/signalr.js"></script>
+
     <script>
         $(document).ready(function () {
             const connection = new signalR.HubConnectionBuilder()

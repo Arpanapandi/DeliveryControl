@@ -17,8 +17,11 @@
         <button type="button" class="btn btn-danger me-2" id="bulkDeleteBtn" style="display:none;" onclick="confirmBulkDelete()">
             <i class="bi bi-trash"></i> Hapus Terpilih (<span id="selectedCount">0</span>)
         </button>
+        <a asp-action="ExportExcel" class="btn btn-warning me-2">
+            <i class="bi bi-file-earmark-excel"></i> Export Semua
+        </a>
         <a asp-action="DownloadTemplate" class="btn btn-success me-2">
-            <i class="bi bi-download"></i> Template Excel
+            <i class="bi bi-download"></i> Template Import
         </a>
         <a asp-action="Create" class="btn btn-primary">
             <i class="bi bi-plus-circle"></i> Tambah Customer

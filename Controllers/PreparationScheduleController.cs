@@ -290,8 +290,12 @@ namespace DeliveryControl.Controllers
             {
                 var worksheet = workbook.Worksheets.Add("Template Schedule");
 
-                // Headers
-                var headers = new[] { "NO", "CUST", "ROUTE", "CYCLE", "ENTER DOCK", "PICKUP", "ETD", "SKID", "AREA", "QTY TARGET" };
+                // Headers sesuai gambar User
+                var headers = new[] { 
+                    "MANIFESTING", "DOCK", "KODE CUSTOMER", "NAMA CUSTOMER", 
+                    "ROUTE", "CYCLE", "ITEM / PART NO", "QTY/LOT", "QTY (PCS)", "KANBAN" 
+                };
+
                 for (int i = 0; i < headers.Length; i++)
                 {
                     worksheet.Cell(1, i + 1).Value = headers[i];
@@ -304,20 +308,30 @@ namespace DeliveryControl.Controllers
                 headerRange.Style.Font.FontColor = XLColor.White;
                 headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-                // Example data
-                worksheet.Cell(2, 1).Value = 1;
-                worksheet.Cell(2, 2).Value = "C001";
-                worksheet.Cell(2, 3).Value = "A-1";
-                worksheet.Cell(2, 4).Value = "Daily";
-                worksheet.Cell(2, 5).Value = "08:00";
-                worksheet.Cell(2, 6).Value = "10:00";
-                worksheet.Cell(2, 7).Value = "12:00";
-                worksheet.Cell(2, 8).Value = "10 Skid";
-                worksheet.Cell(2, 9).Value = "Area 1";
-                worksheet.Cell(2, 10).Value = 100;
+                // Example data (Row 2) - Use REAL DATA from Items/Customers if available
+                var sampleItem = _context.Items.Where(i => !string.IsNullOrEmpty(i.CustomerPartNumber)).FirstOrDefault();
+                var sampleCust = _context.Customers.FirstOrDefault();
 
+                worksheet.Cell(2, 1).Value = "MAN-001"; // Manifesting Example
+                worksheet.Cell(2, 2).Value = sampleCust?.Docking ?? "08:00"; // Dock
+                worksheet.Cell(2, 3).Value = sampleCust?.CustomerCode ?? "CUST001"; // Kode Customer
+                worksheet.Cell(2, 4).Value = sampleCust?.CustomerName ?? "PT. CONTOH"; // Nama Customer
+                worksheet.Cell(2, 5).Value = sampleCust?.Route ?? "R1"; // Route
+                worksheet.Cell(2, 6).Value = sampleCust?.Cycle ?? "C1"; // Cycle
+                worksheet.Cell(2, 7).Value = sampleItem?.CustomerPartNumber ?? "PART-001"; // Item / Part No
+                worksheet.Cell(2, 8).Value = sampleItem?.QtyLot?.ToString() ?? "10"; // Qty/Lot
+                worksheet.Cell(2, 9).Value = 500; // Qty (Pcs)
+                worksheet.Cell(2, 10).Value = sampleItem?.KanbanType ?? "E-KANBAN"; // Kanban
+
+                // Border
                 headerRange.RangeUsed().Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
                 worksheet.Columns().AdjustToContents();
+
+                // Instructions
+                worksheet.Cell(4, 2).Value = "CATATAN PENGISIAN:";
+                worksheet.Cell(5, 2).Value = "• Gunakan format ini untuk Upload Jadwal.";
+                worksheet.Cell(6, 2).Value = "• Kolom KODE CUSTOMER dan ITEM / PART NO Wajib diisi.";
+                worksheet.Cell(7, 2).Value = "• Data ETD, PICKUP, SKID, AREA akan diambil otomatis dari Master Customer.";
 
                 using (var stream = new MemoryStream())
                 {
@@ -351,8 +365,31 @@ namespace DeliveryControl.Controllers
 
             try
             {
-                // Load Customers for Lookup
+                // 1. Load Customers for Lookup
                 var customers = await _context.Customers.ToDictionaryAsync(c => c.CustomerCode.Trim().ToUpper(), c => c);
+
+                // 2. Load Items for "Translation" (Manifest -> VIN)
+                var allItems = await _context.Items.Where(i => i.IsActive).ToListAsync();
+                var itemMap = new Dictionary<string, Item>();
+
+                foreach (var item in allItems)
+                {
+                    if (!string.IsNullOrWhiteSpace(item.CustomerPartNumber))
+                    {
+                        var key = item.CustomerPartNumber.Trim().ToUpper();
+                        if (!itemMap.ContainsKey(key)) itemMap[key] = item;
+                    }
+                    if (!string.IsNullOrWhiteSpace(item.VIN))
+                    {
+                        var keyVin = item.VIN.Trim().ToUpper();
+                        if (!itemMap.ContainsKey(keyVin)) itemMap[keyVin] = item;
+                    }
+                    if (!string.IsNullOrWhiteSpace(item.ItemCode))
+                    {
+                        var keyCode = item.ItemCode.Trim().ToUpper();
+                        if (!itemMap.ContainsKey(keyCode)) itemMap[keyCode] = item;
+                    }
+                }
 
                 using (var stream = new MemoryStream())
                 {
@@ -363,7 +400,11 @@ namespace DeliveryControl.Controllers
 
                         // --- Robust Header Detection ---
                         var headerRow = worksheet.Row(1);
-                        var targetKeywords = new[] { "CUST", "ROUTE", "CYCLE", "ETD", "SKID", "PICKUP", "DOCK" };
+                        // Updated keywords for new template
+                         var targetKeywords = new[] { 
+                            "MANIFESTING", "DOCK", "KODE", "CUSTOMER", "ROUTE", 
+                            "CYCLE", "ITEM", "PART", "QTY", "KANBAN" 
+                        };
 
                         for (int r = 1; r <= 30; r++) // Scan first 30 rows
                         {
@@ -374,7 +415,7 @@ namespace DeliveryControl.Controllers
                                 var val = NormalizeHeader(GetSafeString(testRow.Cell(c)));
                                 foreach (var k in targetKeywords) if (val.Contains(k)) currentScore++;
                             }
-                             // Threshold: 3 keywords match
+                        
                             if (currentScore >= 3)
                             {
                                 headerRow = testRow;
@@ -402,23 +443,31 @@ namespace DeliveryControl.Controllers
                             return -1;
                         }
 
-                        // Column Mapping
+                        // Column Mapping (Updated to match Image)
                         var colMap = new
                         {
-                            Cust = FindCol("CUST", "CUSTOMER"),
-                            Route = FindCol("ROUTE", "JALUR"),
-                            Cycle = FindCol("CYCLE"),
-                            Dock = FindCol("ENTERDOCK", "DOCK", "DOCKING"),
+                            Manifesting = FindCol("MANIFESTING", "MANIFEST"), // New Header
+                            Dock = FindCol("DOCK", "DOCKING", "ENTER DOCK"),
+                            Cust = FindCol("KODE CUSTOMER", "KODE", "CUST"),
+                            CustName = FindCol("NAMA CUSTOMER", "NAMA"),
+                            Route = FindCol("ROUTE", "RUTE"),
+                            Cycle = FindCol("CYCLE", "SIKLUS"),
+                            ItemPartNo = FindCol("ITEM / PART NO", "ITEM", "PART NO", "PART"),
+                            QtyLot = FindCol("QTY/LOT", "LOT"),
+                            QtyPcs = FindCol("QTY (PCS)", "QTY PCS", "QTY"),
+                            Kanban = FindCol("KANBAN"),
+                            
+                            // Legacy/Hidden Columns (Fallback)
                             Pickup = FindCol("PICKUP", "PENJEMPUTAN"),
                             Etd = FindCol("ETD"),
                             Skid = FindCol("SKID", "PALLET"),
                             Area = FindCol("AREA"),
-                            Target = FindCol("QTYTARGET", "TARGET", "QTY")
+                            Target = FindCol("QTYTARGET", "TARGET", "QTY_TOTAL") // Target total schedule
                         };
 
                         if (colMap.Cust == -1)
                         {
-                            TempData["ErrorMessage"] = "Header 'CUST' tidak ditemukan. Pastikan file Excel sesuai template.";
+                            TempData["ErrorMessage"] = "Header 'KODE CUSTOMER' tidak ditemukan. Pastikan file Excel sesuai template.";
                             return RedirectToAction(nameof(Index));
                         }
 
@@ -447,14 +496,62 @@ namespace DeliveryControl.Controllers
                                 string? route = colMap.Route != -1 ? GetSafeString(row.Cell(colMap.Route)) : customer.Route;
                                 string? cycle = colMap.Cycle != -1 ? GetSafeString(row.Cell(colMap.Cycle)) : customer.Cycle;
                                 string? area = colMap.Area != -1 ? GetSafeString(row.Cell(colMap.Area)) : customer.Area;
-                                string? skid = colMap.Skid != -1 ? GetSafeString(row.Cell(colMap.Skid)) : customer.Docking; // SKID sometimes mapped? 
+                                string? skid = colMap.Skid != -1 ? GetSafeString(row.Cell(colMap.Skid)) : customer.SKID; // Use SKID prop
 
-                                // Time Parsing with Fallback to Customer Master
+                                // Times (Fallback to Master if not in Excel)
                                 var enterDockTime = colMap.Dock != -1 ? GetSafeTime(row.Cell(colMap.Dock), scheduledDate) : ParseTimeToDateTime(customer.Docking, scheduledDate);
                                 var pickupTime = colMap.Pickup != -1 ? GetSafeTime(row.Cell(colMap.Pickup), scheduledDate) : ParseTimeToDateTime(customer.Pickup, scheduledDate);
                                 var etdTime = colMap.Etd != -1 ? GetSafeTime(row.Cell(colMap.Etd), scheduledDate) : ParseTimeToDateTime(customer.ETD, scheduledDate);
 
-                                int targetQty = colMap.Target != -1 ? GetSafeInt(row.Cell(colMap.Target)) : 0;
+                                // Mapping Item Decision: MANIFESTING is Key!
+                                DeliveryItem? dItem = null;
+                                int qtyPcs = colMap.QtyPcs != -1 ? GetSafeInt(row.Cell(colMap.QtyPcs)) : 0;
+                                string itemSearchKey = "";
+                                string keySource = "";
+
+                                // Priority 1: Check MANIFESTING column
+                                if (colMap.Manifesting != -1)
+                                {
+                                    string val = GetSafeString(row.Cell(colMap.Manifesting)).Trim().ToUpper();
+                                    if (!string.IsNullOrEmpty(val))
+                                    {
+                                        itemSearchKey = val;
+                                        keySource = "Manifesting";
+                                    }
+                                }
+
+                                // Priority 2: Check ITEM / PART NO (Fallback)
+                                if (string.IsNullOrEmpty(itemSearchKey) && colMap.ItemPartNo != -1)
+                                {
+                                    string val = GetSafeString(row.Cell(colMap.ItemPartNo)).Trim().ToUpper();
+                                    if (!string.IsNullOrEmpty(val))
+                                    {
+                                        itemSearchKey = val;
+                                        keySource = "Item/PartNo";
+                                    }
+                                }
+
+                                if (!string.IsNullOrEmpty(itemSearchKey))
+                                {
+                                    if (itemMap.TryGetValue(itemSearchKey, out var matchedItem))
+                                    {
+                                        dItem = new DeliveryItem
+                                        {
+                                            ItemId = matchedItem.ItemId,
+                                            Quantity = qtyPcs,
+                                            ActualQuantity = 0,
+                                            CreatedDate = DateTime.Now
+                                        };
+                                    }
+                                    else
+                                    {
+                                         // Log warning if item not found
+                                         // If key came from Manifesting, it's critical
+                                         // We can add a note to the schedule
+                                    }
+                                }
+
+                                int targetQty = colMap.Target != -1 ? GetSafeInt(row.Cell(colMap.Target)) : qtyPcs; // Fallback to item qty if total not specified
 
                                 // Adjust Days for Overnight logic
                                 if (enterDockTime.HasValue && pickupTime.HasValue && enterDockTime.Value.TimeOfDay > pickupTime.Value.TimeOfDay)
@@ -486,6 +583,17 @@ namespace DeliveryControl.Controllers
                                     CreatedDate = DateTime.Now,
                                     CreatedBy = User.Identity?.Name ?? "ImportExcel"
                                 };
+                                
+                                if (dItem != null)
+                                {
+                                    schedule.DeliveryItems.Add(dItem);
+                                }
+                                else if (colMap.ItemPartNo != -1 && qtyPcs > 0)
+                                {
+                                     // Case: Item existed in Excel but not found in DB
+                                     string partVal = GetSafeString(row.Cell(colMap.ItemPartNo));
+                                     schedule.Notes = $"[Warning] Part '{partVal}' tidak dikenal sistem.";
+                                }
 
                                 schedules.Add(schedule);
                                 successCount++;
@@ -501,14 +609,13 @@ namespace DeliveryControl.Controllers
                         {
                             _context.DeliverySchedules.AddRange(schedules);
                             await _context.SaveChangesAsync();
-                            // Optional: SignalR notification
                         }
                     }
                 }
 
                 if (successCount > 0)
                 {
-                    TempData["SuccessMessage"] = $"✅ Berhasil import {successCount} schedule!";
+                    TempData["SuccessMessage"] = $"✅ Berhasil import {successCount} schedule dengan Items!";
                 }
                 
                 if (errorCount > 0)

@@ -202,11 +202,7 @@
             <h2 class="text-white fw-bold mb-1"><i class="bi bi-upc-scan me-2 text-warning"></i> Input Progress Preparation</h2>
             <p class="text-secondary mb-0">Scan VIN (Tag), Label, dan Kanban untuk update progres.</p>
         </div>
-        <div class="text-end">
-            <button class="btn btn-outline-warning btn-sm" onclick="location.reload()">
-                <i class="bi bi-arrow-clockwise me-1"></i> Refresh Data
-            </button>
-        </div>
+
     </div>
 
     <!-- Scanner Section -->
@@ -270,71 +266,7 @@
         </div>
     </div>
 
-    <!-- MAIN PROGRESS TABLE -->
-    <div class="progress-table-container shadow">
-        <div class="table-responsive">
-            <table class="cyber-table">
-                <thead>
-                    <tr>
-                        <th style="width: 15%">Manifesting / Customer</th>
-                        <th style="width: 10%">Route/Cycle</th>
-                        <th style="width: 25%">Item / Part No</th>
-                        <th class="text-center" style="width: 15%">Qty (PCS)</th>
-                        <th class="text-center" style="width: 10%">Kanban</th>
-                        <th style="width: 20%">Progress</th>
-                        <th class="text-center" style="width: 10%">Status</th>
-                    </tr>
-                </thead>
-                <tbody id="mainProgressBody">
-                    @foreach (var schedule in Model.OrderByDescending(s => s.Status == "In Progress").ThenBy(s => s.ScheduledDate))
-                    {
-                        foreach (var item in schedule.DeliveryItems)
-                        {
-                            var percent = (item.Quantity > 0) ? ((double)(item.ActualQuantity ?? 0) / (double)item.Quantity * 100) : 0;
-                            <tr class="item-row" data-schedule-id="@schedule.ScheduleId" data-item-vin="@item.Item?.VIN" id="row-@schedule.ScheduleId-@item.ItemId">
-                                <td>
-                                    <div class="fw-bold text-info">@schedule.ScheduleNumber</div>
-                                    <div class="small text-white-50">@(schedule.Customer?.CustomerName ?? "-")</div>
-                                </td>
-                                <td>
-                                    <div class="small fw-bold">R: @schedule.Route</div>
-                                    <div class="small text-white-50">C: @schedule.Cycle</div>
-                                </td>
-                                <td>
-                                    <div class="fw-bold">@item.Item?.ItemName</div>
-                                    <div class="small text-warning">@(item.Item?.CustomerPartNumber ?? item.Item?.VIN)</div>
-                                </td>
-                                <td class="text-center">
-                                    <div class="fw-bold">@item.Quantity.ToString("G29") <small class="text-secondary">pcs</small></div>
-                                </td>
-                                <td class="text-center fw-bold text-info">
-                                    @{
-                                        var qpcW = item.Item?.QtyLot ?? 1;
-                                        var kanbanTarget = Math.Ceiling((double)item.Quantity / (qpcW > 0 ? qpcW : 1));
-                                        var kanbanActual = (double)(item.ActualQuantity ?? 0) / (qpcW > 0 ? qpcW : 1);
-                                    }
-                                    @kanbanActual.ToString("0.##") / @kanbanTarget
-                                </td>
-                                <td>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <div class="progress progress-mini flex-grow-1">
-                                            <div class="progress-bar @(percent >= 100 ? "bg-success" : "bg-info")" style="width: @percent%"></div>
-                                        </div>
-                                        <small class="fw-bold">@Math.Round(percent)%</small>
-                                    </div>
-                                </td>
-                                <td class="text-center">
-                                    <span class="status-badge @(schedule.Status == "In Progress" ? "bg-info text-dark" : "bg-secondary text-white")">
-                                        @schedule.Status
-                                    </span>
-                                </td>
-                            </tr>
-                        }
-                    }
-                </tbody>
-            </table>
-        </div>
-    </div>
+
 </div>
 
 <!-- Modal Scanner -->
@@ -363,6 +295,7 @@
 
 @section Scripts {
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
     <script>
         $(document).ready(function () {
             let html5QrCode = null;

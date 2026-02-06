@@ -196,9 +196,10 @@ public class HomeController : Controller
             // Sudah selesai (ada ActualEndTime)
             return "Completed";
         }
-        else if (schedule.ActualStartTime.HasValue)
+        else if (schedule.ActualStartTime.HasValue || schedule.ActualEnterDockTime.HasValue)
         {
-            // Sedang berjalan (ada ActualStartTime tapi belum ada ActualEndTime)
+            // Sedang berjalan (ada ActualStartTime ATAU ActualEnterDockTime, tapi belum selesai)
+            // Enter Dock juga dianggap In Progress (barang sedang loading)
             return "In Progress";
         }
         else
@@ -676,4 +677,83 @@ public class HomeController : Controller
             ? today.AddDays(1)
             : today;
     }
+    // ============================================
+    // SEED TEST DATA (TEMPORARY FOR TESTING)
+    // ============================================
+    public async Task<IActionResult> SeedTestData()
+    {
+        var now = DateTime.Now;
+        var today = DateTime.Today;
+
+        // 1. Find or Create Customer TMMIN
+        var customer = await _context.Customers.FirstOrDefaultAsync(c => c.CustomerName.Contains("TMMIN"));
+        if (customer == null)
+        {
+            customer = new Customer
+            {
+                CustomerCode = "TMMIN",
+                CustomerName = "TMMIN",
+                CreatedDate = now,
+                IsActive = true
+            };
+            _context.Customers.Add(customer);
+            await _context.SaveChangesAsync();
+        }
+
+        // 2. Find or Create Item TA0840
+        var item = await _context.Items.FirstOrDefaultAsync(i => i.VIN == "TA0840");
+        if (item == null)
+        {
+            item = new Item
+            {
+                ItemCode = "TA0840",
+                ItemName = "Part TA0840",
+                Customer = customer.CustomerName, // Mapping to CUST string
+                VIN = "TA0840",
+                QtyLot = 25, // QPC
+                CreatedDate = now
+            };
+            _context.Items.Add(item);
+            await _context.SaveChangesAsync();
+        }
+
+        // 3. Create Schedule for Today
+        var scheduleNumber = $"TEST-TMMIN-{now:yyyyMMdd}-{new Random().Next(100, 999)}";
+        var enterDockTime = now.AddHours(1); // 1 hour from now
+        var pickupTime = now.AddHours(3);
+
+        var schedule = new DeliverySchedule
+        {
+            ScheduleNumber = scheduleNumber,
+            CustomerId = customer.CustomerId,
+            ScheduledDate = today,
+            EnterDockTime = enterDockTime,
+            PickupTime = pickupTime,
+            Route = "ROUT-TMMIN",
+            Status = "Scheduled",
+            TotalTargetQuantity = 4, // 4 items
+            TotalActualQuantity = 0,
+            CreatedDate = now,
+            CreatedBy = "SeedTestData"
+        };
+        _context.DeliverySchedules.Add(schedule);
+        await _context.SaveChangesAsync();
+
+        // 4. Add Items to Schedule
+        var deliveryItem = new DeliveryItem
+        {
+            ScheduleId = schedule.ScheduleId,
+            ItemId = item.ItemId,
+            Quantity = 4,
+            ActualQuantity = 0,
+            IsCompleted = false,
+            CreatedDate = now
+        };
+        _context.DeliveryItems.Add(deliveryItem);
+        await _context.SaveChangesAsync();
+
+        TempData["SuccessMessage"] = $"✅ Test Data Created: Schedule {scheduleNumber} for Customer {customer.CustomerName} with Item {item.VIN}.";
+        return RedirectToAction("Index");
+    }
 }
+
