@@ -40,7 +40,7 @@
                         <th>NAMA CUSTOMER</th>
                         <th>ROUTE</th>
                         <th>CYCLE</th>
-                        <th>ITEM / PART NO</th>
+                        <th>PART NO / VIN</th>
                         <th class="text-center">QTY/LOT</th>
                         <th class="text-center">QTY (PCS)</th>
                         <th class="text-center">KANBAN</th>
@@ -62,14 +62,14 @@
                                 <td>@(schedule.Cycle ?? "-")</td>
                                 <td>
                                     <div class="d-flex flex-column">
-                                        <span class="text-info fw-bold">@item.Item.VIN</span>
-                                        @if (!string.IsNullOrEmpty(@item.Item.CustomerPartNumber))
+                                        @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
                                         {
-                                            <small class="text-white-50">Part No: @item.Item.CustomerPartNumber</small>
+                                            <span class="text-info fw-bold fs-6">@item.Item.CustomerPartNumber</span>
+                                            <small class="text-secondary opacity-75" style="font-size: 0.75rem;">VIN: @item.Item.VIN</small>
                                         }
                                         else
                                         {
-                                            <small class="text-secondary opacity-75">@item.Item.VIN</small>
+                                            <span class="text-info fw-bold">@item.Item?.VIN</span>
                                         }
                                     </div>
                                 </td>
@@ -101,7 +101,7 @@
                                         else if (item.ActualQuantity > 0)
                                         {
                                             statusBadgeClass = "bg-warning text-dark";
-                                            statusText = "In Progress";
+                                            statusText = "Preparing";
                                         }
                                     }
                                     <span class="badge @statusBadgeClass">@statusText</span>

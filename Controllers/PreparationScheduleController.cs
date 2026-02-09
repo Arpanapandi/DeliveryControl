@@ -83,7 +83,7 @@ namespace DeliveryControl.Controllers
         {
             if (ModelState.IsValid)
             {
-                // Auto-generate schedule number if empty
+                // Auto-generate schedule number ONLY if empty (allows manual Manifest input)
                 if (string.IsNullOrEmpty(deliverySchedule.ScheduleNumber))
                 {
                     int sequence = await GetNextSequenceInternal(deliverySchedule.ScheduledDate);
@@ -293,7 +293,7 @@ namespace DeliveryControl.Controllers
                 // Headers sesuai gambar User
                 var headers = new[] { 
                     "MANIFESTING", "DOCK", "KODE CUSTOMER", "NAMA CUSTOMER", 
-                    "ROUTE", "CYCLE", "ITEM / PART NO", "QTY/LOT", "QTY (PCS)", "KANBAN" 
+                    "ROUTE", "CYCLE", "PART NO / VIN", "QTY/LOT", "QTY (PCS)", "KANBAN" 
                 };
 
                 for (int i = 0; i < headers.Length; i++)
@@ -330,7 +330,7 @@ namespace DeliveryControl.Controllers
                 // Instructions
                 worksheet.Cell(4, 2).Value = "CATATAN PENGISIAN:";
                 worksheet.Cell(5, 2).Value = "• Gunakan format ini untuk Upload Jadwal.";
-                worksheet.Cell(6, 2).Value = "• Kolom KODE CUSTOMER dan ITEM / PART NO Wajib diisi.";
+                worksheet.Cell(6, 2).Value = "• Kolom KODE CUSTOMER dan PART NO / VIN Wajib diisi.";
                 worksheet.Cell(7, 2).Value = "• Data ETD, PICKUP, SKID, AREA akan diambil otomatis dari Master Customer.";
 
                 using (var stream = new MemoryStream())
@@ -374,20 +374,17 @@ namespace DeliveryControl.Controllers
 
                 foreach (var item in allItems)
                 {
+                    // Prioritize Manifest/CustomerPartNumber for mapping
                     if (!string.IsNullOrWhiteSpace(item.CustomerPartNumber))
                     {
                         var key = item.CustomerPartNumber.Trim().ToUpper();
                         if (!itemMap.ContainsKey(key)) itemMap[key] = item;
                     }
+                    // Fallback to VIN
                     if (!string.IsNullOrWhiteSpace(item.VIN))
                     {
                         var keyVin = item.VIN.Trim().ToUpper();
                         if (!itemMap.ContainsKey(keyVin)) itemMap[keyVin] = item;
-                    }
-                    if (!string.IsNullOrWhiteSpace(item.ItemCode))
-                    {
-                        var keyCode = item.ItemCode.Trim().ToUpper();
-                        if (!itemMap.ContainsKey(keyCode)) itemMap[keyCode] = item;
                     }
                 }
 
@@ -560,10 +557,21 @@ namespace DeliveryControl.Controllers
                                 if (etdTime.HasValue && pickupTime.HasValue && etdTime.Value.TimeOfDay < pickupTime.Value.TimeOfDay)
                                     etdTime = etdTime.Value.AddDays(1);
 
-                                // Generate Schedule Number
-                                var prefix = $"SCH-{scheduledDate:yyyyMMdd}";
-                                var scheduleNumber = $"{prefix}{sequenceNumber:D3}";
-                                sequenceNumber++;
+                                 // Manifest logic: Use provided Manifest from Excel if available
+                                 string? manifestCode = colMap.Manifesting != -1 ? GetSafeString(row.Cell(colMap.Manifesting)).Trim().ToUpper() : null;
+                                 string scheduleNumber = "";
+
+                                 if (!string.IsNullOrEmpty(manifestCode))
+                                 {
+                                     scheduleNumber = manifestCode;
+                                 }
+                                 else
+                                 {
+                                     // Generate fallback Schedule Number
+                                     var prefix = $"SCH-{scheduledDate:yyyyMMdd}";
+                                     scheduleNumber = $"{prefix}{sequenceNumber:D3}";
+                                     sequenceNumber++;
+                                 }
 
                                 var schedule = new DeliverySchedule
                                 {

@@ -50,10 +50,27 @@ namespace DeliveryControl.Controllers
                 ViewData["FilterTitle"] = "Jadwal Hari Ini & Besok";
             }
 
-            var schedules = await query
-                .OrderBy(s => s.ScheduledDate)
+            var rawSchedules = await query.ToListAsync();
+
+            // Self-Correct Status for Old Data (In-Memory Fix)
+            foreach (var s in rawSchedules)
+            {
+                if (s.DeliveryItems != null && s.DeliveryItems.Any() && s.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity))
+                {
+                    if (s.Status != "Completed" || s.PreparationStatus != "Prepared")
+                    {
+                        s.Status = "Completed";
+                        s.PreparationStatus = "Prepared";
+                    }
+                }
+            }
+
+            var schedules = rawSchedules
+                .OrderBy(s => ((s.Status == "Preparing" || s.Status == "In Progress" || s.PreparationStatus == "Preparing" || s.PreparationStatus == "In Progress") && s.PreparationStatus != "Prepared" && s.Status != "Completed") ? 0 : 
+                              (s.Status == "Completed" || s.PreparationStatus == "Prepared") ? 2 : 1) // 0=Top, 1=Scheduled, 2=Bottom
+                .ThenBy(s => s.ScheduledDate)
                 .ThenBy(s => s.ScheduleNumber)
-                .ToListAsync();
+                .ToList();
             
             return View(schedules);
         }
@@ -299,22 +316,71 @@ namespace DeliveryControl.Controllers
         var totalPrepared = await _context.PreparationRecords
             .CountAsync(p => p.Tag == record.Tag && p.Label == record.Label);
         
-        // Saldo riil di rak untuk fisik barang dengan label spesifik ini
-        int stockBalance = totalPulled - totalPrepared;
+        // --- VALIDASI STOK (Auto FIFO) ---
+        // Cari semua Pulling untuk Item/Tag ini
+        var allPullings = await _context.PullingRecords
+            .Where(p => p.Tag == record.Tag)
+            .OrderBy(p => p.CreatedDate) // FIFO
+            .ToListAsync();
+        
+        // Cari semua Preparation yang sudah ada untuk Item/Tag ini untuk melihat mana yang sudah terpakai
+        var allPreps = await _context.PreparationRecords
+            .Where(p => p.Tag == record.Tag)
+            .ToListAsync();
 
-        if (stockBalance <= 0)
+        // HashSet dari PullingId yang sudah "consumed" oleh preparation lain (Strict Match Label)
+        // KITA HARUS MENIRU LOGIKA STOCK CONTROLLER AGAR DATA MATCH
+        var consumedPullingIds = new HashSet<int>();
+        var availablePullings = new List<PullingRecord>();
+
+        // 1. Petakan preparation yang sudah ada ke pulling yang sesuai
+        foreach (var p in allPreps)
         {
-            return Json(new { success = false, message = $"STOK HABIS! Barang dengan Label ini sudah pernah dipakai atau belum di-Pulling ke rak." });
+            var pLabel = (p.Label ?? "").Trim().ToUpper();
+            // Cari match di pulling history
+            var match = allPullings.FirstOrDefault(pl => 
+                            !consumedPullingIds.Contains(pl.PullingId) && 
+                            (pl.Label ?? "").Trim().ToUpper() == pLabel);
+            
+            if (match != null) 
+            {
+                consumedPullingIds.Add(match.PullingId);
+            }
         }
 
-        // Strict label string check removed.
-        // We rely on stockBalance check above to ensure the Tag+Label pair exists in inventory.
-        // bool labelOk = labelUpper.Contains(vin) || (!string.IsNullOrEmpty(partNo) && labelUpper.Contains(partNo));
-        
-        // if (!labelOk)
-        // {
-        //    return Json(new { success = false, message = "Label tidak sesuai dengan produk internal!" });
-        // }
+        // 2. Cek apakah Label yang di-scan user saat ini VALID dan TERSEDIA (Strict Match)
+        var strictMatch = allPullings.FirstOrDefault(pl => 
+                            !consumedPullingIds.Contains(pl.PullingId) && 
+                            (pl.Label ?? "").Trim().ToUpper() == record.Label.Trim().ToUpper());
+
+        string successMessage = "Data preparation berhasil disimpan!";
+        bool isFallback = false;
+
+        if (strictMatch != null)
+        {
+            // CASE A: Label physical cocok dengan sistem -> Bagus! Gunakan.
+            // Tidak perlu ubah apa-apa, record.Label sudah benar.
+        }
+        else
+        {
+            // CASE B: Label tidak ditemukan / sudah terpakai -> CARI PENGGANTI (FIFO)
+            var replacement = allPullings.FirstOrDefault(pl => !consumedPullingIds.Contains(pl.PullingId));
+            
+            if (replacement != null)
+            {
+                // Auto-Correct Label
+                // Kita gunakan label dari sistem agar nanti StockController bisa match dan menghilangkan stoknya.
+                string oldLabel = record.Label;
+                record.Label = replacement.Label; 
+                isFallback = true;
+                successMessage = $"INFO: Label '{oldLabel}' tidak ditemukan/habis. Digantikan otomatis dengan stok terlama (FIFO): '{replacement.Label}'. Data disimpan.";
+            }
+            else
+            {
+                // CASE C: Benar-benar habis
+                return Json(new { success = false, message = $"STOK HABIS! Tidak ada stok tersedia untuk Tag '{record.Tag}' di sistem." });
+            }
+        }
 
         record.Plant = item.Plant ?? "-";
         record.ScheduleId = schedule.ScheduleId;
@@ -325,8 +391,8 @@ namespace DeliveryControl.Controllers
                 int qpc = (item.QtyLot != null && item.QtyLot > 0) ? item.QtyLot.Value : 1;
                 
                 schedule.TotalActualQuantity += qpc;
-                schedule.Status = "In Progress";
-                schedule.PreparationStatus = "In Progress";
+                schedule.Status = "Preparing";
+                schedule.PreparationStatus = "Preparing";
                 schedule.UpdatedDate = DateTime.Now;
 
                 if (dItem != null)
@@ -340,9 +406,9 @@ namespace DeliveryControl.Controllers
 
                 if (allDone)
                 {
+                    schedule.Status = "Completed";
                     schedule.PreparationStatus = "Prepared";
-                    schedule.Status = "In Progress"; 
-
+                    
                     // --- LOGIKA AUTO-CONFIRM ENTER DOCK ---
                     // Jika preparation selesai, otomatis set status truk sudah masuk dock
                     if (!schedule.ActualEnterDockTime.HasValue)
@@ -382,14 +448,30 @@ namespace DeliveryControl.Controllers
                 _context.PreparationRecords.Add(record);
                 await _context.SaveChangesAsync();
                 
-                await _deliveryHubContext.Clients.All.SendAsync("DeliveryUpdated", new { Action = "preparation", ScheduleNumber = schedule.ScheduleNumber });
-                await _stockHubContext.Clients.All.SendAsync("UpdateStock");
-
-                // Return detailed info for the UI progress area
                 var totalTarget = schedule.DeliveryItems.Sum(di => di.Quantity);
                 var totalActual = schedule.DeliveryItems.Sum(di => di.ActualQuantity ?? 0);
                 var totalPercent = totalTarget > 0 ? ((double)totalActual / (double)totalTarget * 100) : 0;
 
+                var broadcastData = new {
+                    Action = "preparation",
+                    ScheduleNumber = schedule.ScheduleNumber,
+                    Status = schedule.Status,
+                    PreparationStatus = schedule.PreparationStatus,
+                    TotalPercent = totalPercent,
+                    CustomerName = schedule.Customer?.CustomerName,
+                    Items = schedule.DeliveryItems.Select(di => new {
+                        ItemId = di.ItemId,
+                        VIN = di.Item?.VIN,
+                        Actual = di.ActualQuantity ?? 0,
+                        Target = di.Quantity,
+                        Percent = (di.Quantity > 0) ? ((double)(di.ActualQuantity ?? 0) / (double)di.Quantity * 100) : 0
+                    }).ToList()
+                };
+
+                await _deliveryHubContext.Clients.All.SendAsync("DeliveryUpdated", broadcastData);
+                await _stockHubContext.Clients.All.SendAsync("UpdateStock");
+
+                // Return detailed info for the UI progress area
                 var details = new
                 {
                     schedule.ScheduleId,

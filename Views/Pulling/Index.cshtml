@@ -105,10 +105,13 @@
 
                 </div>
 
-                <div class="mt-5">
+                <div class="mt-5" style="display:none;">
                     <button type="button" class="btn btn-neon-success w-100 py-2 shadow-lg fs-5" id="btnSavePulling">
                         <i class="bi bi-cloud-arrow-up-fill me-2"></i> SIMPAN DATA PULLING
                     </button>
+                    <div id="autoSaveIndicator" class="text-center text-info mt-2">
+                        <span class="spinner-border spinner-border-sm me-2"></span>Menyimpan Data Otomatis...
+                    </div>
                 </div>
             </div>
         </div>
@@ -194,10 +197,11 @@
                 const config = { 
                     fps: 25, 
                     aspectRatio: 1.0,
-                    qrbox: { width: 300, height: 150 }, // Rectangular for 1D barcodes
+                    qrbox: { width: 250, height: 250 }, // Square for better target match
                     showTorchButtonIfSupported: true,
                     videoConstraints: {
                         facingMode: "environment",
+                        focusMode: "continuous", // Try to force autofocus
                         width: { min: 640, ideal: 1280, max: 1920 },
                         height: { min: 480, ideal: 720, max: 1080 }
                     }
@@ -238,10 +242,10 @@
                     if (currentId === 'tagInput') {
                         // Automation for Label will be handled inside lookupItem success
                     } else if (currentId === 'labelInput') {
-                        // After scan Label, focus on Save button instead of auto submit
+                        // AUTOMATION: Auto Submit after Label Scan
                         setTimeout(() => {
-                            $('#btnSavePulling').focus();
-                        }, 600);
+                           triggerAutoSave();
+                        }, 300);
                     }
                 }
             }
@@ -328,9 +332,7 @@
                 $('#labelInput').val('');
             }
 
-            $('#tagInput').on('change', function() {
-                lookupItem($(this).val());
-            }).on('input', function() {
+            $('#tagInput').on('input', function() {
                 if ($(this).val() === "") {
                     isItemValid = false;
                     hidePartDetails();
@@ -338,15 +340,30 @@
                 }
             });
 
+            // Handle Label Input for Handheld Scanner (Enter Key)
+            $('#labelInput').on('change keypress', function(e) {
+                if (e.type === 'keypress' && e.which !== 13) return; // Only trigger on Enter or Change
+                
+                // Debounce simple to avoid double submits
+                if ($(this).val().trim().length > 3) {
+                     setTimeout(() => triggerAutoSave(), 200);
+                }
+            });
+
+            function triggerAutoSave() {
+                 if ($('#btnSavePulling').prop('disabled')) return; // Prevent double submit
+                 $('#btnSavePulling').click();
+            }
+
             // Save Data (AJAX)
             $('#btnSavePulling').click(function () {
                 const tag = $('#tagInput').val();
                 const label = $('#labelInput').val();
 
                 if (!tag || !label) {
-                    alert('Lengkapi data Tag dan Label!');
+                    // alert('Lengkapi data Tag dan Label!'); // Suppress silent errors during typing
                     if (!tag) $('#tagInput').focus();
-                    else $('#labelInput').focus();
+                    else if (!label) $('#labelInput').focus();
                     return;
                 }
 
@@ -357,7 +374,10 @@
                 };
 
                 const $btn = $(this);
-                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Menyimpan...');
+                const $indicator = $('#autoSaveIndicator');
+                
+                $btn.prop('disabled', true);
+                $indicator.show(); // Show visual feedback
 
                 $.ajax({
                     url: '/Pulling/Save',
@@ -366,8 +386,6 @@
                     data: JSON.stringify(data),
                     success: function (response) {
                         if (response.success) {
-                            // Show toast or small notification instead of alert for better flow?
-                            // For now, keep alert but reset focus
                             alert('SUKSES: ' + response.message);
                             $('#tagInput, #labelInput').val('');
                             hidePartDetails();
@@ -375,13 +393,16 @@
                             $('#tagInput').focus(); // Ready for next scan
                         } else {
                             alert('GAGAL: ' + response.message);
+                            // If failed, clear label and refocus to try again
+                            $('#labelInput').val('').focus();
                         }
                     },
                     error: function () {
                         alert('Terjadi kesalahan koneksi ke server.');
                     },
                     complete: function() {
-                        $btn.prop('disabled', false).html('<i class="bi bi-cloud-arrow-up-fill me-2"></i> SIMPAN DATA PULLING');
+                        $btn.prop('disabled', false);
+                         $indicator.hide();
                     }
                 });
             });
@@ -517,9 +538,9 @@
         padding: 14px 18px !important;
         font-size: 1rem;
         flex-grow: 1;
-        width: 100%;
-        position: relative;
-        z-index: 5;
+        width: 1px; /* Let flex-grow handle width */
+        min-width: 0;
+        z-index: 1; /* Lower than button */
     }
 
     .cyber-field::placeholder {
@@ -535,8 +556,7 @@
         font-size: 1.4rem;
         transition: all 0.2s;
         cursor: pointer;
-        position: relative;
-        z-index: 5;
+        z-index: 10; /* Higher than input */
     }
 
     .btn-scan-trigger:hover {
@@ -608,11 +628,12 @@
     }
 
     .bounding-box {
-        width: 260px;
-        height: 160px;
+        width: 250px;
+        height: 250px;
         position: relative;
-        box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.4); /* Reduced opacity for better visibility */
-        border: 2px solid rgba(59, 130, 246, 0.5);
+        box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.4);
+        border: 2px solid var(--cyber-yellow);
+        border-radius: 4px;
     }
     
     /* Corner indicators */
@@ -656,7 +677,7 @@
     #reader video {
         width: 100% !important;
         height: 100% !important;
-        object-fit: cover !important;
+        object-fit: contain !important; /* Fix alignment issue */
     }
     
     #reader canvas {

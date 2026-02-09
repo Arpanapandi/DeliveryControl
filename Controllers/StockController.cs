@@ -308,18 +308,26 @@ namespace DeliveryControl.Controllers
             var pullingQueryAll = _context.PullingRecords.Include(r => r.Item).AsQueryable();
             if (plant != "Overall") pullingQueryAll = pullingQueryAll.Where(r => r.Plant == plant);
             
-            // 2. Preparation: Tetap filter berdasarkan tanggal/periode dashboard untuk performance
-            var preparationQueryFiltered = _context.PreparationRecords.AsQueryable();
-            if (plant != "Overall") preparationQueryFiltered = preparationQueryFiltered.Where(r => r.Plant == plant);
-            preparationQueryFiltered = preparationQueryFiltered.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
+            // 2. Preparation (STOCK CALCULATION): Use ALL TIME data to ensure accurate stock balance
+            //    We must deduct ALL preparations that have ever happened, not just those in the selected period.
+            var preparationQueryAll = _context.PreparationRecords.AsQueryable();
+            if (plant != "Overall") preparationQueryAll = preparationQueryAll.Where(r => r.Plant == plant);
 
+            // 3. Preparation (DISPLAY/ACTIVITY): Filter by date for the "Recent Activity" list and "Counts"
+            var preparationQueryFiltered = preparationQueryAll.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
+
+            // Execute queries
             var allPullingPotential = await pullingQueryAll.OrderBy(r => r.CreatedDate).ToListAsync();
+            // Critical Change: Fetch ALL preparations for calculation
+            var allPreparationAllTime = await preparationQueryAll.OrderBy(r => r.CreatedDate).ToListAsync(); 
+            // Fetch filtered for display
             var allPreparationInRange = await preparationQueryFiltered.OrderBy(r => r.CreatedDate).ToListAsync();
 
             var consumedPullingIds = new HashSet<int>();
 
-            // Pencocokan FIFO: Untuk setiap Preparation, cari Pulling tertua yang belum terpakai
-            foreach (var prep in allPreparationInRange)
+            // Pencocokan FIFO: Untuk setiap Preparation (ALL TIME), cari Pulling tertua yang belum terpakai
+            // Ini memastikan saldo stok BENAR, tidak peduli kapan barang itu disiapkan.
+            foreach (var prep in allPreparationAllTime)
             {
                 var prepTag = (prep.Tag ?? "").Trim().ToUpper();
                 var prepLabel = (prep.Label ?? "").Trim().ToUpper();

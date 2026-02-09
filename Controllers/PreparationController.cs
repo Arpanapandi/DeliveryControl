@@ -56,6 +56,19 @@ namespace DeliveryControl.Controllers
                             (!s.EnterDockTime.HasValue && s.ScheduledDate.Date == enterDockDate.Date))
                 .ToList();
             
+            // Self-Correct Status for Old Data (In-Memory Fix)
+            foreach (var s in schedulesForToday)
+            {
+                if (s.DeliveryItems != null && s.DeliveryItems.Any() && s.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity))
+                {
+                    if (s.Status != "Completed" || s.PreparationStatus != "Prepared")
+                    {
+                        s.Status = "Completed";
+                        s.PreparationStatus = "Prepared";
+                    }
+                }
+            }
+            
             // Filter by customer jika ada
             if (customerId.HasValue && customerId.Value > 0)
             {

@@ -46,14 +46,16 @@
     }
 
     .prep-card-header {
-        background: var(--cyber-yellow);
         padding: 8px 15px;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        color: #000;
         font-weight: 800;
     }
+
+    .header-scheduled { background: var(--cyber-yellow); color: #000; }
+    .header-preparing { background: #06b6d4; color: white; } /* Cyan-500 equivalent */
+    .header-prepared { background: #198754; color: white; }
 
     .prep-card-body {
         padding: 15px;
@@ -275,14 +277,20 @@
     else
     {
         <div class="gallery-grid">
-            @foreach (var schedule in Model.OrderByDescending(s => s.DeliveryItems.Any(di => di.ActualQuantity > 0)))
+            @foreach (var schedule in Model.OrderBy(s => ((s.Status == "Preparing" || s.Status == "In Progress" || s.PreparationStatus == "Preparing" || s.PreparationStatus == "In Progress") && s.PreparationStatus != "Prepared" && s.Status != "Completed") ? 0 : 
+                                                         (s.Status == "Completed" || s.PreparationStatus == "Prepared") ? 2 : 1)
+                                            .ThenBy(s => s.ScheduledDate).ThenBy(s => s.ScheduleNumber))
             {
                 var hasEnteredDock = schedule.ActualEnterDockTime.HasValue;
                 
-                <div class="prep-card @(schedule.Status == "In Progress" ? "highlight-card" : "")" 
+                var headerClass = "header-scheduled";
+                if (schedule.PreparationStatus == "Preparing" || schedule.PreparationStatus == "In Progress" || schedule.Status == "Preparing" || schedule.Status == "In Progress") { headerClass = "header-preparing"; }
+                if (schedule.PreparationStatus == "Prepared" || schedule.Status == "Completed") { headerClass = "header-prepared"; }
+
+                <div class="prep-card @(schedule.Status == "Preparing" || schedule.Status == "In Progress" ? "highlight-card" : "")" 
                      id="card-@schedule.ScheduleId" 
                      data-schedule-number="@schedule.ScheduleNumber">
-                    <div class="prep-card-header">
+                    <div class="prep-card-header @headerClass">
                         <span>@schedule.ScheduleNumber</span>
                         <span class="badge-status">@schedule.Status?.ToUpper()</span>
                     </div>
@@ -320,9 +328,19 @@
                             @foreach (var item in schedule.DeliveryItems)
                             {
                                 var percent = (item.Quantity > 0) ? ((double)(item.ActualQuantity ?? 0) / (double)item.Quantity * 100) : 0;
-                                <div class="card-item-progress">
+                                <div class="card-item-progress" data-vin="@(item.Item?.VIN ?? "")">
                                     <div class="item-info">
-                                        <span class="item-vin">@item.Item?.VIN</span>
+                                        <div class="d-flex flex-column">
+                                            @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
+                                            {
+                                                <span class="item-vin" style="font-size: 0.9rem;">@item.Item.CustomerPartNumber</span>
+                                                <small class="text-secondary opacity-75" style="font-size: 0.65rem;">VIN: @item.Item.VIN</small>
+                                            }
+                                            else
+                                            {
+                                                <span class="item-vin">@item.Item?.VIN</span>
+                                            }
+                                        </div>
                                         <span class="item-progress-val @(percent >= 100 ? "text-success" : "text-info")">
                                             @((item.ActualQuantity ?? 0).ToString("G29")) / @item.Quantity.ToString("G29")
                                         </span>
@@ -339,16 +357,9 @@
                     <div class="prep-card-footer">
                         @if (!hasEnteredDock)
                         {
-                            <a asp-action="EnterDock" asp-route-id="@schedule.ScheduleId" class="btn-dock">
-                                <i class="bi bi-box-arrow-in-right me-1"></i> KONFIRMASI MASUK DOCK
-                            </a>
-                            
-                            <form asp-action="QuickEnterDock" asp-route-id="@schedule.ScheduleId" method="post">
-                                @Html.AntiForgeryToken()
-                                <button type="submit" class="quick-status" onclick="return confirm('Masuk dock SEKARANG?')">
-                                    ⚡ QUICK - MASUK DOCK SEKARANG
-                                </button>
-                            </form>
+                            <div class="text-center py-2 text-white-50">
+                                <small><i class="bi bi-upc-scan me-1"></i> SCAN SEMUA ITEM UNTUK SELESAI</small>
+                            </div>
                         }
                         else
                         {
@@ -374,55 +385,101 @@
         connection.on("DeliveryUpdated", function (data) {
             console.log("Update received:", data);
             
-            // Normalize properties (handle both camelCase and PascalCase)
             var action = data.action || data.Action;
             var scheduleNum = data.scheduleNumber || data.ScheduleNumber;
 
-            // Check if action is 'preparation' (when operator inputs items)
             if (action === "preparation" && scheduleNum) {
-                var card = document.querySelector(`.prep-card[data-schedule-number='${scheduleNum}']`);
+                var selector = `.prep-card[data-schedule-number='${scheduleNum}']`;
+                var card = document.querySelector(selector);
                 
                 if (card) {
-                    // 1. Move to top
+                    // 1. Update UI Elements directly (No Reload)
+                    updateCardUI(card, data);
+
+                    // 2. Move to Top
                     var container = document.querySelector('.gallery-grid');
-                    container.prepend(card);
+                    if (container) container.prepend(card);
                     
-                    // 2. Add glow effect
-                    card.classList.remove('glow-active'); // Reset if already active
-                    void card.offsetWidth; // Trigger reflow
+                    // 3. Glow Effect
+                    card.classList.remove('glow-active');
+                    void card.offsetWidth;
                     card.classList.add('glow-active');
-                    
-                    // 3. Scroll to view (optional, but good for visibility)
                     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     
-                    // 4. Remove glow after 30 seconds
-                    setTimeout(() => {
-                        card.classList.remove('glow-active');
-                    }, 30000);
-                    
-                    // 5. Reload page after short delay to update progress bars?
-                    // Or ideally we update progress bars via JS, but reload is safer for data consistency for now.
-                    // Delaying reload to let animation play a bit.
-                    setTimeout(() => {
-                       location.reload();
-                    }, 5000); // Reload after 5s to show updated numbers
+                    setTimeout(() => card.classList.remove('glow-active'), 10000);
+
                 } else {
-                    // New card? Reload to fetch
-                     location.reload();
+                    // Card not found (maybe new?), reload filtering might be needed but try not to disrupt
+                    // location.reload(); 
                 }
-            } else {
-                // Other updates (enter dock, pickup) -> reload to show status change
-                location.reload();
+            } else if (action === "enterDock") {
+                 // specific logic for enter dock (maybe reload or update badge)
+                 location.reload();
             }
         });
+
+        function updateCardUI(card, data) {
+            // Update Header Color & Text
+            var header = card.querySelector('.prep-card-header');
+            if (header) {
+                var status = data.status || data.Status;
+                var prepStatus = data.preparationStatus || data.PreparationStatus;
+                
+                header.classList.remove('header-scheduled', 'header-preparing', 'header-prepared');
+                
+                if ((status === "Preparing" || status === "In Progress" || prepStatus === "Preparing" || prepStatus === "In Progress") && status !== "Completed" && prepStatus !== "Prepared") {
+                    header.classList.add('header-preparing');
+                    var badge = header.querySelector('.badge-status');
+                    if(badge) badge.innerText = "PREPARING";
+                } else if (status === "Completed" || prepStatus === "Prepared") {
+                    header.classList.add('header-prepared');
+                    var badge = header.querySelector('.badge-status');
+                    if(badge) badge.innerText = "COMPLETED";
+                } else {
+                    header.classList.add('header-scheduled');
+                }
+            }
+
+            // Update Item Progress Bars
+            if (data.items || data.Items) {
+                var items = data.items || data.Items;
+                items.forEach(item => {
+                    var vin = item.vin || item.VIN;
+                    var actual = item.actual || item.Actual;
+                    var target = item.target || item.Target;
+                    var percent = item.percent || item.Percent;
+                    
+                    // Find the progress row for this VIN inside the card
+                    var row = card.querySelector(`.card-item-progress[data-vin='${vin}']`);
+                    if (row) {
+                        // Update text
+                        var textEl = row.querySelector('.item-progress-val');
+                        if (textEl) {
+                            textEl.innerText = `${actual} / ${target}`;
+                            if (percent >= 100) textEl.className = 'item-progress-val text-success';
+                            else textEl.className = 'item-progress-val text-info';
+                        }
+                        
+                        // Update Bar
+                        var bar = row.querySelector('.progress-bar');
+                        if (bar) {
+                            bar.style.width = `${percent}%`;
+                            if (percent >= 100) {
+                                bar.className = 'progress-bar bg-success';
+                            } else {
+                                bar.className = 'progress-bar bg-info';
+                            }
+                        }
+                    }
+                });
+            }
+        }
 
         connection.start().catch(function (err) {
             return console.error(err.toString());
         });
 
-        // Auto refresh fallback
-        setTimeout(function() {
-            location.reload();
-        }, 60000);
+        // Remove auto-reload to keep state stable
+        // setTimeout(function() { location.reload(); }, 60000);
     </script>
 }

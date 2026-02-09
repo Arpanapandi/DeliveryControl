@@ -139,7 +139,7 @@
     #reader video {
         width: 100% !important;
         height: 100% !important;
-        object-fit: cover !important;
+        object-fit: contain !important; /* Fix alignment */
     }
 
     /* Scanner Overlay & Bounding Box */
@@ -158,8 +158,8 @@
     }
 
     .bounding-box {
-        width: 320px;
-        height: 180px;
+        width: 250px;
+        height: 250px;
         position: relative;
         box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.4);
         border: 2px solid var(--cyber-yellow);
@@ -205,69 +205,150 @@
 
     </div>
 
-    <!-- Scanner Section -->
-    <div class="scanner-top-bar shadow-sm">
-        <div class="row g-3">
-            <div class="col-md-3">
-                <label class="form-label mb-1 text-white-50 small fw-bold text-uppercase">VIN (TAG)</label>
-                <div class="custom-cyber-input-group">
-                    <div class="input-icon-left"><i class="bi bi-tag-fill"></i></div>
-                    <input type="text" class="form-control cyber-field" id="tagInput" placeholder="Scan VIN..." autofocus>
-                    <button type="button" class="btn-scan-trigger" data-target="tagInput"><i class="bi bi-qr-code-scan"></i></button>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label mb-1 text-white-50 small fw-bold text-uppercase">LABEL CUSTOMER</label>
-                <div class="custom-cyber-input-group">
-                    <div class="input-icon-left"><i class="bi bi-upc-scan"></i></div>
-                    <input type="text" class="form-control cyber-field" id="labelInput" placeholder="Scan Label..." disabled>
-                    <button type="button" class="btn-scan-trigger" data-target="labelInput" disabled><i class="bi bi-qr-code-scan"></i></button>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label mb-1 text-white-50 small fw-bold text-uppercase">KANBAN CUSTOMER</label>
-                <div class="custom-cyber-input-group">
-                    <div class="input-icon-left"><i class="bi bi-clipboard-check"></i></div>
-                    <input type="text" class="form-control cyber-field" id="kanbanInput" placeholder="Scan Kanban..." disabled>
-                    <button type="button" class="btn-scan-trigger" data-target="kanbanInput" disabled><i class="bi bi-qr-code-scan"></i></button>
-                </div>
-            </div>
-            <div class="col-md-3 d-flex align-items-end">
-                <button type="button" class="btn btn-neon-success w-100 py-2 shadow-sm" id="btnSavePreparation">
-                    <i class="bi bi-shield-check-fill me-2"></i> SIMPAN DATA
-                </button>
-            </div>
-        </div>
-        
-        <!-- Status Identification -->
-        <div id="idStatusSection" style="display: none;" class="mt-3 pt-3 border-top border-secondary border-opacity-25 row align-items-center">
-            <div class="col-md-8">
-                <div class="d-flex align-items-center">
-                    <div class="spinner-grow spinner-grow-sm text-yellow me-2" role="status"></div>
-                    <span id="idStatusText" class="text-white-50 small fw-bold">Mencocokkan data...</span>
-                </div>
-            </div>
-            <div class="col-md-4 text-end">
-                 <span id="idTargetInfo" class="badge bg-primary px-3">---</span>
-            </div>
-        </div>
+    <!-- Scanner Section (Refactored to match Pulling UI) -->
+    <div class="row justify-content-center">
+        <div class="col-12">
+            <div class="cyber-card p-4" style="background: #1e293b; border-radius: 12px; border: 1px solid #334155;">
+                <h5 class="mb-4 fw-bold border-bottom border-secondary pb-2 text-white"><i class="bi bi-pencil-square me-2"></i> Form Input Preparation</h5>
+                
+                <div class="mx-auto">
+                    <!-- Status Identification (Moved here for better flow) -->
+                    <div id="idStatusSection" style="display: none;" class="mb-4 p-3 border border-primary border-opacity-50 rounded bg-dark bg-opacity-50">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="spinner-grow spinner-grow-sm text-yellow me-2" role="status"></div>
+                                <span id="idStatusText" class="text-white small fw-bold">Mencocokkan data...</span>
+                            </div>
+                            <span id="idTargetInfo" class="badge bg-primary px-3">---</span>
+                        </div>
+                    </div>
 
-        <!-- Success Progress Popup (Optional/Dynamic) -->
-        <div id="progressDetailArea" class="progress-detail-container">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="text-yellow mb-0"><i class="bi bi-check-circle me-2"></i> BERHASIL DI-SCAN: <span id="progressTargetName" class="text-white">---</span></h6>
-                <span id="progressPercentTotal" class="badge bg-success">0%</span>
-            </div>
-            <div id="confirmButtonArea" class="mt-3 text-center" style="display:none;">
-                <button type="button" class="btn btn-success btn-sm fw-bold" id="btnConfirmFinal">
-                    <i class="bi bi-check-all me-1"></i> KONFIRMASI SELESAI
-                </button>
+                    <!-- 1. VIN (Tag) -->
+                    <div class="mb-3">
+                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">VIN (TAG MASTER) <span class="text-danger">*</span></label>
+                        <div class="custom-cyber-input-group">
+                            <div class="input-icon-left"><i class="bi bi-tag-fill"></i></div>
+                            <input type="text" class="form-control cyber-field" id="tagInput" placeholder="Scan VIN..." autofocus>
+                            <button type="button" class="btn-scan-trigger" data-target="tagInput"><i class="bi bi-qr-code-scan"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- 2. Label Customer -->
+                    <div class="mb-3">
+                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">LABEL CUSTOMER <span class="text-danger">*</span></label>
+                        <div class="custom-cyber-input-group">
+                            <div class="input-icon-left"><i class="bi bi-upc-scan"></i></div>
+                            <input type="text" class="form-control cyber-field" id="labelInput" placeholder="Scan Label..." disabled>
+                            <button type="button" class="btn-scan-trigger" data-target="labelInput" disabled><i class="bi bi-qr-code-scan"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- 3. Kanban Customer -->
+                    <div class="mb-3">
+                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">KANBAN CUSTOMER <span class="text-danger">*</span></label>
+                        <div class="custom-cyber-input-group">
+                            <div class="input-icon-left"><i class="bi bi-clipboard-check"></i></div>
+                            <input type="text" class="form-control cyber-field" id="kanbanInput" placeholder="Scan Kanban..." disabled>
+                            <button type="button" class="btn-scan-trigger" data-target="kanbanInput" disabled><i class="bi bi-qr-code-scan"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- Hidden Button & Indicator -->
+                    <div class="mt-4 text-center">
+                        <button type="button" class="btn btn-neon-success w-100 py-2 shadow-lg fs-5" id="btnSavePreparation" style="display:none;">
+                            <i class="bi bi-shield-check-fill me-2"></i> SIMPAN DATA
+                        </button>
+                        <div id="prepLoadingIndicator" style="display:none;" class="text-info">
+                            <span class="spinner-border spinner-border-sm me-2"></span>Menyimpan otomatis...
+                        </div>
+                    </div>
+
+                </div>
             </div>
         </div>
     </div>
 
+    <!-- Progress Table (Restored) -->
+    <div class="progress-table-container shadow-lg">
+        <table class="cyber-table">
+            <thead>
+                <tr>
+                    <th>Manifest / Schedule</th>
+                    <th>Customer / Dock</th>
+                    <th>Part No / VIN</th>
+                    <th>Progress</th>
+                    <th class="text-center">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model != null && Model.Any())
+                {
+                    foreach (var schedule in Model)
+                    {
+                        foreach (var item in schedule.DeliveryItems)
+                        {
+                            var percent = (item.Quantity > 0) ? ((double)(item.ActualQuantity ?? 0) / (double)item.Quantity * 100) : 0;
+                            <tr class="item-row" data-schedule-id="@schedule.ScheduleId">
+                                <td>
+                                    <div class="fw-bold text-warning">@schedule.ScheduleNumber</div>
+                                    <small class="text-white-50">@schedule.ScheduledDate.ToString("dd MMM yyyy")</small>
+                                </td>
+                                <td>
+                                    <div class="text-white fw-bold">@schedule.Customer?.CustomerName</div>
+                                    <span class="badge bg-secondary opacity-75" style="font-size: 0.65rem;">Dock: @schedule.Customer?.Docking</span>
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-column">
+                                        @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
+                                        {
+                                            <span class="text-info fw-bold fs-6">@item.Item.CustomerPartNumber</span>
+                                            <small class="text-secondary opacity-75" style="font-size: 0.75rem;">VIN: @item.Item.VIN</small>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-info fw-bold">@item.Item?.VIN</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td style="min-width: 150px;">
+                                    <div class="d-flex justify-content-between small mb-1">
+                                        <span class="text-white-50 font-monospace">@((item.ActualQuantity ?? 0).ToString("G29")) / @item.Quantity.ToString("G29")</span>
+                                        <span class="@(percent >= 100 ? "text-success" : "text-info")">@percent.ToString("0")%</span>
+                                    </div>
+                                    <div class="progress progress-mini">
+                                        <div class="progress-bar @(percent >= 100 ? "bg-success" : "bg-info")" 
+                                             role="progressbar" style="width: @percent%"></div>
+                                    </div>
+                                </td>
+                                <td class="text-center">
+                                    @if (percent >= 100) { <span class="status-badge bg-success text-white">READY</span> }
+                                    else if (percent > 0) { <span class="status-badge bg-warning text-dark">PROGRESS</span> }
+                                    else { <span class="status-badge bg-secondary opacity-50">WAITING</span> }
+                                </td>
+                            </tr>
+                        }
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="5" class="text-center py-5">
+                            <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                            <span class="text-secondary">Tidak ada jadwal aktif untuk saat ini.</span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 
-</div>
+    <!-- Success Progress Popup -->
+    <div id="progressDetailArea" class="progress-detail-container">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="text-yellow mb-0"><i class="bi bi-check-circle me-2"></i> BERHASIL DI-SCAN: <span id="progressTargetName" class="text-white">---</span></h6>
+            <span id="progressPercentTotal" class="badge bg-success">0%</span>
+        </div>
+    </div>
 
 <!-- Modal Scanner -->
 <div class="modal fade" id="scannerModal" tabindex="-1" data-bs-backdrop="static">
@@ -299,53 +380,49 @@
     <script>
         $(document).ready(function () {
             let html5QrCode = null;
-            let scannerModal = new bootstrap.Modal(document.getElementById('scannerModal'));
+            const scannerModalEl = document.getElementById('scannerModal');
+            const scannerModal = new bootstrap.Modal(scannerModalEl);
             let activeInputId = null;
             let currentScheduleId = null;
 
-            // Trigger scanner
+            // --- SCANNER HANDLERS ---
             $('.btn-scan-trigger').click(function() {
                 activeInputId = $(this).data('target');
-                $('#scannerModalLabel').text("MEMINDAI: " + activeInputId.toUpperCase());
+                $('#scannerModalLabel').text("MEMINDAI: " + (activeInputId || "ITEM").toUpperCase());
                 scannerModal.show();
             });
 
-            // Start scanner ONLY after modal is fully shown to ensure container has dimensions
-            $('#scannerModal').on('shown.bs.modal', function () {
+            $(scannerModalEl).on('shown.bs.modal', function () {
                 initScanner();
             });
 
-            $('#scannerModal').on('hidden.bs.modal', function () {
+            $(scannerModalEl).on('hidden.bs.modal', function () {
                 stopScanner();
+                // Ensure focus is definitely not on the modal trigger if possible, though we handled it in onDetected
             });
 
             async function initScanner() {
                 try {
-                    // Optimized for 1D Barcodes (wider box)
                     const config = { 
                         fps: 25, 
                         aspectRatio: 1.0, 
-                        qrbox: { width: 300, height: 150 }, // Rectangular for 1D barcodes
-                        showTorchButtonIfSupported: true, // Enable flashlight
+                        qrbox: { width: 250, height: 250 },
+                        showTorchButtonIfSupported: true,
                         videoConstraints: {
                             facingMode: "environment",
+                            focusMode: "continuous",
                             width: { min: 640, ideal: 1280, max: 1920 },
                             height: { min: 480, ideal: 720, max: 1080 }
                         }
                     };
                     
                     if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
-                    
-                    if (html5QrCode.isScanning) {
-                        await html5QrCode.stop();
-                    }
+                    if (html5QrCode.isScanning) await html5QrCode.stop();
 
                     $('#scanner-status').text("Mengakses Kamera...");
                     await html5QrCode.start({ facingMode: "environment" }, config, onDetected);
                     $('#scanner-status').text("Scanner Aktif");
-                    console.log("Scanner started successfully");
                 } catch (err) {
-                    console.error("Scanner failed to start", err);
                     $('#scanner-status').text("Gagal: " + err);
                     try {
                          if (html5QrCode) await html5QrCode.start({ facingMode: "user" }, { fps: 20, qrbox: { width: 250, height: 250 } }, onDetected);
@@ -356,23 +433,56 @@
             }
 
             function onDetected(decodedText) {
-                $(`#${activeInputId}`).val(decodedText).addClass('active-scan');
-                scannerModal.hide();
-                performLookup();
+                // FIX ARIA HIDDEN: Focus OUT of the modal immediately.
+                if (activeInputId) {
+                    const $input = $(`#${activeInputId}`);
+                    $input.val(decodedText).addClass('active-scan');
+                    $input.prop('disabled', false).focus(); // Ensure it's enabled before focusing
+                } else {
+                    $('#tagInput').focus();
+                }
+                
+                // Delay hiding to let the focus event propagate
+                setTimeout(() => {
+                    scannerModal.hide();
+                    performLookup();
+                }, 150);
             }
 
             async function stopScanner() {
                 if (html5QrCode && html5QrCode.isScanning) await html5QrCode.stop();
             }
 
-            // Trigger lookup on enter or change (for scanners that don't send enter)
-            $('#tagInput, #labelInput, #kanbanInput').on('keypress', function(e) {
-                if (e.which == 13) {
-                    e.preventDefault();
+            // --- INPUT LOGIC ---
+
+            function checkAndAdvance() {
+                const tag = $('#tagInput').val().trim();
+                const label = $('#labelInput').val().trim();
+                const kanban = $('#kanbanInput').val().trim();
+
+                if (!tag) { $('#tagInput').focus(); return; }
+                if (!label && !$('#labelInput').prop('disabled')) { $('#labelInput').focus(); return; }
+                if (!kanban && !$('#kanbanInput').prop('disabled')) { $('#kanbanInput').focus(); return; }
+
+                if (tag && label && kanban) {
+                    triggerPrepAutoSave();
+                }
+            }
+
+            function triggerPrepAutoSave() {
+                if ($('#btnSavePreparation').prop('disabled')) return;
+                $('#btnSavePreparation').click();
+            }
+
+            $('#tagInput, #labelInput, #kanbanInput').on('change keypress', function(e) {
+                if(e.type === 'keypress' && e.which !== 13) return;
+                
+                const id = $(this).attr('id');
+                if (id === 'kanbanInput') {
+                    checkAndAdvance();
+                } else {
                     performLookup();
                 }
-            }).on('change', function() {
-                if ($(this).val().trim()) performLookup();
             });
 
             function resetInputs() {
@@ -401,45 +511,85 @@
                                 $('#idStatusText').text("Ditemukan: " + res.schedule.customerName);
                                 $('#idTargetInfo').text(res.schedule.scheduleNumber);
                                 
-                                // Highlight Row
+                                // Highlight
                                 $('.item-row').removeClass('highlight-row');
                                 $(`.item-row[data-schedule-id="${currentScheduleId}"]`).addClass('highlight-row');
                                 
-                                // Scroll to row
                                 const $firstRow = $(`.item-row[data-schedule-id="${currentScheduleId}"]`).first();
                                 if ($firstRow.length) {
-                                    $('html, body').animate({
-                                        scrollTop: $firstRow.offset().top - 200
+                                    $('html, body').animate({ scrollTop: $firstRow.offset().top - 200 }, 500);
+                                }
+
+                                // Enable All
+                                $('#labelInput, #kanbanInput, .btn-scan-trigger').prop('disabled', false);
+
+                                // Auto Advance / Submit
+                                if (tag && label && kanban) {
+                                    triggerPrepAutoSave();
+                                } else if (tag && label) {
+                                    // AUTOMATION: Open Kanban Scanner
+                                    setTimeout(() => {
+                                        if (!$('#scannerModal').is(':visible')) {
+                                            $('.btn-scan-trigger[data-target="kanbanInput"]').click();
+                                        }
+                                    }, 500);
+                                } else if (tag) {
+                                    // AUTOMATION: Open Label Scanner
+                                    setTimeout(() => {
+                                        if (!$('#scannerModal').is(':visible')) {
+                                            $('.btn-scan-trigger[data-target="labelInput"]').click();
+                                        }
                                     }, 500);
                                 }
 
-                                $('#labelInput, #kanbanInput, .btn-scan-trigger').prop('disabled', false);
                             } else if (res.item) {
-                                // Item identified but not all 3 scans completed
+                                // Partial Match / Step
+                                
+                                // Handle Specific Validation Failures (Label/Kanban mismatch)
+                                if (res.message && (res.message.includes("tidak sesuai") || res.message.includes("tidak cocok") || res.message.includes("Label tidak sesuai"))) {
+                                    alert(res.message);
+                                    if (res.step === 'label') {
+                                        $('#labelInput').val('').focus();
+                                    } else if (res.step === 'kanban') {
+                                        $('#kanbanInput').val('').focus();
+                                    }
+                                    // Don't proceed to update UI if error
+                                    return; 
+                                }
+
                                 $('#idStatusSection').slideDown();
                                 $('#idStatusText').text("Item: " + res.item.itemName);
                                 $('#idTargetInfo').text(res.item.vin);
                                 
-                                // Enable inputs progressively
-                                const tag = $('#tagInput').val().trim();
-                                const label = $('#labelInput').val().trim();
-                                
-                                if (tag) {
-                                    $('#labelInput, .btn-scan-trigger[data-target="labelInput"]').prop('disabled', false);
-                                    if (!label) $('#labelInput').focus();
-                                }
+                                // Always enable Label if Tag is valid
+                                $('#labelInput, .btn-scan-trigger[data-target="labelInput"]').prop('disabled', false);
+
+                                // If Label is present, enable Kanban and Focus it
                                 if (label) {
                                     $('#kanbanInput, .btn-scan-trigger[data-target="kanbanInput"]').prop('disabled', false);
-                                    if (!kanban) $('#kanbanInput').focus();
-                                }
-                                if (tag && label && kanban) {
-                                    $('#btnSavePreparation').focus();
+                                    // AUTOMATION: Open Kanban Scanner
+                                    setTimeout(() => {
+                                        if (!$('#scannerModal').is(':visible')) {
+                                            $('.btn-scan-trigger[data-target="kanbanInput"]').click();
+                                        }
+                                    }, 500);
+                                } else {
+                                     // AUTOMATION: Open Label Scanner
+                                    setTimeout(() => {
+                                        if (!$('#scannerModal').is(':visible')) {
+                                            $('.btn-scan-trigger[data-target="labelInput"]').click();
+                                        }
+                                    }, 500);
                                 }
                             }
                         } else {
                             if (res.message) alert(res.message);
                             resetInputs();
+                            $('#tagInput').focus();
                         }
+                    },
+                    error: function() {
+                         alert("Gagal menghubungi server.");
                     }
                 });
             }
@@ -451,9 +601,11 @@
                     Kanban: $('#kanbanInput').val().trim()
                 };
 
-                if (!data.Tag || !data.Label || !data.Kanban) return alert('Data belum lengkap!');
+                if (!data.Tag || !data.Label || !data.Kanban) return; 
 
-                $(this).prop('disabled', true).html('Saving...');
+                const $btn = $(this);
+                $btn.prop('disabled', true);
+                $('#prepLoadingIndicator').show();
 
                 $.ajax({
                     url: '/PreparationWorkflow/Save',
@@ -462,18 +614,25 @@
                     data: JSON.stringify(data),
                     success: function (res) {
                         if (res.success) {
-                            // Reload page to reflect updated counts in the main table
+                            if (res.isFallback || (res.message && res.message.includes("FIFO"))) {
+                                alert(res.message);
+                            }
                             location.reload();
                         } else {
                             alert(res.message);
-                            $('#btnSavePreparation').prop('disabled', false).html('SIMPAN DATA');
+                            $btn.prop('disabled', false);
+                            $('#prepLoadingIndicator').hide();
+                            $('#kanbanInput').val('').focus();
                         }
+                    },
+                    error: function() {
+                         alert("Connection Error");
+                         $btn.prop('disabled', false);
+                         $('#prepLoadingIndicator').hide();
                     }
                 });
             });
 
-            // SignalR for updates
-            // (Assumed already set up in layout or needed here)
         });
     </script>
 }
