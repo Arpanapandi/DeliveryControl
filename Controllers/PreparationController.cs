@@ -206,7 +206,7 @@ namespace DeliveryControl.Controllers
                 // Log activity
                 await _logService.LogConfirm(
                     "Preparation",
-                    schedule.ScheduleNumber,
+                    schedule.ScheduleNumber ?? "UNKNOWN",
                     schedule.ScheduleId,
                     $"Konfirmasi masuk dock untuk {schedule.Customer?.CustomerName} pada {enterDockTime:HH:mm}",
                     User.Identity?.Name ?? "Preparation"

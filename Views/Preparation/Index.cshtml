@@ -331,14 +331,17 @@
                                 <div class="card-item-progress" data-vin="@(item.Item?.VIN ?? "")">
                                     <div class="item-info">
                                         <div class="d-flex flex-column">
-                                            @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
+                                            @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber) && !string.IsNullOrEmpty(item.Item?.VIN))
+                                            {
+                                                <span class="item-vin" style="font-size: 0.9rem;">@item.Item.CustomerPartNumber/@item.Item.VIN</span>
+                                            }
+                                            else if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
                                             {
                                                 <span class="item-vin" style="font-size: 0.9rem;">@item.Item.CustomerPartNumber</span>
-                                                <small class="text-secondary opacity-75" style="font-size: 0.65rem;">VIN: @item.Item.VIN</small>
                                             }
                                             else
                                             {
-                                                <span class="item-vin">@item.Item?.VIN</span>
+                                                <span class="item-vin">@(item.Item?.VIN ?? "-")</span>
                                             }
                                         </div>
                                         <span class="item-progress-val @(percent >= 100 ? "text-success" : "text-info")">

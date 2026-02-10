@@ -30,6 +30,7 @@ namespace DeliveryControl.Controllers
         {
             var today = DateTime.Today;
             var query = _context.DeliverySchedules
+                .AsNoTracking()
                 .Include(s => s.Customer)
                 .Include(s => s.DeliveryItems)
                     .ThenInclude(di => di.Item)
@@ -129,7 +130,7 @@ namespace DeliveryControl.Controllers
                 .Include(s => s.Customer)
                 .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
                 .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
-                             s.ScheduleNumber.ToUpper() == kanbanUpper &&
+                             (s.ScheduleNumber ?? "").ToUpper() == kanbanUpper &&
                              s.DeliveryItems.Any(di => di.ItemId == targetItem.ItemId))
                 .FirstOrDefaultAsync();
 
@@ -290,7 +291,7 @@ namespace DeliveryControl.Controllers
             .Include(s => s.Customer)
             .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
             .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
-                         s.ScheduleNumber.ToUpper() == kanbanSaveUpper &&
+                         (s.ScheduleNumber ?? "").ToUpper() == kanbanSaveUpper &&
                          s.DeliveryItems.Any(di => di.ItemId == item.ItemId))
             .OrderBy(s => s.ScheduledDate)
             .ThenBy(s => s.ScheduleNumber)
@@ -354,7 +355,6 @@ namespace DeliveryControl.Controllers
                             (pl.Label ?? "").Trim().ToUpper() == record.Label.Trim().ToUpper());
 
         string successMessage = "Data preparation berhasil disimpan!";
-        bool isFallback = false;
 
         if (strictMatch != null)
         {
@@ -372,7 +372,6 @@ namespace DeliveryControl.Controllers
                 // Kita gunakan label dari sistem agar nanti StockController bisa match dan menghilangkan stoknya.
                 string oldLabel = record.Label;
                 record.Label = replacement.Label; 
-                isFallback = true;
                 successMessage = $"INFO: Label '{oldLabel}' tidak ditemukan/habis. Digantikan otomatis dengan stok terlama (FIFO): '{replacement.Label}'. Data disimpan.";
             }
             else
@@ -428,7 +427,7 @@ namespace DeliveryControl.Controllers
                         // Log Activity
                         await _logService.LogConfirm(
                             "System",
-                            schedule.ScheduleNumber,
+                            schedule.ScheduleNumber ?? "UNKNOWN",
                             schedule.ScheduleId,
                             $"Auto-Confirm: Preparation Selesai -> Otomatis Set Masuk Dock pada {now:HH:mm}",
                             "System"

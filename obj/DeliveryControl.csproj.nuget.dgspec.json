@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\DeliveryControl\\DeliveryControl\\DeliveryControl.csproj": {}
+    "c:\\DeliveryControl\\DeliveryControl\\DeliveryControl.csproj": {}
   },
   "projects": {
-    "C:\\DeliveryControl\\DeliveryControl\\DeliveryControl.csproj": {
+    "c:\\DeliveryControl\\DeliveryControl\\DeliveryControl.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\DeliveryControl\\DeliveryControl\\DeliveryControl.csproj",
+        "projectUniqueName": "c:\\DeliveryControl\\DeliveryControl\\DeliveryControl.csproj",
         "projectName": "DeliveryControl",
-        "projectPath": "C:\\DeliveryControl\\DeliveryControl\\DeliveryControl.csproj",
+        "projectPath": "c:\\DeliveryControl\\DeliveryControl\\DeliveryControl.csproj",
         "packagesPath": "C:\\Users\\fio.vlt00122\\.nuget\\packages\\",
-        "outputPath": "C:\\DeliveryControl\\DeliveryControl\\obj\\",
+        "outputPath": "c:\\DeliveryControl\\DeliveryControl\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\fio.vlt00122\\AppData\\Roaming\\NuGet\\NuGet.Config"

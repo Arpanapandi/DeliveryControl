@@ -39,6 +39,8 @@ namespace DeliveryControl.Data
             modelBuilder.Entity<Item>(entity =>
             {
                 entity.HasIndex(e => e.ItemCode).IsUnique();
+                entity.HasIndex(e => e.VIN); // Index for VIN lookups
+                entity.HasIndex(e => e.CreatedDate); // Index for sorting by date
                 entity.Property(e => e.ItemCode).IsRequired();
                 entity.Property(e => e.ItemName).IsRequired();
             });
@@ -56,6 +58,7 @@ namespace DeliveryControl.Data
                 // Index untuk pencarian berdasarkan tanggal dan status
                 entity.HasIndex(e => e.ScheduledDate);
                 entity.HasIndex(e => e.Status);
+                entity.HasIndex(e => e.CreatedDate); // Index for sorting
                 entity.HasIndex(e => new { e.CustomerId, e.ScheduledDate });
             });
 
@@ -82,6 +85,11 @@ namespace DeliveryControl.Data
                     .WithMany(ds => ds.PreparationRecords)
                     .HasForeignKey(pr => pr.ScheduleId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.Tag);
+                entity.HasIndex(e => e.Label);
+                entity.HasIndex(e => e.CreatedDate);
+                entity.HasIndex(e => new { e.Tag, e.Label }); // For Composite FIFO lookups
             });
 
             // Configure PullingRecord
@@ -91,6 +99,11 @@ namespace DeliveryControl.Data
                     .WithMany(i => i.PullingRecords)
                     .HasForeignKey(pr => pr.ItemId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.Tag);
+                entity.HasIndex(e => e.Label);
+                entity.HasIndex(e => e.CreatedDate);
+                entity.HasIndex(e => new { e.Tag, e.Label }); // For Composite FIFO lookups
             });
 
             // Configure User

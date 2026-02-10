@@ -589,6 +589,7 @@ namespace DeliveryControl.Controllers
             
             // Get all active customers
             var customers = await _context.Customers
+                .AsNoTracking() // Added AsNoTracking
                 .Where(c => c.IsActive)
                 .OrderBy(c => c.CustomerCode)
                 .ToListAsync();
@@ -641,6 +642,7 @@ namespace DeliveryControl.Controllers
                     }
 
                     customers = await _context.Customers
+                        .AsNoTracking() // Added AsNoTracking
                         .Where(c => c.IsActive)
                         .ToListAsync();
 
@@ -663,6 +665,7 @@ namespace DeliveryControl.Controllers
                     }
 
                     customers = await _context.Customers
+                        .AsNoTracking() // Added AsNoTracking
                         .Where(c => model.SelectedCustomerIds.Contains(c.CustomerId))
                         .ToListAsync();
                 }
@@ -840,6 +843,7 @@ namespace DeliveryControl.Controllers
 
             // Ambil semua customer aktif
             var allCustomers = await _context.Customers
+                .AsNoTracking() // Added AsNoTracking
                 .Where(c => c.IsActive)
                 .ToListAsync();
 
@@ -855,6 +859,7 @@ namespace DeliveryControl.Controllers
 
             // Ambil schedule yang sudah ada di tanggal tersebut untuk menghindari duplikasi per customer
             var existingSchedules = await _context.DeliverySchedules
+                .AsNoTracking() // Added AsNoTracking
                 .Where(s => s.ScheduledDate.Date == date)
                 .ToListAsync();
 
@@ -867,6 +872,7 @@ namespace DeliveryControl.Controllers
             // Prefix dan sequence number mengikuti format existing
             var prefix = $"SCH-{date:yyyyMMdd}";
             var lastSchedule = await _context.DeliverySchedules
+                .AsNoTracking() // Added AsNoTracking
                 .Where(s => s.ScheduleNumber.StartsWith(prefix))
                 .OrderByDescending(s => s.ScheduleNumber)
                 .FirstOrDefaultAsync();
@@ -957,6 +963,7 @@ namespace DeliveryControl.Controllers
         public IActionResult Create()
         {
             var customerList = _context.Customers
+                .AsNoTracking() // Added AsNoTracking
                 .Where(c => c.IsActive)
                 .Select(c => new { 
                     c.CustomerId, 
@@ -987,6 +994,7 @@ namespace DeliveryControl.Controllers
             
             // Cari schedule number terakhir hari ini
             var lastSchedule = _context.DeliverySchedules
+                .AsNoTracking() // Added AsNoTracking
                 .Where(s => s.ScheduleNumber.StartsWith(prefix))
                 .OrderByDescending(s => s.ScheduleNumber)
                 .FirstOrDefault();
@@ -1010,6 +1018,7 @@ namespace DeliveryControl.Controllers
         public IActionResult GetCustomerDetails(int customerId)
         {
             var customer = _context.Customers
+                .AsNoTracking() // Added AsNoTracking
                 .Where(c => c.CustomerId == customerId)
                 .Select(c => new {
                     route = c.Route ?? "",
@@ -1031,6 +1040,7 @@ namespace DeliveryControl.Controllers
         {
             var prefix = $"SCH-{date:yyyyMMdd}";
             var lastSchedule = await _context.DeliverySchedules
+                .AsNoTracking() // Added AsNoTracking
                 .Where(s => s.ScheduleNumber.StartsWith(prefix))
                 .OrderByDescending(s => s.ScheduleNumber)
                 .FirstOrDefaultAsync();
@@ -1103,6 +1113,7 @@ namespace DeliveryControl.Controllers
             }
             
             var customerList = _context.Customers
+                .AsNoTracking() // Added AsNoTracking
                 .Where(c => c.IsActive)
                 .Select(c => new { 
                     c.CustomerId, 
@@ -1131,6 +1142,7 @@ namespace DeliveryControl.Controllers
                 return NotFound();
             }
             var customerList = _context.Customers
+                .AsNoTracking() // Added AsNoTracking
                 .Where(c => c.IsActive)
                 .Select(c => new { 
                     c.CustomerId, 
@@ -1197,6 +1209,7 @@ namespace DeliveryControl.Controllers
                 return RedirectToAction(nameof(Index));
             }
             var customerList = _context.Customers
+                .AsNoTracking() // Added AsNoTracking
                 .Where(c => c.IsActive)
                 .Select(c => new { 
                     c.CustomerId, 

@@ -49,6 +49,7 @@ namespace DeliveryControl.Controllers
 
             // Ambil kandidat schedule dari tiga hari (kemarin, hari ini, besok) untuk cover cross-day schedules
             var rawSchedules = await _context.DeliverySchedules
+                .AsNoTracking()
                 .Include(s => s.Customer)
                 .Where(s => s.ScheduledDate.Date >= yesterday.Date && s.ScheduledDate.Date <= tomorrow.Date)
                 .ToListAsync();
@@ -222,7 +223,7 @@ namespace DeliveryControl.Controllers
                 // Log activity
                 await _logService.LogConfirm(
                     "Driver",
-                    schedule.ScheduleNumber,
+                    schedule.ScheduleNumber ?? "UNKNOWN",
                     schedule.ScheduleId,
                     $"Konfirmasi kedatangan untuk {schedule.Customer?.CustomerName} pada {arrivalTime:HH:mm}",
                     User.Identity?.Name ?? "Driver"
@@ -334,7 +335,7 @@ namespace DeliveryControl.Controllers
                 // Log activity
                 await _logService.LogConfirm(
                     "Driver",
-                    schedule.ScheduleNumber,
+                    schedule.ScheduleNumber ?? "UNKNOWN",
                     schedule.ScheduleId,
                     $"Konfirmasi keberangkatan dari {schedule.Customer?.CustomerName} pada {departureTime:HH:mm}. Durasi: {durationText}",
                     User.Identity?.Name ?? "Driver"
@@ -399,36 +400,43 @@ namespace DeliveryControl.Controllers
                 return RedirectToAction(nameof(Index), new { selectedDate = schedule.ScheduledDate });
             }
 
-            var arrivalTime = DateTime.Now;
-            schedule.ActualStartTime = arrivalTime;
-            schedule.DriverStatus = "In Progress";
-            schedule.UpdatedDate = arrivalTime;
-            schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
-
-            await _context.SaveChangesAsync();
-
-            // Load customer data untuk SignalR message
-            await _context.Entry(schedule).Reference(s => s.Customer).LoadAsync();
-
-            // Log activity
-            await _logService.LogConfirm(
-                "Driver",
-                schedule.ScheduleNumber,
-                schedule.ScheduleId,
-                $"Quick konfirmasi kedatangan untuk {schedule.Customer?.CustomerName} pada {arrivalTime:HH:mm}",
-                User.Identity?.Name ?? "Driver"
-            );
-
-            // Broadcast update via SignalR
-            await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+            try 
             {
-                ScheduleNumber = schedule.ScheduleNumber,
-                Action = "arrival",
-                Message = $"Driver telah tiba di {schedule.Customer?.CustomerName} pada {arrivalTime:HH:mm}",
-                Timestamp = arrivalTime
-            });
+                var arrivalTime = DateTime.Now;
+                schedule.ActualStartTime = arrivalTime;
+                schedule.DriverStatus = "In Progress";
+                schedule.UpdatedDate = arrivalTime;
+                schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
 
-            TempData["SuccessMessage"] = $"✅ Kedatangan dikonfirmasi pada {arrivalTime:HH:mm}!";
+                await _context.SaveChangesAsync();
+
+                // Load customer data untuk SignalR message
+                await _context.Entry(schedule).Reference(s => s.Customer).LoadAsync();
+
+                // Log activity
+                await _logService.LogConfirm(
+                    "Driver",
+                    schedule.ScheduleNumber ?? "UNKNOWN",
+                    schedule.ScheduleId,
+                    $"Quick konfirmasi kedatangan untuk {schedule.Customer?.CustomerName} pada {arrivalTime:HH:mm}",
+                    User.Identity?.Name ?? "Driver"
+                );
+
+                // Broadcast update via SignalR
+                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                {
+                    ScheduleNumber = schedule.ScheduleNumber,
+                    Action = "arrival",
+                    Message = $"Driver telah tiba di {schedule.Customer?.CustomerName} pada {arrivalTime:HH:mm}",
+                    Timestamp = arrivalTime
+                });
+
+                TempData["SuccessMessage"] = $"✅ Kedatangan dikonfirmasi pada {arrivalTime:HH:mm}!";
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = "Gagal memproses quick arrival: " + ex.Message;
+            }
             return RedirectToAction(nameof(Index), new { selectedDate = schedule.ScheduledDate });
         }
 
@@ -456,42 +464,49 @@ namespace DeliveryControl.Controllers
                 return RedirectToAction(nameof(Index), new { selectedDate = schedule.ScheduledDate });
             }
 
-            var departureTime = DateTime.Now;
-            schedule.ActualEndTime = departureTime;
-            schedule.DriverStatus = "Completed";
-            schedule.UpdatedDate = departureTime;
-            schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
-
-            await _context.SaveChangesAsync();
-
-            // Load customer data untuk SignalR message
-            await _context.Entry(schedule).Reference(s => s.Customer).LoadAsync();
-
-            // Hitung durasi
-            var duration = departureTime - schedule.ActualStartTime!.Value;
-            var durationText = duration.TotalHours >= 1 
-                ? $"{(int)duration.TotalHours} jam {duration.Minutes} menit"
-                : $"{(int)duration.TotalMinutes} menit";
-
-            // Log activity
-            await _logService.LogConfirm(
-                "Driver",
-                schedule.ScheduleNumber,
-                schedule.ScheduleId,
-                $"Quick konfirmasi keberangkatan dari {schedule.Customer?.CustomerName} pada {departureTime:HH:mm}. Durasi: {durationText}",
-                User.Identity?.Name ?? "Driver"
-            );
-
-            // Broadcast update via SignalR
-            await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+            try 
             {
-                ScheduleNumber = schedule.ScheduleNumber,
-                Action = "departure",
-                Message = $"Delivery ke {schedule.Customer?.CustomerName} selesai pada {departureTime:HH:mm}. Durasi: {durationText}",
-                Timestamp = departureTime
-            });
+                var departureTime = DateTime.Now;
+                schedule.ActualEndTime = departureTime;
+                schedule.DriverStatus = "Completed";
+                schedule.UpdatedDate = departureTime;
+                schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
 
-            TempData["SuccessMessage"] = $"✅ Keberangkatan dikonfirmasi pada {departureTime:HH:mm}!";
+                await _context.SaveChangesAsync();
+
+                // Load customer data untuk SignalR message
+                await _context.Entry(schedule).Reference(s => s.Customer).LoadAsync();
+
+                // Hitung durasi
+                var duration = departureTime - schedule.ActualStartTime!.Value;
+                var durationText = duration.TotalHours >= 1 
+                    ? $"{(int)duration.TotalHours} jam {duration.Minutes} menit"
+                    : $"{(int)duration.TotalMinutes} menit";
+
+                // Log activity
+                await _logService.LogConfirm(
+                    "Driver",
+                    schedule.ScheduleNumber,
+                    schedule.ScheduleId,
+                    $"Quick konfirmasi keberangkatan dari {schedule.Customer?.CustomerName} pada {departureTime:HH:mm}. Durasi: {durationText}",
+                    User.Identity?.Name ?? "Driver"
+                );
+
+                // Broadcast update via SignalR
+                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                {
+                    ScheduleNumber = schedule.ScheduleNumber,
+                    Action = "departure",
+                    Message = $"Delivery ke {schedule.Customer?.CustomerName} selesai pada {departureTime:HH:mm}. Durasi: {durationText}",
+                    Timestamp = departureTime
+                });
+
+                TempData["SuccessMessage"] = $"✅ Keberangkatan dikonfirmasi pada {departureTime:HH:mm}!";
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = "Gagal memproses quick departure: " + ex.Message;
+            }
             return RedirectToAction(nameof(Index), new { selectedDate = schedule.ScheduledDate });
         }
 

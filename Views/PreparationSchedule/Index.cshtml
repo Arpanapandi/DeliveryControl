@@ -11,6 +11,12 @@
              <p class="text-secondary mb-0">List jadwal pengiriman yang perlu diproses.</p>
         </div>
         <div class="d-flex align-items-center gap-2">
+            <!-- Date Filter Filter -->
+            <form method="get" class="d-flex align-items-center gap-2 me-3">
+                <input type="date" name="filterDate" class="form-control form-control-sm bg-dark text-white border-secondary" 
+                       value="@ViewBag.FilterDate" onchange="this.form.submit()" />
+            </form>
+
             <!-- Download Template Button -->
             <a asp-action="DownloadTemplate" class="btn btn-sm btn-secondary d-flex align-items-center shadow-sm">
                 <i class="bi bi-download me-2"></i> <span>Download Template</span>
@@ -55,25 +61,32 @@
                         {
                             <tr>
                                 <td class="fw-bold text-info">@schedule.ScheduleNumber</td>
-                                <td><span class="badge bg-secondary">@(schedule.Customer?.Docking ?? "-")</span></td>
+                                <td>
+                                    <span class="badge bg-secondary">
+                                        @(string.IsNullOrEmpty(schedule.Area) ? (schedule.Customer?.Docking ?? "-") : schedule.Area)
+                                    </span>
+                                </td>
                                 <td>@(schedule.Customer?.CustomerCode ?? "-")</td>
                                 <td>@(schedule.Customer?.CustomerName ?? "-")</td>
                                 <td>@(schedule.Route ?? "-")</td>
                                 <td>@(schedule.Cycle ?? "-")</td>
                                 <td>
                                     <div class="d-flex flex-column">
-                                        @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
+                                        @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber) && !string.IsNullOrEmpty(item.Item?.VIN))
                                         {
-                                            <span class="text-info fw-bold fs-6">@item.Item.CustomerPartNumber</span>
-                                            <small class="text-secondary opacity-75" style="font-size: 0.75rem;">VIN: @item.Item.VIN</small>
+                                            <span class="text-info fw-bold fs-6">@item.Item.CustomerPartNumber/@item.Item.VIN</span>
+                                        }
+                                        else if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
+                                        {
+                                            <span class="text-info fw-bold">@item.Item.CustomerPartNumber</span>
                                         }
                                         else
                                         {
-                                            <span class="text-info fw-bold">@item.Item?.VIN</span>
+                                            <span class="text-info fw-bold">@(item.Item?.VIN ?? "-")</span>
                                         }
                                     </div>
                                 </td>
-                                <td class="text-center"><span class="badge bg-dark border">@item.Item.QtyLot</span></td>
+                                <td class="text-center"><span class="badge bg-dark border">@item.Item?.QtyLot</span></td>
                                 <td class="text-center fw-bold fs-5 text-warning">
                                     @item.Quantity.ToString("G29") <small class="text-secondary">pcs</small>
                                 </td>

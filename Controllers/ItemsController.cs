@@ -17,7 +17,9 @@ namespace DeliveryControl.Controllers
         // GET: Items
         public async Task<IActionResult> Index(string searchString, string category)
         {
-            ViewData["CurrentFilter"] = searchString;
+            var query = _context.Items
+                .AsNoTracking() // Performance for high data
+                .AsQueryable();
             ViewData["CurrentCategory"] = category;
 
             var categories = await _context.Items

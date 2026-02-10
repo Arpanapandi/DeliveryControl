@@ -21,17 +21,30 @@ namespace DeliveryControl.Controllers
             _hubContext = hubContext;
         }
 
-        public async Task<IActionResult> Index()
+        public async Task<IActionResult> Index(DateTime? filterDate)
         {
-            var schedules = await _context.DeliverySchedules
+            var dateToFilter = filterDate ?? DateTime.Today;
+            var query = _context.DeliverySchedules
+                .AsNoTracking()
                 .Include(s => s.Customer)
                 .Include(s => s.DeliveryItems)
-                .ThenInclude(di => di.Item)
-                .Where(s => s.Status == "Scheduled" || s.Status == "In Progress")
+                    .ThenInclude(di => di.Item)
+                .Where(s => s.DeliveryItems.Any()); // Hide Ghost Data
+
+            // Default (Today): Hide Completed/Cancelled to keep To-Do list clean
+            // Historical/Specific Date: Show everything
+            if (!filterDate.HasValue || filterDate.Value == DateTime.Today)
+            {
+                query = query.Where(s => s.Status != "Cancelled" && s.Status != "Completed");
+            }
+
+            var schedules = await query
+                .Where(s => s.ScheduledDate == dateToFilter)
                 .OrderBy(s => s.ScheduledDate)
                 .ThenBy(s => s.ScheduleNumber)
                 .ToListAsync();
 
+            ViewBag.FilterDate = dateToFilter.ToString("yyyy-MM-dd");
             return View(schedules);
         }
 
@@ -79,62 +92,63 @@ namespace DeliveryControl.Controllers
         // POST: PreparationSchedule/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(int? SelectedItemId, decimal? SelectedItemQty, [Bind("ScheduleId,ScheduleNumber,CustomerId,ScheduledDate,Route,Cycle,EnterDockTime,PickupTime,ETD,Range,SKID,Area,TotalTargetQuantity,Notes,Status")] DeliverySchedule deliverySchedule)
+        public async Task<IActionResult> Create(List<int> itemIds, List<decimal> itemQtys, [Bind("ScheduleId,ScheduleNumber,CustomerId,ScheduledDate,Route,Cycle,EnterDockTime,PickupTime,ETD,Range,SKID,Area,TotalTargetQuantity,Notes,Status")] DeliverySchedule deliverySchedule)
         {
             if (ModelState.IsValid)
             {
-                // Auto-generate schedule number ONLY if empty (allows manual Manifest input)
-                if (string.IsNullOrEmpty(deliverySchedule.ScheduleNumber))
+                if (itemIds == null || !itemIds.Any())
                 {
-                    int sequence = await GetNextSequenceInternal(deliverySchedule.ScheduledDate);
-                    deliverySchedule.ScheduleNumber = $"SCH-{deliverySchedule.ScheduledDate:yyyyMMdd}{sequence:D3}";
+                    ModelState.AddModelError("", "Setidaknya harus ada satu item dalam jadwal.");
                 }
-                
-                deliverySchedule.CreatedDate = DateTime.Now;
-                deliverySchedule.CreatedBy = User.Identity?.Name ?? "PreparationPortal";
-
-                _context.Add(deliverySchedule);
-                
-                // If Item is selected, create DeliveryItem
-                if (SelectedItemId.HasValue && SelectedItemQty.HasValue)
+                else
                 {
-                    var dItem = new DeliveryItem
+                    // Auto-generate schedule number ONLY if empty
+                    if (string.IsNullOrEmpty(deliverySchedule.ScheduleNumber))
                     {
-                        DeliverySchedule = deliverySchedule, // EF will link it
-                        ItemId = SelectedItemId.Value,
-                        Quantity = SelectedItemQty.Value,
-                        ActualQuantity = 0,
-                        CreatedDate = DateTime.Now
-                    };
-                    _context.DeliveryItems.Add(dItem);
+                        int sequence = await GetNextSequenceInternal(deliverySchedule.ScheduledDate);
+                        deliverySchedule.ScheduleNumber = $"SCH-{deliverySchedule.ScheduledDate:yyyyMMdd}{sequence:D3}";
+                    }
                     
-                    // Update total target quantity if not set
-                    if (deliverySchedule.TotalTargetQuantity == 0)
-                        deliverySchedule.TotalTargetQuantity = (int)SelectedItemQty.Value;
+                    deliverySchedule.CreatedDate = DateTime.Now;
+                    deliverySchedule.CreatedBy = User.Identity?.Name ?? "PreparationPortal";
+
+                    _context.Add(deliverySchedule);
+                    
+                    // Create DeliveryItems from lists
+                    for (int i = 0; i < itemIds.Count; i++)
+                    {
+                        if (itemIds[i] > 0 && itemQtys.Count > i && itemQtys[i] > 0)
+                        {
+                            var dItem = new DeliveryItem
+                            {
+                                DeliverySchedule = deliverySchedule,
+                                ItemId = itemIds[i],
+                                Quantity = itemQtys[i],
+                                ActualQuantity = 0,
+                                CreatedDate = DateTime.Now
+                            };
+                            deliverySchedule.DeliveryItems.Add(dItem);
+                            _context.DeliveryItems.Add(dItem);
+                        }
+                    }
+
+                    // Update total target qty from sum of items
+                    deliverySchedule.TotalTargetQuantity = (int)deliverySchedule.DeliveryItems.Sum(di => di.Quantity);
+
+                    await _context.SaveChangesAsync();
+                    return RedirectToAction(nameof(Index));
                 }
-
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
             }
             
-            // Debug: Capture all validation errors
-            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
-            if (errors.Any())
-            {
-                TempData["ErrorMessage"] = "Validation Errors: " + string.Join(" | ", errors);
-            }
-
+            // On failure, reload view data
             ViewData["CustomerId"] = new Microsoft.AspNetCore.Mvc.Rendering.SelectList(_context.Customers, "CustomerId", "CustomerName", deliverySchedule.CustomerId);
-            
-            var itemList = _context.Items
-                .OrderBy(i => i.ItemName)
+            var itemList = await _context.Items.OrderBy(i => i.ItemName)
                 .Select(i => new {
                     ItemId = i.ItemId,
                     DisplayName = $"{i.ItemName} | Rack: {i.Rack}-{i.NoRack} | VIN: {i.VIN}"
-                })
-                .ToList();
+                }).ToListAsync();
+            ViewData["Items"] = new Microsoft.AspNetCore.Mvc.Rendering.SelectList(itemList, "ItemId", "DisplayName");
 
-            ViewData["Items"] = new Microsoft.AspNetCore.Mvc.Rendering.SelectList(itemList, "ItemId", "DisplayName", SelectedItemId);
             return View(deliverySchedule);
         }
 
@@ -290,10 +304,10 @@ namespace DeliveryControl.Controllers
             {
                 var worksheet = workbook.Worksheets.Add("Template Schedule");
 
-                // Headers sesuai gambar User
+                // Headers sesuai gambar User (Ex: 8 Kolom)
                 var headers = new[] { 
                     "MANIFESTING", "DOCK", "KODE CUSTOMER", "NAMA CUSTOMER", 
-                    "ROUTE", "CYCLE", "PART NO / VIN", "QTY/LOT", "QTY (PCS)", "KANBAN" 
+                    "ROUTE", "CYCLE", "PART NO / VIN", "QTY (PCS)" 
                 };
 
                 for (int i = 0; i < headers.Length; i++)
@@ -312,16 +326,14 @@ namespace DeliveryControl.Controllers
                 var sampleItem = _context.Items.Where(i => !string.IsNullOrEmpty(i.CustomerPartNumber)).FirstOrDefault();
                 var sampleCust = _context.Customers.FirstOrDefault();
 
-                worksheet.Cell(2, 1).Value = "MAN-001"; // Manifesting Example
-                worksheet.Cell(2, 2).Value = sampleCust?.Docking ?? "08:00"; // Dock
+                worksheet.Cell(2, 1).Value = "MAN-001"; // Manifesting
+                worksheet.Cell(2, 2).Value = sampleCust?.Docking ?? "DOCK-A"; // Dock (Location Code)
                 worksheet.Cell(2, 3).Value = sampleCust?.CustomerCode ?? "CUST001"; // Kode Customer
                 worksheet.Cell(2, 4).Value = sampleCust?.CustomerName ?? "PT. CONTOH"; // Nama Customer
                 worksheet.Cell(2, 5).Value = sampleCust?.Route ?? "R1"; // Route
                 worksheet.Cell(2, 6).Value = sampleCust?.Cycle ?? "C1"; // Cycle
-                worksheet.Cell(2, 7).Value = sampleItem?.CustomerPartNumber ?? "PART-001"; // Item / Part No
-                worksheet.Cell(2, 8).Value = sampleItem?.QtyLot?.ToString() ?? "10"; // Qty/Lot
-                worksheet.Cell(2, 9).Value = 500; // Qty (Pcs)
-                worksheet.Cell(2, 10).Value = sampleItem?.KanbanType ?? "E-KANBAN"; // Kanban
+                worksheet.Cell(2, 7).Value = sampleItem?.CustomerPartNumber ?? "PART-001"; // Part No / VIN
+                worksheet.Cell(2, 8).Value = 500; // Qty (Pcs)
 
                 // Border
                 headerRange.RangeUsed().Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
@@ -329,9 +341,9 @@ namespace DeliveryControl.Controllers
 
                 // Instructions
                 worksheet.Cell(4, 2).Value = "CATATAN PENGISIAN:";
-                worksheet.Cell(5, 2).Value = "• Gunakan format ini untuk Upload Jadwal.";
+                worksheet.Cell(5, 2).Value = "• Kolom DOCK berisi Kode Lokasi Dock.";
                 worksheet.Cell(6, 2).Value = "• Kolom KODE CUSTOMER dan PART NO / VIN Wajib diisi.";
-                worksheet.Cell(7, 2).Value = "• Data ETD, PICKUP, SKID, AREA akan diambil otomatis dari Master Customer.";
+                worksheet.Cell(7, 2).Value = "• Qty/Lot dan Kanban otomatis terisi dari Master Item.";
 
                 using (var stream = new MemoryStream())
                 {
@@ -341,10 +353,16 @@ namespace DeliveryControl.Controllers
                 }
             }
         }
+        [HttpGet]
+        public IActionResult ImportExcel()
+        {
+            return RedirectToAction(nameof(Index));
+        }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ImportExcel(IFormFile file)
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> ImportExcel([FromForm] IFormFile file)
         {
             if (file == null || file.Length == 0)
             {
@@ -403,14 +421,15 @@ namespace DeliveryControl.Controllers
                             "CYCLE", "ITEM", "PART", "QTY", "KANBAN" 
                         };
 
-                        for (int r = 1; r <= 30; r++) // Scan first 30 rows
+                        for (int r = 1; r <= 10; r++) // Scan first 10 rows
                         {
                             var testRow = worksheet.Row(r);
                             int currentScore = 0;
-                            for (int c = 1; c <= 30; c++)
+                            for (int c = 1; c <= 20; c++)
                             {
                                 var val = NormalizeHeader(GetSafeString(testRow.Cell(c)));
-                                foreach (var k in targetKeywords) if (val.Contains(k)) currentScore++;
+                                if (val.Contains("MANIFESTING") || val.Contains("DOCK") || val.Contains("CUSTOMER") || val.Contains("PART")) 
+                                    currentScore++;
                             }
                         
                             if (currentScore >= 3)
@@ -440,26 +459,26 @@ namespace DeliveryControl.Controllers
                             return -1;
                         }
 
-                        // Column Mapping (Updated to match Image)
+                        // Column Mapping (Updated to match Image: 8 Col)
                         var colMap = new
                         {
-                            Manifesting = FindCol("MANIFESTING", "MANIFEST"), // New Header
-                            Dock = FindCol("DOCK", "DOCKING", "ENTER DOCK"),
+                            Manifesting = FindCol("MANIFESTING", "MANIFEST"),
+                            Dock = FindCol("DOCK"),
                             Cust = FindCol("KODE CUSTOMER", "KODE", "CUST"),
                             CustName = FindCol("NAMA CUSTOMER", "NAMA"),
                             Route = FindCol("ROUTE", "RUTE"),
                             Cycle = FindCol("CYCLE", "SIKLUS"),
-                            ItemPartNo = FindCol("ITEM / PART NO", "ITEM", "PART NO", "PART"),
-                            QtyLot = FindCol("QTY/LOT", "LOT"),
+                            ItemPartNo = FindCol("PART NO / VIN", "PART NO", "ITEM", "PART", "VIN"),
                             QtyPcs = FindCol("QTY (PCS)", "QTY PCS", "QTY"),
-                            Kanban = FindCol("KANBAN"),
                             
                             // Legacy/Hidden Columns (Fallback)
+                            QtyLot = FindCol("QTY/LOT", "LOT"),
+                            Kanban = FindCol("KANBAN"),
                             Pickup = FindCol("PICKUP", "PENJEMPUTAN"),
                             Etd = FindCol("ETD"),
                             Skid = FindCol("SKID", "PALLET"),
                             Area = FindCol("AREA"),
-                            Target = FindCol("QTYTARGET", "TARGET", "QTY_TOTAL") // Target total schedule
+                            Target = FindCol("QTYTARGET", "TARGET", "QTY_TOTAL")
                         };
 
                         if (colMap.Cust == -1)
@@ -468,148 +487,176 @@ namespace DeliveryControl.Controllers
                             return RedirectToAction(nameof(Index));
                         }
 
-                        var schedules = new List<DeliverySchedule>();
-                        // Default Date: Today (or logic to pick from excel if exists, but strictly Today for now as per requirement)
-                        var scheduledDate = DateTime.Today; 
-                        int sequenceNumber = await GetNextSequenceInternal(scheduledDate);
 
-                        // Process Rows
+                        // --- PHASE 1: Collect All Valid Data Rows ---
+                        var validRowsData = new List<ExcelRowData>();
                         var rows = worksheet.RowsUsed().Where(r => r.RowNumber() > headerRow.RowNumber());
+                        
+                        // Fill-down states
+                        string lastCustCode = "";
+                        string lastManifest = "";
+                        string lastDock = "";
+                        string lastRoute = "";
+                        string lastCycle = "";
+
                         foreach (var row in rows)
                         {
                             if (row.IsEmpty()) continue;
-
                             try
                             {
                                 string custCode = GetSafeString(row.Cell(colMap.Cust)).Trim().ToUpper();
-                                if (string.IsNullOrEmpty(custCode)) continue;
+                                string manifest = colMap.Manifesting != -1 ? GetSafeString(row.Cell(colMap.Manifesting)).Trim().ToUpper() : "";
+                                string itemCode = colMap.ItemPartNo != -1 ? GetSafeString(row.Cell(colMap.ItemPartNo)).Trim().ToUpper() : "";
+                                string dockLocation = colMap.Dock != -1 ? GetSafeString(row.Cell(colMap.Dock)).Trim() : "";
+                                string route = colMap.Route != -1 ? GetSafeString(row.Cell(colMap.Route)).Trim() : "";
+                                string cycle = colMap.Cycle != -1 ? GetSafeString(row.Cell(colMap.Cycle)).Trim() : "";
+                                int qty = colMap.QtyPcs != -1 ? GetSafeInt(row.Cell(colMap.QtyPcs)) : 0;
 
-                                if (!customers.TryGetValue(custCode, out var customer))
-                                {
-                                    throw new Exception($"Customer Code '{custCode}' tidak ditemukan di database.");
-                                }
+                                // --- Fill Down Logic ---
+                                if (string.IsNullOrEmpty(custCode)) custCode = lastCustCode; else lastCustCode = custCode;
+                                if (string.IsNullOrEmpty(manifest)) manifest = lastManifest; else lastManifest = manifest;
+                                if (string.IsNullOrEmpty(dockLocation)) dockLocation = lastDock; else lastDock = dockLocation;
+                                if (string.IsNullOrEmpty(route)) route = lastRoute; else lastRoute = route;
+                                if (string.IsNullOrEmpty(cycle)) cycle = lastCycle; else lastCycle = cycle;
 
-                                // Parsing Data
-                                string? route = colMap.Route != -1 ? GetSafeString(row.Cell(colMap.Route)) : customer.Route;
-                                string? cycle = colMap.Cycle != -1 ? GetSafeString(row.Cell(colMap.Cycle)) : customer.Cycle;
-                                string? area = colMap.Area != -1 ? GetSafeString(row.Cell(colMap.Area)) : customer.Area;
-                                string? skid = colMap.Skid != -1 ? GetSafeString(row.Cell(colMap.Skid)) : customer.SKID; // Use SKID prop
-
-                                // Times (Fallback to Master if not in Excel)
-                                var enterDockTime = colMap.Dock != -1 ? GetSafeTime(row.Cell(colMap.Dock), scheduledDate) : ParseTimeToDateTime(customer.Docking, scheduledDate);
-                                var pickupTime = colMap.Pickup != -1 ? GetSafeTime(row.Cell(colMap.Pickup), scheduledDate) : ParseTimeToDateTime(customer.Pickup, scheduledDate);
-                                var etdTime = colMap.Etd != -1 ? GetSafeTime(row.Cell(colMap.Etd), scheduledDate) : ParseTimeToDateTime(customer.ETD, scheduledDate);
-
-                                // Mapping Item Decision: MANIFESTING is Key!
-                                DeliveryItem? dItem = null;
-                                int qtyPcs = colMap.QtyPcs != -1 ? GetSafeInt(row.Cell(colMap.QtyPcs)) : 0;
-                                string itemSearchKey = "";
-                                string keySource = "";
-
-                                // Priority 1: Check MANIFESTING column
-                                if (colMap.Manifesting != -1)
-                                {
-                                    string val = GetSafeString(row.Cell(colMap.Manifesting)).Trim().ToUpper();
-                                    if (!string.IsNullOrEmpty(val))
-                                    {
-                                        itemSearchKey = val;
-                                        keySource = "Manifesting";
-                                    }
-                                }
-
-                                // Priority 2: Check ITEM / PART NO (Fallback)
-                                if (string.IsNullOrEmpty(itemSearchKey) && colMap.ItemPartNo != -1)
-                                {
-                                    string val = GetSafeString(row.Cell(colMap.ItemPartNo)).Trim().ToUpper();
-                                    if (!string.IsNullOrEmpty(val))
-                                    {
-                                        itemSearchKey = val;
-                                        keySource = "Item/PartNo";
-                                    }
-                                }
-
-                                if (!string.IsNullOrEmpty(itemSearchKey))
-                                {
-                                    if (itemMap.TryGetValue(itemSearchKey, out var matchedItem))
-                                    {
-                                        dItem = new DeliveryItem
-                                        {
-                                            ItemId = matchedItem.ItemId,
-                                            Quantity = qtyPcs,
-                                            ActualQuantity = 0,
-                                            CreatedDate = DateTime.Now
-                                        };
-                                    }
-                                    else
-                                    {
-                                         // Log warning if item not found
-                                         // If key came from Manifesting, it's critical
-                                         // We can add a note to the schedule
-                                    }
-                                }
-
-                                int targetQty = colMap.Target != -1 ? GetSafeInt(row.Cell(colMap.Target)) : qtyPcs; // Fallback to item qty if total not specified
-
-                                // Adjust Days for Overnight logic
-                                if (enterDockTime.HasValue && pickupTime.HasValue && enterDockTime.Value.TimeOfDay > pickupTime.Value.TimeOfDay)
-                                    enterDockTime = enterDockTime.Value.AddDays(-1);
-
-                                if (etdTime.HasValue && pickupTime.HasValue && etdTime.Value.TimeOfDay < pickupTime.Value.TimeOfDay)
-                                    etdTime = etdTime.Value.AddDays(1);
-
-                                 // Manifest logic: Use provided Manifest from Excel if available
-                                 string? manifestCode = colMap.Manifesting != -1 ? GetSafeString(row.Cell(colMap.Manifesting)).Trim().ToUpper() : null;
-                                 string scheduleNumber = "";
-
-                                 if (!string.IsNullOrEmpty(manifestCode))
-                                 {
-                                     scheduleNumber = manifestCode;
-                                 }
-                                 else
-                                 {
-                                     // Generate fallback Schedule Number
-                                     var prefix = $"SCH-{scheduledDate:yyyyMMdd}";
-                                     scheduleNumber = $"{prefix}{sequenceNumber:D3}";
-                                     sequenceNumber++;
-                                 }
-
-                                var schedule = new DeliverySchedule
-                                {
-                                    ScheduleNumber = scheduleNumber,
-                                    CustomerId = customer.CustomerId,
-                                    ScheduledDate = scheduledDate,
-                                    Route = route,
-                                    Cycle = cycle,
-                                    EnterDockTime = enterDockTime,
-                                    PickupTime = pickupTime,
-                                    ETD = etdTime,
-                                    Range = (etdTime.HasValue && pickupTime.HasValue) ? (etdTime.Value - pickupTime.Value).ToString(@"hh\:mm") : null,
-                                    SKID = skid,
-                                    Area = area,
-                                    TotalTargetQuantity = targetQty,
-                                    Status = "Scheduled",
-                                    CreatedDate = DateTime.Now,
-                                    CreatedBy = User.Identity?.Name ?? "ImportExcel"
-                                };
+                                if (string.IsNullOrEmpty(custCode)) continue; // Still empty? skip
+                                if (string.IsNullOrEmpty(itemCode)) continue; // No item? skip
                                 
-                                if (dItem != null)
+                                if (!customers.TryGetValue(custCode, out var customer)) continue; 
+
+                                // --- REVOLUTIONARY MATCHING (v10.0): Triple-Tier Matching ---
+                                // Tier 1: Strict Match (Exact Part + Exact/Sub-Customer)
+                                var matchedItem = allItems.FirstOrDefault(i => 
+                                    (i.CustomerPartNumber?.Trim().ToUpper() == itemCode || i.VIN?.Trim().ToUpper() == itemCode) &&
+                                    (
+                                        string.IsNullOrEmpty(i.Customer) || 
+                                        string.Equals(i.Customer?.Trim(), customer.CustomerName?.Trim(), StringComparison.OrdinalIgnoreCase) || 
+                                        string.Equals(i.Customer?.Trim(), customer.CustomerCode?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                                        (i.Customer != null && (customer.CustomerName.ToUpper().Contains(i.Customer.ToUpper()) || customer.CustomerCode.ToUpper().Contains(i.Customer.ToUpper())))
+                                    )
+                                );
+
+                                // Tier 2: Lenient Match (Ignore Customer Filter if only 1 match exists globally)
+                                if (matchedItem == null)
                                 {
-                                    schedule.DeliveryItems.Add(dItem);
-                                }
-                                else if (colMap.ItemPartNo != -1 && qtyPcs > 0)
-                                {
-                                     // Case: Item existed in Excel but not found in DB
-                                     string partVal = GetSafeString(row.Cell(colMap.ItemPartNo));
-                                     schedule.Notes = $"[Warning] Part '{partVal}' tidak dikenal sistem.";
+                                    var potentialMatches = allItems.Where(i => 
+                                        i.CustomerPartNumber?.Trim().ToUpper() == itemCode || i.VIN?.Trim().ToUpper() == itemCode).ToList();
+                                    
+                                    if (potentialMatches.Count == 1)
+                                    {
+                                        matchedItem = potentialMatches.First();
+                                    }
+                                    else if (potentialMatches.Count > 1)
+                                    {
+                                        // Pick the one that is closest to our customer if multiple exist
+                                        matchedItem = potentialMatches.FirstOrDefault(i => 
+                                            !string.IsNullOrEmpty(i.Customer) && 
+                                            (customer.CustomerName.ToUpper().Contains(i.Customer.ToUpper()) || i.Customer.ToUpper().Contains(customer.CustomerCode.ToUpper())));
+                                        
+                                        // Still nothing? pick the first one as a last resort
+                                        if (matchedItem == null) matchedItem = potentialMatches.First();
+                                    }
                                 }
 
-                                schedules.Add(schedule);
-                                successCount++;
+                                validRowsData.Add(new ExcelRowData {
+                                    RowNumber = row.RowNumber(),
+                                    Customer = customer,
+                                    ManifestNum = manifest,
+                                    ItemCode = itemCode,
+                                    DockLocation = dockLocation,
+                                    MatchedItem = matchedItem,
+                                    Quantity = qty,
+                                    Row = row
+                                });
                             }
                             catch (Exception ex)
                             {
                                 errorCount++;
                                 if (errorSamples.Count < 5) errorSamples.Add($"Baris {row.RowNumber()}: {ex.Message}");
+                            }
+                        }
+
+                        // --- PHASE 2: Grouping Logic (The "Perfect" Part) ---
+                        var scheduledDate = DateTime.Today;
+                        int sequenceNumber = await GetNextSequenceInternal(scheduledDate);
+                        var schedules = new List<DeliverySchedule>();
+
+                        // Group by Manifest & Customer (Primary Grouping)
+                        var manifestGroups = validRowsData.GroupBy(r => new { r.ManifestNum, r.Customer.CustomerId });
+
+                        foreach (var group in manifestGroups)
+                        {
+                            var first = group.First();
+                            string finalScheduleNumber = group.Key.ManifestNum;
+                            
+                            if (string.IsNullOrEmpty(finalScheduleNumber))
+                            {
+                                var prefix = $"SCH-{scheduledDate:yyyyMMdd}";
+                                finalScheduleNumber = $"{prefix}{sequenceNumber:D3}";
+                                sequenceNumber++;
+                            }
+
+                            // Secondary Logic: Times use first row of group
+                            var enterDockTime = colMap.Dock != -1 ? GetSafeTime(first.Row.Cell(colMap.Dock), scheduledDate) : ParseTimeToDateTime(first.Customer.Docking, scheduledDate);
+                            var pickupTime = colMap.Pickup != -1 ? GetSafeTime(first.Row.Cell(colMap.Pickup), scheduledDate) : ParseTimeToDateTime(first.Customer.Pickup, scheduledDate);
+                            var etdTime = colMap.Etd != -1 ? GetSafeTime(first.Row.Cell(colMap.Etd), scheduledDate) : ParseTimeToDateTime(first.Customer.ETD, scheduledDate);
+                            string? route = colMap.Route != -1 ? GetSafeString(first.Row.Cell(colMap.Route)) : first.Customer.Route;
+                            string? cycle = colMap.Cycle != -1 ? GetSafeString(first.Row.Cell(colMap.Cycle)) : first.Customer.Cycle;
+
+                             var schedule = new DeliverySchedule
+                            {
+                                ScheduleNumber = finalScheduleNumber,
+                                CustomerId = group.Key.CustomerId,
+                                ScheduledDate = scheduledDate,
+                                Route = route,
+                                Cycle = cycle,
+                                Area = first.DockLocation, // Map DOCK string to Area property
+                                EnterDockTime = enterDockTime,
+                                PickupTime = pickupTime,
+                                ETD = etdTime,
+                                Status = "Scheduled",
+                                CreatedDate = DateTime.Now,
+                                CreatedBy = User.Identity?.Name ?? "ImportExcel"
+                            };
+
+                            // Group items within this manifest to combine duplicates
+                            var itemGroups = group.Where(g => g.MatchedItem != null)
+                                                 .GroupBy(g => g.MatchedItem!.ItemId);
+
+                            foreach (var itemGroup in itemGroups)
+                            {
+                                var totalQty = itemGroup.Sum(ig => ig.Quantity);
+                                
+                                schedule.DeliveryItems.Add(new DeliveryItem {
+                                    ItemId = itemGroup.Key,
+                                    Quantity = totalQty,
+                                    ActualQuantity = 0,
+                                    CreatedDate = DateTime.Now
+                                });
+                            }
+
+                            // Handling orphan items
+                            var unknownItems = group.Where(g => g.MatchedItem == null && !string.IsNullOrEmpty(g.ItemCode))
+                                                   .Select(g => g.ItemCode)
+                                                   .Distinct();
+                            
+                            if (unknownItems.Any())
+                            {
+                                schedule.Notes = "[Warning] Part(s) tidak dikenal: " + string.Join(", ", unknownItems);
+                            }
+
+                            if (schedule.DeliveryItems.Any())
+                            {
+                                schedules.Add(schedule);
+                                successCount++;
+                            }
+                            else
+                            {
+                                errorCount++;
+                                if (errorSamples.Count < 5 && unknownItems.Any()) 
+                                    errorSamples.Add($"Manifest {finalScheduleNumber}: Semua part tidak dikenal ({string.Join(", ", unknownItems)})");
+                                else if (errorSamples.Count < 5)
+                                    errorSamples.Add($"Manifest {finalScheduleNumber}: Tidak ada data item yang valid.");
                             }
                         }
 
@@ -717,5 +764,17 @@ namespace DeliveryControl.Controllers
             var number = $"SCH-{date:yyyyMMdd}{seq:D3}";
             return Json(new { number = number });
         }
+    }
+
+    public class ExcelRowData
+    {
+        public int RowNumber { get; set; }
+        public Customer Customer { get; set; } = null!;
+        public string ManifestNum { get; set; } = "";
+        public string ItemCode { get; set; } = "";
+        public string? DockLocation { get; set; } // Added for DOCK location support
+        public Item? MatchedItem { get; set; }
+        public int Quantity { get; set; }
+        public IXLRow Row { get; set; } = null!;
     }
 }

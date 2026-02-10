@@ -271,15 +271,7 @@
     <!-- Progress Table (Restored) -->
     <div class="progress-table-container shadow-lg">
         <table class="cyber-table">
-            <thead>
-                <tr>
-                    <th>Manifest / Schedule</th>
-                    <th>Customer / Dock</th>
-                    <th>Part No / VIN</th>
-                    <th>Progress</th>
-                    <th class="text-center">Status</th>
-                </tr>
-            </thead>
+            <!-- Header removed per User Request -->
             <tbody>
                 @if (Model != null && Model.Any())
                 {
@@ -295,18 +287,23 @@
                                 </td>
                                 <td>
                                     <div class="text-white fw-bold">@schedule.Customer?.CustomerName</div>
-                                    <span class="badge bg-secondary opacity-75" style="font-size: 0.65rem;">Dock: @schedule.Customer?.Docking</span>
+                                    <span class="badge bg-secondary opacity-75" style="font-size: 0.65rem;">
+                                        Dock: @(string.IsNullOrEmpty(schedule.Area) ? (schedule.Customer?.Docking ?? "-") : schedule.Area)
+                                    </span>
                                 </td>
                                 <td>
                                     <div class="d-flex flex-column">
-                                        @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
+                                        @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber) && !string.IsNullOrEmpty(item.Item?.VIN))
                                         {
-                                            <span class="text-info fw-bold fs-6">@item.Item.CustomerPartNumber</span>
-                                            <small class="text-secondary opacity-75" style="font-size: 0.75rem;">VIN: @item.Item.VIN</small>
+                                            <span class="text-info fw-bold fs-6">@item.Item.CustomerPartNumber/@item.Item.VIN</span>
+                                        }
+                                        else if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
+                                        {
+                                            <span class="text-info fw-bold">@item.Item.CustomerPartNumber</span>
                                         }
                                         else
                                         {
-                                            <span class="text-info fw-bold">@item.Item?.VIN</span>
+                                            <span class="text-info fw-bold">@(item.Item?.VIN ?? "-")</span>
                                         }
                                     </div>
                                 </td>

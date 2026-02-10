@@ -305,12 +305,12 @@ namespace DeliveryControl.Controllers
             // STOCK CALCULATION LOGIC (FIFO)
             // 1. Pulling: Ambil SEMUA data historis (Tanpa batas waktu) untuk pencocokan FIFO yang akurat
             //    Karena barang yang ditarik 1 bulan lalu bisa saja baru disiapkan hari ini.
-            var pullingQueryAll = _context.PullingRecords.Include(r => r.Item).AsQueryable();
+            var pullingQueryAll = _context.PullingRecords.AsNoTracking().Include(r => r.Item).AsQueryable();
             if (plant != "Overall") pullingQueryAll = pullingQueryAll.Where(r => r.Plant == plant);
             
             // 2. Preparation (STOCK CALCULATION): Use ALL TIME data to ensure accurate stock balance
             //    We must deduct ALL preparations that have ever happened, not just those in the selected period.
-            var preparationQueryAll = _context.PreparationRecords.AsQueryable();
+            var preparationQueryAll = _context.PreparationRecords.AsNoTracking().AsQueryable();
             if (plant != "Overall") preparationQueryAll = preparationQueryAll.Where(r => r.Plant == plant);
 
             // 3. Preparation (DISPLAY/ACTIVITY): Filter by date for the "Recent Activity" list and "Counts"
@@ -346,7 +346,7 @@ namespace DeliveryControl.Controllers
             // Stok yang MASIH ADA = Semua Pulling historis - Pulling yang sudah dikonsumsi oleh Preparation mana pun
             // Untuk dashboard view, kita mungkin hanya ingin menampilkan item yang masih di rak.
             var inStockPieces = allPullingPotential.Where(p => !consumedPullingIds.Contains(p.PullingId)).ToList();
-            var allItems = await _context.Items.ToListAsync();
+            var allItems = await _context.Items.AsNoTracking().ToListAsync();
             var itemStatuses = new Dictionary<int, string>();
             var piecesByItem = inStockPieces.Where(p => p.ItemId.HasValue).GroupBy(p => p.ItemId!.Value).ToDictionary(g => g.Key, g => (decimal)g.Count());
 

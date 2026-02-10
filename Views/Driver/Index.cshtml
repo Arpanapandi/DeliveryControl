@@ -286,20 +286,20 @@ else
                                 <hr />
 
                                 <!-- Actual Arrival -->
-                                @if (hasArrived)
+                                @if (hasArrived && schedule.ActualStartTime.HasValue)
                                 {
                                     <div class="alert alert-info py-2 mb-2">
                                         <small><i class="bi bi-check-circle"></i> <strong>Kedatangan:</strong></small>
-                                        <div><strong>@schedule.ActualStartTime!.Value.ToString("HH:mm")</strong></div>
+                                        <div><strong>@schedule.ActualStartTime.Value.ToString("HH:mm")</strong></div>
                                     </div>
                                 }
 
                                 <!-- Actual Departure -->
-                                @if (hasDeparted)
+                                @if (hasDeparted && schedule.ActualEndTime.HasValue)
                                 {
                                     <div class="alert alert-success py-2 mb-2">
                                         <small><i class="bi bi-check-circle-fill"></i> <strong>Keberangkatan:</strong></small>
-                                        <div><strong>@schedule.ActualEndTime!.Value.ToString("HH:mm")</strong></div>
+                                        <div><strong>@schedule.ActualEndTime.Value.ToString("HH:mm")</strong></div>
                                         @{
                                             var startTime = schedule.ActualStartTime ?? schedule.ActualEndTime.Value;
                                             var duration = schedule.ActualEndTime.Value - startTime;
@@ -489,20 +489,20 @@ else
                         <hr />
 
                         <!-- Actual Arrival -->
-                        @if (hasArrived)
+                        @if (hasArrived && schedule.ActualStartTime.HasValue)
                         {
                             <div class="alert alert-info py-2 mb-2">
                                 <small><i class="bi bi-check-circle"></i> <strong>Kedatangan:</strong></small>
-                                <div><strong>@schedule.ActualStartTime!.Value.ToString("HH:mm")</strong></div>
+                                <div><strong>@schedule.ActualStartTime.Value.ToString("HH:mm")</strong></div>
                             </div>
                         }
 
                         <!-- Actual Departure -->
-                        @if (hasDeparted)
+                        @if (hasDeparted && schedule.ActualEndTime.HasValue)
                         {
                             <div class="alert alert-success py-2 mb-2">
                                 <small><i class="bi bi-check-circle-fill"></i> <strong>Keberangkatan:</strong></small>
-                                <div><strong>@schedule.ActualEndTime!.Value.ToString("HH:mm")</strong></div>
+                                <div><strong>@schedule.ActualEndTime.Value.ToString("HH:mm")</strong></div>
                                 @{
                                     var startTime = schedule.ActualStartTime ?? schedule.ActualEndTime.Value;
                                     var duration = schedule.ActualEndTime.Value - startTime;
