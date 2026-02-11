@@ -309,57 +309,40 @@ namespace DeliveryControl.Controllers
             return Json(new { success = false, message = $"Kebutuhan item '{item.ItemName}' ({dItem.Quantity} pcs) sudah terpenuhi untuk jadwal ini!" });
         }
 
-        // --- VALIDASI 2: Cek Saldo Stok Riil (FIFO / Stock On Hand) ---
-        // Hitung saldo: Total Pulling (All Time) - Total Preparation (All Time) untuk Tag/Label ini
-        var totalPulled = await _context.PullingRecords
+        // --- VALIDASI 2: Cek Saldo Stok Riil (Per Label & FIFO) ---
+        // Hitung saldo: Total Pulling - Total Preparation untuk Tag/Label ini
+        var countPulled = await _context.PullingRecords
             .CountAsync(p => p.Tag == record.Tag && p.Label == record.Label);
         
-        var totalPrepared = await _context.PreparationRecords
+        var countPrepared = await _context.PreparationRecords
             .CountAsync(p => p.Tag == record.Tag && p.Label == record.Label);
-        
-        // --- VALIDASI STOK (Auto FIFO) ---
-        // Cari semua Pulling untuk Item/Tag ini
+
+        // Cari semua Pulling untuk Item/Tag ini (FIFO)
         var allPullings = await _context.PullingRecords
             .Where(p => p.Tag == record.Tag)
-            .OrderBy(p => p.CreatedDate) // FIFO
+            .OrderBy(p => p.CreatedDate)
             .ToListAsync();
         
-        // Cari semua Preparation yang sudah ada untuk Item/Tag ini untuk melihat mana yang sudah terpakai
         var allPreps = await _context.PreparationRecords
             .Where(p => p.Tag == record.Tag)
             .ToListAsync();
 
-        // HashSet dari PullingId yang sudah "consumed" oleh preparation lain (Strict Match Label)
-        // KITA HARUS MENIRU LOGIKA STOCK CONTROLLER AGAR DATA MATCH
         var consumedPullingIds = new HashSet<int>();
-        var availablePullings = new List<PullingRecord>();
-
-        // 1. Petakan preparation yang sudah ada ke pulling yang sesuai
         foreach (var p in allPreps)
         {
             var pLabel = (p.Label ?? "").Trim().ToUpper();
-            // Cari match di pulling history
             var match = allPullings.FirstOrDefault(pl => 
                             !consumedPullingIds.Contains(pl.PullingId) && 
                             (pl.Label ?? "").Trim().ToUpper() == pLabel);
-            
-            if (match != null) 
-            {
-                consumedPullingIds.Add(match.PullingId);
-            }
+            if (match != null) consumedPullingIds.Add(match.PullingId);
         }
 
-        // 2. Cek apakah Label yang di-scan user saat ini VALID dan TERSEDIA (Strict Match)
-        var strictMatch = allPullings.FirstOrDefault(pl => 
-                            !consumedPullingIds.Contains(pl.PullingId) && 
-                            (pl.Label ?? "").Trim().ToUpper() == record.Label.Trim().ToUpper());
-
+        bool labelAvailable = (countPulled > countPrepared);
         string successMessage = "Data preparation berhasil disimpan!";
 
-        if (strictMatch != null)
+        if (labelAvailable)
         {
-            // CASE A: Label physical cocok dengan sistem -> Bagus! Gunakan.
-            // Tidak perlu ubah apa-apa, record.Label sudah benar.
+            // CASE A: Label physical tersedia (Stok Pulled > Prep) -> Gunakan.
         }
         else
         {
@@ -390,8 +373,8 @@ namespace DeliveryControl.Controllers
                 int qpc = (item.QtyLot != null && item.QtyLot > 0) ? item.QtyLot.Value : 1;
                 
                 schedule.TotalActualQuantity += qpc;
-                schedule.Status = "Preparing";
-                schedule.PreparationStatus = "Preparing";
+                schedule.Status = "In Progress";
+                schedule.PreparationStatus = "In Progress";
                 schedule.UpdatedDate = DateTime.Now;
 
                 if (dItem != null)

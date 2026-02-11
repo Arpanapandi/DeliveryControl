@@ -142,7 +142,6 @@
                                 <th class="bg-dark-blue text-white text-center" style="min-width: 100px;">PROD. PLANT</th>
                                 <th class="bg-dark-blue text-white text-center" style="min-width: 80px;">RAK</th>
                                 <th class="bg-dark-blue text-white text-center" style="min-width: 120px;">LABEL</th>
-                                <th class="bg-dark-blue text-white text-center" style="min-width: 80px;">STOCK</th>
                                 <th class="bg-dark-blue text-white text-center" style="min-width: 60px;">ACT</th>
                                 <th class="bg-dark-blue text-white text-center" style="min-width: 150px;">LEVEL STOCK</th>
                                 <th class="bg-dark-blue text-white text-center" style="min-width: 100px;">CUST</th>
@@ -164,12 +163,6 @@
                                     <td class="text-center"><span class="badge @(record.Plant == "Molded" ? "bg-primary" : record.Plant == "Hose" ? "bg-info text-dark" : "bg-warning text-dark") smaller">@record.Plant</span></td>
                                     <td class="text-center fw-bold">@record.RackInfo</td>
                                     <td class="text-center"><span class="text-primary fw-bold" style="font-size: 0.8rem;">@record.Label</span></td>
-                                    <td class="text-center">
-                                        <div class="d-flex flex-column align-items-center">
-                                            <span class="fw-bold @(record.Status == "Shortage" ? "text-danger" : record.Status == "Over" ? "text-info" : "text-success")" style="font-size: 1.1rem;">@record.CurrentStock.ToString("G29")</span>
-                                            <small class="text-muted" style="font-size: 0.6rem;">BOX</small>
-                                        </div>
-                                    </td>
                                     <td class="text-center">
                                         <div class="d-flex flex-column align-items-center">
                                             <span class="fw-bold text-info" style="font-size: 1.1rem;">@record.CurrentStock.ToString("G29")</span>

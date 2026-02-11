@@ -94,14 +94,8 @@ namespace DeliveryControl.Controllers
                     return Json(new { success = false, message = "Input Tag/VIN tidak boleh kosong." });
                 }
 
-                // 1. Strict Unique Label Check (Label must be unique across all Pulling transactions)
-                bool exist = await _context.PullingRecords
-                    .AnyAsync(r => r.Label == record.Label);
-                
-                if (exist)
-                {
-                    return Json(new { success = false, message = "LABEL DUPLIKAT! Label ini sudah pernah digunakan." });
-                }
+                // 1. Identification & Item Lookup
+                // Note: Label duplicate check removed as per user request to allow redundant scans.
 
                 // 2. Lookup Item Master - Using VIN as Tag
                 Item? item = await _context.Items

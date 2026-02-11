@@ -383,28 +383,22 @@ namespace DeliveryControl.Controllers
 
             try
             {
-                // 1. Load Customers for Lookup
-                var customers = await _context.Customers.ToDictionaryAsync(c => c.CustomerCode.Trim().ToUpper(), c => c);
+                // 1. Load Customers for Lookup (Optimized for multiple matching strategies)
+                var allCustomers = await _context.Customers.AsNoTracking().ToListAsync();
+                
+                // Use GroupBy to handle duplicates in DB gracefully
+                var customersByCode = allCustomers
+                    .Where(c => !string.IsNullOrWhiteSpace(c.CustomerCode))
+                    .GroupBy(c => c.CustomerCode.Trim().ToUpper())
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                var customersByName = allCustomers
+                    .Where(c => !string.IsNullOrWhiteSpace(c.CustomerName))
+                    .GroupBy(c => NormalizeHeader(c.CustomerName))
+                    .ToDictionary(g => g.Key, g => g.First());
 
                 // 2. Load Items for "Translation" (Manifest -> VIN)
-                var allItems = await _context.Items.Where(i => i.IsActive).ToListAsync();
-                var itemMap = new Dictionary<string, Item>();
-
-                foreach (var item in allItems)
-                {
-                    // Prioritize Manifest/CustomerPartNumber for mapping
-                    if (!string.IsNullOrWhiteSpace(item.CustomerPartNumber))
-                    {
-                        var key = item.CustomerPartNumber.Trim().ToUpper();
-                        if (!itemMap.ContainsKey(key)) itemMap[key] = item;
-                    }
-                    // Fallback to VIN
-                    if (!string.IsNullOrWhiteSpace(item.VIN))
-                    {
-                        var keyVin = item.VIN.Trim().ToUpper();
-                        if (!itemMap.ContainsKey(keyVin)) itemMap[keyVin] = item;
-                    }
-                }
+                var allItems = await _context.Items.AsNoTracking().Where(i => i.IsActive).ToListAsync();
 
                 using (var stream = new MemoryStream())
                 {
@@ -415,8 +409,7 @@ namespace DeliveryControl.Controllers
 
                         // --- Robust Header Detection ---
                         var headerRow = worksheet.Row(1);
-                        // Updated keywords for new template
-                         var targetKeywords = new[] { 
+                        var targetKeywords = new[] { 
                             "MANIFESTING", "DOCK", "KODE", "CUSTOMER", "ROUTE", 
                             "CYCLE", "ITEM", "PART", "QTY", "KANBAN" 
                         };
@@ -439,7 +432,7 @@ namespace DeliveryControl.Controllers
                             }
                         }
 
-                         // Map Headers accurately
+                        // Map Headers accurately
                         var cleanedHeaders = new Dictionary<string, int>();
                         for (int col = 1; col <= worksheet.LastColumnUsed().ColumnNumber(); col++)
                         {
@@ -459,6 +452,9 @@ namespace DeliveryControl.Controllers
                             return -1;
                         }
 
+                        // Local helper for normalization in matching
+                        string SafeNormalize(string? input) => NormalizeHeader(input ?? "");
+
                         // Column Mapping (Updated to match Image: 8 Col)
                         var colMap = new
                         {
@@ -470,15 +466,8 @@ namespace DeliveryControl.Controllers
                             Cycle = FindCol("CYCLE", "SIKLUS"),
                             ItemPartNo = FindCol("PART NO / VIN", "PART NO", "ITEM", "PART", "VIN"),
                             QtyPcs = FindCol("QTY (PCS)", "QTY PCS", "QTY"),
-                            
-                            // Legacy/Hidden Columns (Fallback)
-                            QtyLot = FindCol("QTY/LOT", "LOT"),
-                            Kanban = FindCol("KANBAN"),
                             Pickup = FindCol("PICKUP", "PENJEMPUTAN"),
-                            Etd = FindCol("ETD"),
-                            Skid = FindCol("SKID", "PALLET"),
-                            Area = FindCol("AREA"),
-                            Target = FindCol("QTYTARGET", "TARGET", "QTY_TOTAL")
+                            Etd = FindCol("ETD")
                         };
 
                         if (colMap.Cust == -1)
@@ -487,13 +476,13 @@ namespace DeliveryControl.Controllers
                             return RedirectToAction(nameof(Index));
                         }
 
-
                         // --- PHASE 1: Collect All Valid Data Rows ---
                         var validRowsData = new List<ExcelRowData>();
                         var rows = worksheet.RowsUsed().Where(r => r.RowNumber() > headerRow.RowNumber());
                         
                         // Fill-down states
                         string lastCustCode = "";
+                        string lastCustName = "";
                         string lastManifest = "";
                         string lastDock = "";
                         string lastRoute = "";
@@ -504,7 +493,8 @@ namespace DeliveryControl.Controllers
                             if (row.IsEmpty()) continue;
                             try
                             {
-                                string custCode = GetSafeString(row.Cell(colMap.Cust)).Trim().ToUpper();
+                                string custCodeCell = GetSafeString(row.Cell(colMap.Cust)).Trim().ToUpper();
+                                string custNameCell = colMap.CustName != -1 ? GetSafeString(row.Cell(colMap.CustName)).Trim() : "";
                                 string manifest = colMap.Manifesting != -1 ? GetSafeString(row.Cell(colMap.Manifesting)).Trim().ToUpper() : "";
                                 string itemCode = colMap.ItemPartNo != -1 ? GetSafeString(row.Cell(colMap.ItemPartNo)).Trim().ToUpper() : "";
                                 string dockLocation = colMap.Dock != -1 ? GetSafeString(row.Cell(colMap.Dock)).Trim() : "";
@@ -513,34 +503,49 @@ namespace DeliveryControl.Controllers
                                 int qty = colMap.QtyPcs != -1 ? GetSafeInt(row.Cell(colMap.QtyPcs)) : 0;
 
                                 // --- Fill Down Logic ---
-                                if (string.IsNullOrEmpty(custCode)) custCode = lastCustCode; else lastCustCode = custCode;
+                                if (string.IsNullOrEmpty(custCodeCell)) custCodeCell = lastCustCode; else lastCustCode = custCodeCell;
+                                if (string.IsNullOrEmpty(custNameCell)) custNameCell = lastCustName; else lastCustName = custNameCell;
                                 if (string.IsNullOrEmpty(manifest)) manifest = lastManifest; else lastManifest = manifest;
                                 if (string.IsNullOrEmpty(dockLocation)) dockLocation = lastDock; else lastDock = dockLocation;
                                 if (string.IsNullOrEmpty(route)) route = lastRoute; else lastRoute = route;
                                 if (string.IsNullOrEmpty(cycle)) cycle = lastCycle; else lastCycle = cycle;
 
-                                if (string.IsNullOrEmpty(custCode)) continue; // Still empty? skip
-                                if (string.IsNullOrEmpty(itemCode)) continue; // No item? skip
+                                if (string.IsNullOrEmpty(custCodeCell) && string.IsNullOrEmpty(custNameCell)) continue; 
+                                if (string.IsNullOrEmpty(itemCode)) continue; 
                                 
-                                if (!customers.TryGetValue(custCode, out var customer)) continue; 
+                                // --- FLEXIBLE CUSTOMER LOOKUP (Triple-Link Step A) ---
+                                Customer? customer = null;
+                                if (!string.IsNullOrEmpty(custCodeCell) && customersByCode.TryGetValue(custCodeCell, out var cByCode)) 
+                                    customer = cByCode;
+                                else if (!string.IsNullOrEmpty(custNameCell) && customersByName.TryGetValue(NormalizeHeader(custNameCell), out var cByName)) 
+                                    customer = cByName;
+                                else if (!string.IsNullOrEmpty(custCodeCell) && customersByName.TryGetValue(NormalizeHeader(custCodeCell), out var cByCodeAsName))
+                                    customer = cByCodeAsName; // Case where code is actually the name
 
-                                // --- REVOLUTIONARY MATCHING (v10.0): Triple-Tier Matching ---
-                                // Tier 1: Strict Match (Exact Part + Exact/Sub-Customer)
+                                if (customer == null)
+                                {
+                                    errorCount++;
+                                    if (errorSamples.Count < 5) errorSamples.Add($"Baris {row.RowNumber()}: Customer '{custCodeCell}/{custNameCell}' tidak ditemukan di Master Customer.");
+                                    continue;
+                                }
+
+                                // --- ROBUST ITEM MATCHING (Triple-Link Step B) ---
+                                string normalizedItemCode = SafeNormalize(itemCode);
+                                string normalizedCustContext = SafeNormalize(custCodeCell);
+
+                                // High Priority: Match Part + Customer Context (Kamus Integration)
                                 var matchedItem = allItems.FirstOrDefault(i => 
-                                    (i.CustomerPartNumber?.Trim().ToUpper() == itemCode || i.VIN?.Trim().ToUpper() == itemCode) &&
-                                    (
-                                        string.IsNullOrEmpty(i.Customer) || 
-                                        string.Equals(i.Customer?.Trim(), customer.CustomerName?.Trim(), StringComparison.OrdinalIgnoreCase) || 
-                                        string.Equals(i.Customer?.Trim(), customer.CustomerCode?.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                                        (i.Customer != null && (customer.CustomerName.ToUpper().Contains(i.Customer.ToUpper()) || customer.CustomerCode.ToUpper().Contains(i.Customer.ToUpper())))
-                                    )
+                                    (SafeNormalize(i.CustomerPartNumber) == normalizedItemCode || SafeNormalize(i.VIN) == normalizedItemCode) &&
+                                    (SafeNormalize(i.Customer) == normalizedCustContext || 
+                                     SafeNormalize(i.Customer).Contains(normalizedCustContext) || 
+                                     normalizedCustContext.Contains(SafeNormalize(i.Customer)))
                                 );
 
-                                // Tier 2: Lenient Match (Ignore Customer Filter if only 1 match exists globally)
+                                // Medium Priority: Global Match (If only 1 item exists for this part globally)
                                 if (matchedItem == null)
                                 {
                                     var potentialMatches = allItems.Where(i => 
-                                        i.CustomerPartNumber?.Trim().ToUpper() == itemCode || i.VIN?.Trim().ToUpper() == itemCode).ToList();
+                                        SafeNormalize(i.CustomerPartNumber) == normalizedItemCode || SafeNormalize(i.VIN) == normalizedItemCode).ToList();
                                     
                                     if (potentialMatches.Count == 1)
                                     {
@@ -548,14 +553,27 @@ namespace DeliveryControl.Controllers
                                     }
                                     else if (potentialMatches.Count > 1)
                                     {
-                                        // Pick the one that is closest to our customer if multiple exist
+                                        // Try to pick one that has ANY customer info matching our target customer name/code
                                         matchedItem = potentialMatches.FirstOrDefault(i => 
                                             !string.IsNullOrEmpty(i.Customer) && 
-                                            (customer.CustomerName.ToUpper().Contains(i.Customer.ToUpper()) || i.Customer.ToUpper().Contains(customer.CustomerCode.ToUpper())));
+                                            (SafeNormalize(customer.CustomerName).Contains(SafeNormalize(i.Customer)) || 
+                                             SafeNormalize(customer.CustomerCode).Contains(SafeNormalize(i.Customer))));
                                         
-                                        // Still nothing? pick the first one as a last resort
                                         if (matchedItem == null) matchedItem = potentialMatches.First();
                                     }
+                                }
+
+                                // Low Priority: Item Name Fallback
+                                if (matchedItem == null)
+                                {
+                                    matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.ItemName) == normalizedItemCode);
+                                }
+
+                                if (matchedItem == null)
+                                {
+                                    errorCount++;
+                                    if (errorSamples.Count < 5) errorSamples.Add($"Baris {row.RowNumber()}: Part '{itemCode}' tidak terdaftar untuk customer '{custCodeCell}'.");
+                                    continue;
                                 }
 
                                 validRowsData.Add(new ExcelRowData {

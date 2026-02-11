@@ -11,13 +11,13 @@ build_property.EnforceExtendedAnalyzerRules =
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.RootNamespace = DeliveryControl
 build_property.RootNamespace = DeliveryControl
-build_property.ProjectDir = c:\DeliveryControl\DeliveryControl\
+build_property.ProjectDir = C:\DeliveryControl\DeliveryControl\
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 
 build_property.RazorLangVersion = 8.0
 build_property.SupportLocalizedComponentNames = 
 build_property.GenerateRazorMetadataSourceChecksumAttributes = 
-build_property.MSBuildProjectDirectory = c:\DeliveryControl\DeliveryControl
+build_property.MSBuildProjectDirectory = C:\DeliveryControl\DeliveryControl
 build_property._RazorSourceGeneratorDebug = 
 build_property.EffectiveAnalysisLevelStyle = 8.0
 build_property.EnableCodeStyleSeverity = 
@@ -144,6 +144,22 @@ build_metadata.AdditionalFiles.CssScope =
 
 [C:/DeliveryControl/DeliveryControl/Views/Home/_ScheduleTablePartial.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSG9tZVxfU2NoZWR1bGVUYWJsZVBhcnRpYWwuY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/DeliveryControl/DeliveryControl/Views/ItemMappings/Create.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSXRlbU1hcHBpbmdzXENyZWF0ZS5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/DeliveryControl/DeliveryControl/Views/ItemMappings/Delete.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSXRlbU1hcHBpbmdzXERlbGV0ZS5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/DeliveryControl/DeliveryControl/Views/ItemMappings/Edit.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSXRlbU1hcHBpbmdzXEVkaXQuY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/DeliveryControl/DeliveryControl/Views/ItemMappings/Index.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSXRlbU1hcHBpbmdzXEluZGV4LmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
 [C:/DeliveryControl/DeliveryControl/Views/Items/Create.cshtml]

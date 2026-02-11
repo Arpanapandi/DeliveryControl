@@ -22,7 +22,7 @@
 
     .gallery-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); /* Better fit for tablet */
         gap: 1.5rem;
         padding: 1rem 0;
     }
@@ -30,7 +30,7 @@
     .prep-card {
         background: var(--cyber-card-bg);
         border: 2px solid var(--cyber-border);
-        border-radius: 8px;
+        border-radius: 12px;
         overflow: hidden;
         transition: transform 0.2s, box-shadow 0.2s;
         height: 100%;
@@ -46,11 +46,12 @@
     }
 
     .prep-card-header {
-        padding: 8px 15px;
+        padding: 12px 15px; /* More padding */
         display: flex;
         justify-content: space-between;
         align-items: center;
         font-weight: 800;
+        font-size: 1rem; /* Larger font */
     }
 
     .header-scheduled { background: var(--cyber-yellow); color: #000; }
@@ -58,30 +59,30 @@
     .header-prepared { background: #198754; color: white; }
 
     .prep-card-body {
-        padding: 15px;
+        padding: 20px; /* More padding */
         flex-grow: 1;
         color: white;
     }
 
     .customer-name {
-        font-size: 1.25rem;
+        font-size: 1.4rem; /* Larger name */
         font-weight: 700;
-        margin-bottom: 12px;
+        margin-bottom: 15px;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
         text-transform: uppercase;
     }
 
     .detail-row {
         display: flex;
-        margin-bottom: 6px;
-        font-size: 0.85rem;
+        margin-bottom: 8px; /* More spacing */
+        font-size: 1rem; /* Base 16px equivalent */
     }
 
     .detail-label {
         color: var(--cyber-text-muted);
-        width: 140px;
+        width: 150px; /* Wider label */
         flex-shrink: 0;
     }
 
@@ -90,14 +91,14 @@
     }
 
     .icon-spacing {
-        width: 20px;
+        width: 24px;
         display: inline-block;
         text-align: center;
-        margin-right: 5px;
+        margin-right: 8px;
     }
 
     .prep-card-footer {
-        padding: 12px 15px;
+        padding: 15px;
         background: rgba(0,0,0,0.2);
         border-top: 1px solid var(--cyber-border);
     }
@@ -108,10 +109,10 @@
         color: black;
         font-weight: 700;
         width: 100%;
-        padding: 10px;
-        border-radius: 4px;
+        padding: 14px; /* Larger button */
+        border-radius: 8px;
         text-transform: uppercase;
-        font-size: 0.85rem;
+        font-size: 1rem; /* Larger font */
         display: block;
         text-align: center;
         text-decoration: none;
@@ -124,10 +125,10 @@
     }
 
     .quick-status {
-        font-size: 0.75rem;
+        font-size: 0.85rem;
         color: var(--cyber-yellow);
         text-align: center;
-        margin-top: 8px;
+        margin-top: 10px;
         font-weight: 600;
         cursor: pointer;
         background: transparent;
@@ -138,9 +139,9 @@
     .badge-status {
         background: white;
         color: #1e293b;
-        padding: 2px 8px;
+        padding: 4px 10px;
         border-radius: 12px;
-        font-size: 0.7rem;
+        font-size: 0.8rem;
         font-weight: 700;
     }
 

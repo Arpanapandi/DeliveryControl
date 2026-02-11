@@ -113,6 +113,18 @@
                         <span class="spinner-border spinner-border-sm me-2"></span>Menyimpan Data Otomatis...
                     </div>
                 </div>
+
+                <!-- Toast Notification Helper -->
+                <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100">
+                    <div id="scannerToast" class="toast hide align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                        <div class="d-flex">
+                            <div class="toast-body" id="scannerToastBody">
+                                Message here
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -159,6 +171,17 @@
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
         $(document).ready(function () {
+            // Toast Helper Function
+            function showScannerToast(message, type = 'primary') {
+                const $toast = $('#scannerToast');
+                if (!$toast.length) return;
+                $toast.removeClass('bg-primary bg-success bg-danger bg-warning');
+                $toast.addClass('bg-' + type);
+                $('#scannerToastBody').text(message);
+                const toast = new bootstrap.Toast($toast[0], { delay: 3000 });
+                toast.show();
+            }
+
             let activeInputId = null;
 
             // Modal handling
@@ -276,22 +299,20 @@
                             showPartDetails(response);
                             enableLabelInput();
                             
-                            // Workflow: Automatically focus/trigger scanner for Label
+                            // Workflow: Automatically focus Label for External Scanner
                             setTimeout(() => {
-                                if (!$('#scannerModal').is(':visible')) {
-                                    $('.btn-scan-trigger[data-target="labelInput"]').click();
-                                }
-                            }, 800);
+                                $('#labelInput').focus();
+                            }, 300);
                         } else {
                             isItemValid = false;
                             hidePartDetails();
                             disableLabelInput();
-                            alert("ERROR: " + (response.message || "Item tidak ditemukan."));
+                            showScannerToast("ERROR: " + (response.message || "Item tidak ditemukan."), "danger");
                             $('#tagInput').val('').focus();
                         }
                     },
                     error: function() {
-                        alert("Gagal menghubungi server untuk lookup item.");
+                        showScannerToast("Gagal menghubungi server untuk lookup item.", "danger");
                     }
                 });
             }
@@ -342,16 +363,15 @@
 
             // Handle Label Input for Handheld Scanner (Enter Key)
             $('#labelInput').on('change keypress', function(e) {
-                if (e.type === 'keypress' && e.which !== 13) return; // Only trigger on Enter or Change
+                if (e.type === 'keypress' && e.which !== 13) return; 
                 
-                // Debounce simple to avoid double submits
-                if ($(this).val().trim().length > 3) {
-                     setTimeout(() => triggerAutoSave(), 200);
+                if ($(this).val().trim().length > 1) {
+                     triggerAutoSave();
                 }
             });
 
             function triggerAutoSave() {
-                 if ($('#btnSavePulling').prop('disabled')) return; // Prevent double submit
+                 if ($('#btnSavePulling').prop('disabled')) return;
                  $('#btnSavePulling').click();
             }
 
@@ -386,19 +406,18 @@
                     data: JSON.stringify(data),
                     success: function (response) {
                         if (response.success) {
-                            alert('SUKSES: ' + response.message);
+                            showScannerToast('SUKSES: ' + response.message, 'success');
                             $('#tagInput, #labelInput').val('');
                             hidePartDetails();
                             disableLabelInput();
                             $('#tagInput').focus(); // Ready for next scan
                         } else {
-                            alert('GAGAL: ' + response.message);
-                            // If failed, clear label and refocus to try again
+                            showScannerToast('GAGAL: ' + response.message, 'danger');
                             $('#labelInput').val('').focus();
                         }
                     },
                     error: function () {
-                        alert('Terjadi kesalahan koneksi ke server.');
+                        showScannerToast('Terjadi kesalahan koneksi.', 'danger');
                     },
                     complete: function() {
                         $btn.prop('disabled', false);
@@ -411,7 +430,8 @@
             $('#tagInput').on('keypress', function(e) {
                 if (e.which == 13) {
                     e.preventDefault();
-                    $('#labelInput').focus();
+                     const val = $(this).val().trim();
+                     if (val) lookupItem(val);
                 }
             });
 
@@ -424,8 +444,26 @@
 
             // Auto-focus Tag on load
             $('#tagInput').focus();
+
+            // Global click to refocus for external scanners
+            $(document).click(function(e) {
+                if (!$(e.target).closest('input, button, select, textarea, .modal').length) {
+                    if ($('#labelInput').is(':visible') && !$('#labelInput').prop('disabled')) {
+                        $('#labelInput').focus();
+                    } else {
+                        $('#tagInput').focus();
+                    }
+                }
+            });
+
+            // Visual feedback for focus
+            $('input').on('focus', function() {
+                $(this).closest('.custom-cyber-input-group').addClass('selected-glow');
+            }).on('blur', function() {
+                $(this).closest('.custom-cyber-input-group').removeClass('selected-glow');
+            });
         });
-    </script>
+</script>
 }
 
 <style>
@@ -687,5 +725,17 @@
     .active-scan {
         background: rgba(16, 185, 129, 0.2) !important;
         border-color: #10b981 !important;
+    }
+
+    .selected-glow {
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 15px rgba(59, 130, 246, 0.5) !important;
+        background: rgba(30, 41, 59, 0.9) !important;
+    }
+
+    #scannerToast {
+        backdrop-filter: blur(8px);
+        background: rgba(15, 23, 42, 0.9);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
 </style>

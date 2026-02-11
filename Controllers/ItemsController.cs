@@ -77,7 +77,7 @@ namespace DeliveryControl.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("ItemId,ItemCode,ItemName,Description,Unit,Category,Weight,Volume,MinStock,MaxStock,IsActive,Plant,Rack,NoRack,QtyLot,RackMin,RackMax,Customer,VIN,ROP")] Item item)
+        public async Task<IActionResult> Create([Bind("ItemId,ItemCode,ItemName,Description,Unit,Category,Weight,Volume,MinStock,MaxStock,IsActive,Plant,Rack,NoRack,QtyLot,RackMin,RackMax,Customer,VIN,ROP,CustomerPartNumber,KanbanType")] Item item)
         {
             if (ModelState.IsValid)
             {
@@ -118,7 +118,7 @@ namespace DeliveryControl.Controllers
         // POST: Items/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("ItemId,ItemCode,ItemName,Description,Unit,Category,Weight,Volume,MinStock,MaxStock,IsActive,CreatedDate,Plant,Rack,NoRack,QtyLot,RackMin,RackMax,Customer,VIN,ROP")] Item item)
+        public async Task<IActionResult> Edit(int id, [Bind("ItemId,ItemCode,ItemName,Description,Unit,Category,Weight,Volume,MinStock,MaxStock,IsActive,CreatedDate,Plant,Rack,NoRack,QtyLot,RackMin,RackMax,Customer,VIN,ROP,CustomerPartNumber,KanbanType")] Item item)
         {
             if (id != item.ItemId)
             {
@@ -394,32 +394,23 @@ namespace DeliveryControl.Controllers
                     {
                         var worksheet = workbook.Worksheet(1);
                         
-                        // --- v6.1 ROCK-SOLID HEADER DETECTION (Handling Alt+Enter) ---
+                        // --- v7.0 COMPREHENSIVE HEADER MAPPING ---
+                        var targetKeywords = new[] { "VIN", "LOKASI", "RACK", "RAK", "CUST", "PLANT", "QPC", "MIN", "ROP", "MAX", "PROD", "STATUS" };
                         var headerRow = worksheet.Row(1);
                         int bestScore = -1;
-                        var targetKeywords = new[] { "VIN", "LOKASI", "RACK", "CUST", "PLANT", "QPC", "MIN", "ROP", "MAX", "PROD" };
 
-                        // Stop at the FIRST row that has a high keyword match to avoid skipping data
                         for (int r = 1; r <= 30; r++) {
                             var testRow = worksheet.Row(r);
                             int currentScore = 0;
                             for (int c = 1; c <= 30; c++) {
                                 var val = NormalizeHeader(GetSafeString(testRow.Cell(c)));
-                                foreach (var k in targetKeywords) if (val.Contains(k)) currentScore++;
+                                if (string.IsNullOrEmpty(val)) continue;
+                                foreach (var k in targetKeywords) if (val.Contains(NormalizeHeader(k))) currentScore++;
                             }
-                            // Threshold 6: Very likely a header. Stop immediately.
-                            if (currentScore >= 6) {
-                                headerRow = testRow;
-                                break;
-                            }
-                            // Lower threshold backup
-                            if (currentScore > bestScore && currentScore >= 3) {
-                                bestScore = currentScore;
-                                headerRow = testRow;
-                            }
+                            if (currentScore >= 6) { headerRow = testRow; break; }
+                            if (currentScore > bestScore && currentScore >= 3) { bestScore = currentScore; headerRow = testRow; }
                         }
 
-                        // Map Headers accurately
                         var cleanedHeaders = new Dictionary<string, int>();
                         for (int col = 1; col <= worksheet.LastColumnUsed().ColumnNumber(); col++) {
                             var cleaned = NormalizeHeader(GetSafeString(headerRow.Cell(col)));
@@ -427,33 +418,35 @@ namespace DeliveryControl.Controllers
                         }
 
                         int FindCol(params string[] keywords) {
+                            // Phase 1: Try exact matches for all keywords
                             foreach (var kw in keywords) {
                                 var cleanKw = NormalizeHeader(kw);
                                 if (cleanedHeaders.ContainsKey(cleanKw)) return cleanedHeaders[cleanKw];
+                            }
+                            // Phase 2: Try fuzzy (Contains) matches only if exact match fails
+                            foreach (var kw in keywords) {
+                                var cleanKw = NormalizeHeader(kw);
                                 var match = cleanedHeaders.Keys.FirstOrDefault(k => k.Contains(cleanKw));
                                 if (match != null) return cleanedHeaders[match];
                             }
                             return -1;
                         }
-
                         // Get Column Letter for Auditor Report
                         string GetColLetter(int colIndex) => colIndex != -1 ? worksheet.Column(colIndex).ColumnLetter() : "?";
-                        
+
                         var colMap = new {
-                            Lokasi   = FindCol("LOKASI RACK", "LOKASIRACK", "LOKASI"),
-                            Plant    = FindCol("PROD PLANT", "PRODPLANT", "PLANT"),
+                            Lokasi   = FindCol("LOKASI RACK", "LOKASI"),
+                            Plant    = FindCol("PROD PLANT", "PLANT"),
                             Rak      = FindCol("RAK"),
                             NoRak    = FindCol("NO RAK", "NORAK"),
                             Cust     = FindCol("CUST"),
                             Status   = FindCol("STATUS"),
-                            Prod     = FindCol("PROD", "PROD."), 
+                            Prod     = FindCol("PROD", "KATEGORI"), // Focus on PROD (Exact match will prioritize it over PROD PLANT)
                             Vin      = FindCol("VIN"),
                             Qpc      = FindCol("QPC"),
-                            Min      = FindCol("MIN1D", "MIN"),
-                            Rop      = FindCol("ROP2D", "ROP"),
-                            Max      = FindCol("MAX3D", "MAX"),
-                            PartNo   = FindCol("CUST NO", "PART NO", "CUST PART NO"),
-                            Kanban   = FindCol("KANBAN")
+                            Min      = FindCol("MIN 1D", "MIN1D", "MIN"),
+                            Rop      = FindCol("ROP 2D", "ROP2D", "ROP"),
+                            Max      = FindCol("MAX 3D", "MAX3D", "MAX")
                         };
 
                         if (colMap.Vin == -1) {
@@ -478,12 +471,12 @@ namespace DeliveryControl.Controllers
                             rowProcessCount++;
                             try
                             {
-                                string vin  = GetSafeString(row.Cell(colMap.Vin)).Trim();
-                                string lok  = GetSafeString(row.Cell(colMap.Lokasi)).Trim();
-                                string plt  = GetSafeString(row.Cell(colMap.Plant)).Trim();
-                                string rak  = GetSafeString(row.Cell(colMap.Rak)).Trim();
-                                string nrk  = GetSafeString(row.Cell(colMap.NoRak)).Trim();
-                                string cst  = GetSafeString(row.Cell(colMap.Cust)).Trim();
+                                string vin  = GetSafeString(row, colMap.Vin);
+                                string lok  = GetSafeString(row, colMap.Lokasi);
+                                string plt  = GetSafeString(row, colMap.Plant);
+                                string rak  = GetSafeString(row, colMap.Rak);
+                                string nrk  = GetSafeString(row, colMap.NoRak);
+                                string cst  = GetSafeString(row, colMap.Cust);
 
                                 if (string.IsNullOrEmpty(vin)) continue;
 
@@ -493,7 +486,7 @@ namespace DeliveryControl.Controllers
                                 // Capture Samples (First 3 rows)
                                 if (sampleVins.Count < 3) {
                                     sampleVins.Add(vin);
-                                    sampleMins.Add(GetSafeString(row.Cell(colMap.Min))); 
+                                    sampleMins.Add(GetSafeString(row, colMap.Min)); 
                                 }
 
                                 // --- v7.0 DUPLICATE STRATEGY: KEEP FIRST ---
@@ -510,15 +503,13 @@ namespace DeliveryControl.Controllers
                                     Rack      = rak,
                                     NoRackStr = nrk,
                                     Customer  = cst,
-                                    StatusStr = GetSafeString(row.Cell(colMap.Status)),
-                                    Category  = GetSafeString(row.Cell(colMap.Prod)),
+                                    StatusStr = GetSafeString(row, colMap.Status),
+                                    Category  = GetSafeString(row, colMap.Prod),
                                     VIN       = vin,
-                                    QpcStr    = GetSafeNumberString(row.Cell(colMap.Qpc)),
-                                    MinStr    = GetSafeNumberString(row.Cell(colMap.Min)),
-                                    RopStr    = GetSafeNumberString(row.Cell(colMap.Rop)),
-                                    MaxStr    = GetSafeNumberString(row.Cell(colMap.Max)),
-                                    PartNoStr = GetSafeString(row.Cell(colMap.PartNo)),
-                                    KanbanStr = GetSafeString(row.Cell(colMap.Kanban))
+                                    QpcStr    = GetSafeNumberString(row, colMap.Qpc),
+                                    MinStr    = GetSafeNumberString(row, colMap.Min),
+                                    RopStr    = GetSafeNumberString(row, colMap.Rop),
+                                    MaxStr    = GetSafeNumberString(row, colMap.Max)
                                 };
 
                                 if (itemDict.TryGetValue(compositeKey, out var existingItem))
@@ -579,8 +570,20 @@ namespace DeliveryControl.Controllers
         private string NormalizeHeader(string header)
         {
             if (string.IsNullOrEmpty(header)) return "";
-            // Remove all non-alphanumeric characters (newlines, dots, spaces, special chars)
-            return System.Text.RegularExpressions.Regex.Replace(header, @"[^A-Z0-9]", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).ToUpper();
+            // v7.1 Robust Normalization: Keep Alphanumeric only, handle Alt+Enter/Newlines
+            return new string(header.ToUpper().Where(c => char.IsLetterOrDigit(c)).ToArray());
+        }
+
+        private string GetSafeString(ClosedXML.Excel.IXLRow row, int colIndex)
+        {
+            if (colIndex <= 0) return "";
+            return GetSafeString(row.Cell(colIndex));
+        }
+
+        private string GetSafeNumberString(ClosedXML.Excel.IXLRow row, int colIndex)
+        {
+            if (colIndex <= 0) return "0";
+            return GetSafeNumberString(row.Cell(colIndex));
         }
 
         private string GetSafeNumberString(ClosedXML.Excel.IXLCell cell)
@@ -671,8 +674,6 @@ namespace DeliveryControl.Controllers
             item.RackMin  = ParseInt(data.MinStr);
             item.ROP      = ParseInt(data.RopStr);
             item.RackMax  = ParseInt(data.MaxStr);
-            item.CustomerPartNumber = data.PartNoStr;
-            item.KanbanType = data.KanbanStr;
             item.IsActive = !data.StatusStr.Equals("Tidak Aktif", StringComparison.OrdinalIgnoreCase);
             item.UpdatedDate = DateTime.Now;
         }
@@ -693,8 +694,6 @@ namespace DeliveryControl.Controllers
                 RackMin     = ParseInt(data.MinStr),
                 ROP         = ParseInt(data.RopStr),
                 RackMax     = ParseInt(data.MaxStr),
-                CustomerPartNumber = data.PartNoStr,
-                KanbanType  = data.KanbanStr,
                 IsActive    = !data.StatusStr.Equals("Tidak Aktif", StringComparison.OrdinalIgnoreCase),
                 CreatedDate = DateTime.Now
             };

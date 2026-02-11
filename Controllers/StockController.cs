@@ -344,11 +344,14 @@ namespace DeliveryControl.Controllers
             }
 
             // Stok yang MASIH ADA = Semua Pulling historis - Pulling yang sudah dikonsumsi oleh Preparation mana pun
-            // Untuk dashboard view, kita mungkin hanya ingin menampilkan item yang masih di rak.
             var inStockPieces = allPullingPotential.Where(p => !consumedPullingIds.Contains(p.PullingId)).ToList();
             var allItems = await _context.Items.AsNoTracking().ToListAsync();
             var itemStatuses = new Dictionary<int, string>();
-            var piecesByItem = inStockPieces.Where(p => p.ItemId.HasValue).GroupBy(p => p.ItemId!.Value).ToDictionary(g => g.Key, g => (decimal)g.Count());
+            
+            // piecesByItem: Tetap per ItemId untuk perhitungan status (Shortage/Over)
+            var piecesByItem = inStockPieces.Where(p => p.ItemId.HasValue)
+                .GroupBy(p => p.ItemId!.Value)
+                .ToDictionary(g => g.Key, g => (decimal)g.Count());
 
             foreach (var item in allItems)
             {
@@ -361,26 +364,43 @@ namespace DeliveryControl.Controllers
             var stockDetails = new List<StockItemDetail>();
             int shortageCount = 0, normalCount = 0, overCount = 0;
 
-            foreach (var piece in inStockPieces.OrderByDescending(p => p.CreatedDate))
-            {
-                var status = piece.ItemId.HasValue ? itemStatuses.GetValueOrDefault(piece.ItemId.Value, "None") : "None";
-                if (status == "Shortage") shortageCount++; else if (status == "Normal") normalCount++; else if (status == "Over") overCount++;
+            // GROUP BY LABEL: Agar tampilan di dashboard digabung per Label
+            var groupedByLabel = inStockPieces.GroupBy(p => new { p.ItemId, Label = (p.Label ?? "").Trim().ToUpper() });
 
-                var currentStock = piece.ItemId.HasValue ? piecesByItem.GetValueOrDefault(piece.ItemId.Value, 0) : 0;
+            foreach (var group in groupedByLabel.OrderByDescending(g => g.Max(p => p.CreatedDate)))
+            {
+                var latestPiece = group.OrderByDescending(p => p.CreatedDate).First();
+                var status = latestPiece.ItemId.HasValue ? itemStatuses.GetValueOrDefault(latestPiece.ItemId.Value, "None") : "None";
+                
+                // Hitung jumlah box UNTUK LABEL INI SAJA (Permintaan user: agregasi per label)
+                var labelStockCount = (decimal)group.Count();
+                
+                if (status == "Shortage") shortageCount += group.Count(); 
+                else if (status == "Normal") normalCount += group.Count(); 
+                else if (status == "Over") overCount += group.Count();
+
                 stockDetails.Add(new StockItemDetail
                 {
-                    Tag = piece.Tag, Label = piece.Label, ItemName = piece.Item?.ItemName ?? "N/A", Time = piece.CreatedDate.ToString("HH:mm:ss"), Date = piece.CreatedDate.ToString("dd-MM-yyyy"),
-                    Location = piece.Item != null ? $"{piece.Item.Rack}.{piece.Item.NoRack}" : $"{piece.Rack}.{piece.Column}", Plant = piece.Plant ?? string.Empty, QtyLot = piece.Item?.QtyLot,
-                    RackInfo = piece.Item != null ? $"{piece.Item.Rack}.{piece.Item.NoRack}" : "-",
-                    Customer = piece.Item?.Customer ?? "-",
-                    Category = piece.Item?.Category ?? "-",
-                    VIN = piece.Item?.VIN ?? "-",
-                    IsActive = piece.Item?.IsActive ?? true,
-                    Min = piece.Item?.RackMin ?? 5, 
-                    Rop = piece.Item?.ROP ?? 0,
-                    Max = piece.Item?.RackMax ?? 20, 
-                    CurrentStock = currentStock,
-                    LevelStock = (piece.Item?.RackMin ?? 5) > 0 ? currentStock / (piece.Item?.RackMin ?? 5) : 0, Operator = piece.CreatedBy ?? "-", Status = status
+                    Tag = latestPiece.Tag, 
+                    Label = latestPiece.Label, 
+                    ItemName = latestPiece.Item?.ItemName ?? "N/A", 
+                    Time = latestPiece.CreatedDate.ToString("HH:mm:ss"), 
+                    Date = latestPiece.CreatedDate.ToString("dd-MM-yyyy"),
+                    Location = latestPiece.Item != null ? $"{latestPiece.Item.Rack}.{latestPiece.Item.NoRack}" : $"{latestPiece.Rack}.{latestPiece.Column}", 
+                    Plant = latestPiece.Plant ?? string.Empty, 
+                    QtyLot = latestPiece.Item?.QtyLot,
+                    RackInfo = latestPiece.Item != null ? $"{latestPiece.Item.Rack}.{latestPiece.Item.NoRack}" : "-",
+                    Customer = latestPiece.Item?.Customer ?? "-",
+                    Category = latestPiece.Item?.Category ?? "-",
+                    VIN = latestPiece.Item?.VIN ?? "-",
+                    IsActive = latestPiece.Item?.IsActive ?? true,
+                    Min = latestPiece.Item?.RackMin ?? 5, 
+                    Rop = latestPiece.Item?.ROP ?? 0,
+                    Max = latestPiece.Item?.RackMax ?? 20, 
+                    CurrentStock = labelStockCount, // Ini akan muncul di kolom ACT
+                    LevelStock = (latestPiece.Item?.RackMin ?? 5) > 0 ? labelStockCount / (latestPiece.Item?.RackMin ?? 5) : 0, 
+                    Operator = latestPiece.CreatedBy ?? "-", 
+                    Status = status
                 });
             }
 

@@ -103,7 +103,7 @@ namespace DeliveryControl.Controllers
 
             // Data cycle untuk dropdown filter cycle (berdasarkan tanggal enter dock terpilih)
             var availableCycles = allSchedules
-                .Where(s => s.EnterDockTime!.Value.Date == enterDockDate.Date)
+                .Where(s => s.EnterDockTime.HasValue && s.EnterDockTime.Value.Date == enterDockDate.Date)
                 .Select(s => s.Cycle)
                 .Where(cy => !string.IsNullOrWhiteSpace(cy))
                 .Distinct()

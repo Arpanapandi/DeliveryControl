@@ -2,6 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - PPIC Control System</title>
     <link rel="icon" type="image/png" href="~/images/logo.png" />
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
@@ -248,6 +249,11 @@
                     <a asp-controller="Items" asp-action="Index" class="sidebar-link sidebar-link-sub">
                         <i class="bi bi-boxes"></i>
                         <span>Item</span>
+                        <div class="link-glow"></div>
+                    </a>
+                    <a asp-controller="ItemMappings" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-arrow-left-right"></i>
+                        <span>Item Mapping (Customer)</span>
                         <div class="link-glow"></div>
                     </a>
                     <a asp-controller="Users" asp-action="Index" class="sidebar-link sidebar-link-sub">

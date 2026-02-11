@@ -22,7 +22,7 @@
         background: var(--cyber-card-bg);
         border: 1px solid var(--cyber-border);
         border-radius: 12px;
-        padding: 20px;
+        padding: 24px;
         margin-bottom: 2rem;
     }
 
@@ -30,25 +30,27 @@
         display: flex;
         background: rgba(15, 23, 42, 0.6);
         border: 1px solid rgba(59, 130, 246, 0.3);
-        border-radius: 8px;
+        border-radius: 10px;
         overflow: hidden;
+        min-height: 54px; /* Touch-friendly height */
     }
     
     .input-icon-left {
         display: flex;
         align-items: center;
-        padding: 0 12px;
+        padding: 0 16px;
         color: rgba(255, 255, 255, 0.5);
         border-right: 1px solid rgba(255, 255, 255, 0.1);
+        font-size: 1.2rem;
     }
     
     .cyber-field {
         background: transparent !important;
         border: none !important;
         color: white !important;
-        padding: 10px 12px !important;
+        padding: 12px 16px !important;
         width: 100%;
-        font-size: 0.9rem;
+        font-size: 1.1rem; /* Larger font */
     }
     
     .btn-scan-trigger {
@@ -56,7 +58,8 @@
         border: none;
         border-left: 1px solid rgba(255, 255, 255, 0.1);
         color: rgba(255, 255, 255, 0.6);
-        padding: 0 12px;
+        padding: 0 16px;
+        font-size: 1.2rem;
     }
 
     .btn-neon-success {
@@ -65,6 +68,8 @@
         font-weight: bold;
         border: none;
         transition: 0.3s;
+        padding: 14px !important;
+        font-size: 1.1rem !important;
     }
 
     /* Progress Table Styles */
@@ -72,7 +77,7 @@
         background: var(--cyber-card-bg);
         border: 1px solid var(--cyber-border);
         border-radius: 12px;
-        overflow: hidden;
+        overflow-x: auto; /* Tablet scroll fix */
         margin-top: 1.5rem;
     }
 
@@ -89,15 +94,16 @@
         color: var(--cyber-yellow);
         font-weight: 700;
         text-transform: uppercase;
-        font-size: 0.75rem;
-        padding: 12px 15px;
+        font-size: 0.85rem; /* Larger font */
+        padding: 16px 15px;
         border-bottom: 2px solid var(--cyber-border);
     }
 
     .cyber-table td {
-        padding: 12px 15px;
+        padding: 16px 15px;
         border-bottom: 1px solid rgba(255,255,255,0.05);
         vertical-align: middle;
+        font-size: 0.95rem; /* Larger font */
     }
 
     .item-row.highlight-row {
@@ -112,16 +118,16 @@
     }
 
     .progress-mini {
-        height: 6px;
+        height: 8px; /* Slightly thicker */
         background: rgba(255,255,255,0.05);
-        border-radius: 3px;
-        margin-top: 4px;
+        border-radius: 4px;
+        margin-top: 6px;
     }
 
     .status-badge {
-        font-size: 0.7rem;
-        padding: 2px 8px;
-        border-radius: 10px;
+        font-size: 0.75rem;
+        padding: 4px 10px;
+        border-radius: 12px;
         font-weight: 700;
     }
 
@@ -131,7 +137,7 @@
         background: #0f172a;
         border: 2px solid var(--cyber-yellow);
         border-radius: 8px;
-        padding: 20px;
+        padding: 24px;
         margin-top: 20px;
         box-shadow: 0 0 30px rgba(0,0,0,0.5);
     }
@@ -186,13 +192,29 @@
 
     .scanner-tip {
         color: white;
-        font-size: 0.75rem;
+        font-size: 0.85rem;
         margin-top: 15px;
         background: rgba(0,0,0,0.6);
-        padding: 4px 12px;
+        padding: 6px 16px;
         border-radius: 20px;
         text-transform: uppercase;
         letter-spacing: 1px;
+    }
+    .active-scan {
+        background: rgba(250, 204, 21, 0.2) !important;
+        border-color: var(--cyber-yellow) !important;
+    }
+
+    #scannerToast {
+        backdrop-filter: blur(8px);
+        background: rgba(15, 23, 42, 0.9);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    .selected-glow {
+        border-color: var(--cyber-yellow) !important;
+        box-shadow: 0 0 15px rgba(250, 204, 21, 0.5) !important;
+        background: rgba(30, 41, 59, 0.9) !important;
     }
 </style>
 
@@ -260,6 +282,18 @@
                         </button>
                         <div id="prepLoadingIndicator" style="display:none;" class="text-info">
                             <span class="spinner-border spinner-border-sm me-2"></span>Menyimpan otomatis...
+                        </div>
+                    </div>
+
+                    <!-- Toast Notification Helper -->
+                    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100">
+                        <div id="scannerToast" class="toast hide align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                            <div class="d-flex">
+                                <div class="toast-body" id="scannerToastBody">
+                                    Message here
+                                </div>
+                                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                            </div>
                         </div>
                     </div>
 
@@ -520,23 +554,13 @@
                                 // Enable All
                                 $('#labelInput, #kanbanInput, .btn-scan-trigger').prop('disabled', false);
 
-                                // Auto Advance / Submit
+                                // Auto Advance: Focus next field for External Scanner
                                 if (tag && label && kanban) {
                                     triggerPrepAutoSave();
                                 } else if (tag && label) {
-                                    // AUTOMATION: Open Kanban Scanner
-                                    setTimeout(() => {
-                                        if (!$('#scannerModal').is(':visible')) {
-                                            $('.btn-scan-trigger[data-target="kanbanInput"]').click();
-                                        }
-                                    }, 500);
+                                    setTimeout(() => $('#kanbanInput').focus(), 300);
                                 } else if (tag) {
-                                    // AUTOMATION: Open Label Scanner
-                                    setTimeout(() => {
-                                        if (!$('#scannerModal').is(':visible')) {
-                                            $('.btn-scan-trigger[data-target="labelInput"]').click();
-                                        }
-                                    }, 500);
+                                    setTimeout(() => $('#labelInput').focus(), 300);
                                 }
 
                             } else if (res.item) {
@@ -561,26 +585,16 @@
                                 // Always enable Label if Tag is valid
                                 $('#labelInput, .btn-scan-trigger[data-target="labelInput"]').prop('disabled', false);
 
-                                // If Label is present, enable Kanban and Focus it
+                                // Focus next field for External Scanner
                                 if (label) {
                                     $('#kanbanInput, .btn-scan-trigger[data-target="kanbanInput"]').prop('disabled', false);
-                                    // AUTOMATION: Open Kanban Scanner
-                                    setTimeout(() => {
-                                        if (!$('#scannerModal').is(':visible')) {
-                                            $('.btn-scan-trigger[data-target="kanbanInput"]').click();
-                                        }
-                                    }, 500);
+                                    setTimeout(() => $('#kanbanInput').focus(), 300);
                                 } else {
-                                     // AUTOMATION: Open Label Scanner
-                                    setTimeout(() => {
-                                        if (!$('#scannerModal').is(':visible')) {
-                                            $('.btn-scan-trigger[data-target="labelInput"]').click();
-                                        }
-                                    }, 500);
+                                    setTimeout(() => $('#labelInput').focus(), 300);
                                 }
                             }
                         } else {
-                            if (res.message) alert(res.message);
+                            if (res.message) showScannerToast(res.message, "danger");
                             resetInputs();
                             $('#tagInput').focus();
                         }
@@ -612,24 +626,55 @@
                     success: function (res) {
                         if (res.success) {
                             if (res.isFallback || (res.message && res.message.includes("FIFO"))) {
-                                alert(res.message);
+                                showScannerToast(res.message, "warning");
+                                setTimeout(() => location.reload(), 2000);
+                            } else {
+                                location.reload();
                             }
-                            location.reload();
                         } else {
-                            alert(res.message);
+                            showScannerToast(res.message, "danger");
                             $btn.prop('disabled', false);
                             $('#prepLoadingIndicator').hide();
                             $('#kanbanInput').val('').focus();
                         }
                     },
                     error: function() {
-                         alert("Connection Error");
+                         showScannerToast("Connection Error", "danger");
                          $btn.prop('disabled', false);
                          $('#prepLoadingIndicator').hide();
                     }
                 });
             });
 
+            // Toast Helper Function
+            function showScannerToast(message, type = 'primary') {
+                const $toast = $('#scannerToast');
+                $toast.removeClass('bg-primary bg-success bg-danger bg-warning');
+                $toast.addClass('bg-' + type);
+                $('#scannerToastBody').text(message);
+                const toast = new bootstrap.Toast($toast[0], { delay: 3000 });
+                toast.show();
+            }
+
+            // Global click to refocus for external scanners
+            $(document).click(function(e) {
+                if (!$(e.target).closest('input, button, select, textarea').length) {
+                    if ($('#kanbanInput').is(':visible') && !$('#kanbanInput').prop('disabled')) {
+                        $('#kanbanInput').focus();
+                    } else if ($('#labelInput').is(':visible') && !$('#labelInput').prop('disabled')) {
+                        $('#labelInput').focus();
+                    } else {
+                        $('#tagInput').focus();
+                    }
+                }
+            });
+
+            // Visual feedback for focus
+            $('input').on('focus', function() {
+                $(this).closest('.custom-cyber-input-group').addClass('selected-glow');
+            }).on('blur', function() {
+                $(this).closest('.custom-cyber-input-group').removeClass('selected-glow');
+            });
         });
     </script>
 }
