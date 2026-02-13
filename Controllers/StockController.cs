@@ -569,9 +569,9 @@ namespace DeliveryControl.Controllers
         private void UpdateStats(CategoryStats s, decimal level)
         {
             if (level < 1) s.Less1++;
-            if (level < 1.5m) s.Less1_5++;
-            if (level >= 1.5m && level <= 2m) s.Range1_5_2++;
-            else if (level >= 2m && level <= 3m) s.Range2_3++;
+            else if (level < 1.5m) s.Less1_5++;
+            else if (level >= 1.5m && level <= 2m) s.Range1_5_2++;
+            else if (level > 2m && level <= 3m) s.Range2_3++;
             else if (level > 3m) s.More3++;
         }
 

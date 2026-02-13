@@ -30,7 +30,18 @@ namespace DeliveryControl.Data
             // Configure Customer
             modelBuilder.Entity<Customer>(entity =>
             {
-                entity.HasIndex(e => e.CustomerCode).IsUnique();
+                entity.HasIndex(e => new { 
+                    e.CustomerCode, 
+                    e.CustomerName, 
+                    e.Route, 
+                    e.Cycle, 
+                    e.Docking, 
+                    e.Pickup, 
+                    e.ETD, 
+                    e.Range, 
+                    e.SKID, 
+                    e.Area 
+                }).IsUnique();
                 entity.Property(e => e.CustomerCode).IsRequired();
                 entity.Property(e => e.CustomerName).IsRequired();
             });
@@ -81,6 +92,7 @@ namespace DeliveryControl.Data
             // Configure PreparationRecord
             modelBuilder.Entity<PreparationRecord>(entity =>
             {
+                entity.ToTable("PreparationRecords");
                 entity.HasOne(pr => pr.DeliverySchedule)
                     .WithMany(ds => ds.PreparationRecords)
                     .HasForeignKey(pr => pr.ScheduleId)
@@ -95,6 +107,7 @@ namespace DeliveryControl.Data
             // Configure PullingRecord
             modelBuilder.Entity<PullingRecord>(entity =>
             {
+                entity.ToTable("PullingRecords");
                 entity.HasOne(pr => pr.Item)
                     .WithMany(i => i.PullingRecords)
                     .HasForeignKey(pr => pr.ItemId)

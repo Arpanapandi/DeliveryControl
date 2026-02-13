@@ -81,8 +81,24 @@
             <small>@(item.Cycle ?? "-")</small>
         </td>
         <td class="text-center align-middle">
+            @{
+                double kbnTarget = 0;
+                double kbnActual = 0;
+                if (item.DeliveryItems != null)
+                {
+                    foreach(var di in item.DeliveryItems)
+                    {
+                        var qpc = di.Item?.QtyLot ?? 1;
+                        if (qpc > 0)
+                        {
+                            kbnTarget += (double)di.Quantity / qpc;
+                            kbnActual += (double)(di.ActualQuantity ?? 0) / qpc;
+                        }
+                    }
+                }
+            }
             <div class="@(item.TotalActualQuantity >= item.TotalTargetQuantity && item.TotalTargetQuantity > 0 ? "text-success" : (item.TotalActualQuantity > 0 ? "text-warning" : "")) fw-bold">
-                @item.TotalActualQuantity.ToString("N0")/@item.TotalTargetQuantity.ToString("N0")
+                @kbnActual.ToString("N1")/@kbnTarget.ToString("N1")
             </div>
         </td>
         <td class="text-center align-middle">

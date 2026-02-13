@@ -143,7 +143,8 @@ namespace DeliveryControl.Controllers
                     item = new { 
                         itemName = targetItem.ItemName, 
                         vin = targetItem.VIN, 
-                        customerPartNumber = targetItem.CustomerPartNumber 
+                        customerPartNumber = targetItem.CustomerPartNumber,
+                        qtyLot = targetItem.QtyLot ?? 0
                     },
                     message = $"Kanban (Manifest) '{kanban}' tidak cocok dengan jadwal aktif untuk item ini!" 
                 });
@@ -171,7 +172,8 @@ namespace DeliveryControl.Controllers
                         item = new { 
                             itemName = targetItem.ItemName, 
                             vin = targetItem.VIN, 
-                            customerPartNumber = targetItem.CustomerPartNumber 
+                            customerPartNumber = targetItem.CustomerPartNumber,
+                            qtyLot = targetItem.QtyLot ?? 0
                         },
                         message = "Label tidak sesuai dengan Tag produk dan tidak ditemukan di stok!" 
                     });
@@ -229,7 +231,7 @@ namespace DeliveryControl.Controllers
                     success = true, 
                     found = true,
                     step = "complete",
-                    item = new { targetItem.ItemName, targetItem.VIN, targetItem.CustomerPartNumber, TargetPartNo = !string.IsNullOrEmpty(targetItem.CustomerPartNumber) ? targetItem.CustomerPartNumber : targetItem.VIN },
+                    item = new { targetItem.ItemName, targetItem.VIN, targetItem.CustomerPartNumber, targetItem.QtyLot, TargetPartNo = !string.IsNullOrEmpty(targetItem.CustomerPartNumber) ? targetItem.CustomerPartNumber : targetItem.VIN },
                     schedule = new { 
                         schedule.ScheduleId, 
                         schedule.ScheduleNumber, 

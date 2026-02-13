@@ -2,7 +2,7 @@
 -- Script ini aman dijalankan berulang kali (idempotent)
 -- Gunakan script ini untuk memastikan semua kolom yang diperlukan sudah ada
 
-USE [DeliveryControlDB];
+USE [PPIC_DeliveryControl];
 GO
 
 PRINT '========================================';

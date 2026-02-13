@@ -293,6 +293,13 @@
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             }
+            @if (TempData["WarningMessage"] != null)
+            {
+                <div class="alert alert-warning alert-dismissible fade show cyber-alert text-dark" role="alert">
+                    <i class="bi bi-exclamation-circle-fill me-2"></i> @Html.Raw(TempData["WarningMessage"])
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            }
             @RenderBody()
         </div>
         

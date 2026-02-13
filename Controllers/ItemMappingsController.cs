@@ -112,12 +112,21 @@ namespace DeliveryControl.Controllers
                     var existingItem = await _context.Items.FindAsync(id);
                     if (existingItem == null) return NotFound();
 
-                    // Update ONLY mapping fields
+                    // Update mapping fields
                     existingItem.Customer = item.Customer;
                     existingItem.CustomerPartNumber = item.CustomerPartNumber;
-                    // VIN is readonly in UI, but we can still update it if posted, 
-                    // or keep it same. Here we keep it same to be safe.
-                    // existingItem.VIN = item.VIN; 
+                    
+                    // Allow VIN update with conflict check
+                    if (existingItem.VIN != item.VIN)
+                    {
+                        var vinConflict = await _context.Items.AnyAsync(i => i.VIN == item.VIN && i.ItemId != id);
+                        if (vinConflict)
+                        {
+                            ModelState.AddModelError("VIN", "VIN ini sudah digunakan oleh item lain!");
+                            return View(item);
+                        }
+                        existingItem.VIN = item.VIN;
+                    }
                     
                     existingItem.UpdatedDate = DateTime.Now;
 
@@ -250,6 +259,16 @@ namespace DeliveryControl.Controllers
                         int colCust = FindCol("KODE CUSTOMER", "CUSTOMER", "CUST");
                         int colPart = FindCol("PART NO EKSTERNAL", "PART NO EXTERNAL", "PART NO", "EXT");
                         int colVin  = FindCol("VIN INTERNAL", "VIN", "INTERNAL");
+                        
+                        // New Columns for Full Data Import
+                        int colQpc = FindCol("QPC", "QTY", "PCS", "LOT", "QTY/LOT");
+                        int colPlant = FindCol("PLANT", "PROD. PLANT", "FACTORY");
+                        int colRack = FindCol("RAK", "LOKASI RAK", "RACK", "LOC");
+                        int colNoRack = FindCol("NO RAK", "NO. RAK", "NO RACK");
+                        int colKanban = FindCol("KANBAN", "TIPE KANBAN", "KB");
+                        int colMin = FindCol("MIN", "MIN 1D");
+                        int colRop = FindCol("ROP", "ROP 2D");
+                        int colMax = FindCol("MAX", "MAX 3D");
 
                         if (colPart == -1 || colVin == -1)
                         {
@@ -259,11 +278,29 @@ namespace DeliveryControl.Controllers
 
                         var rows = worksheet.RowsUsed().Skip(1);
                         
-                        // Load all existing items into a dictionary to prevent duplicates and handle updates
+                        // Helper for Composite Key - REMOVED (Unused)
+                        /*
+                        string GetCompositeKey(string cust, string part, string vin)
+                        {
+                            return $"{cust?.Trim().ToUpper()}|{part?.Trim().ToUpper()}|{vin?.Trim().ToUpper()}";
+                        }
+                        */
+
+                        // Load all existing items into a dictionary using Composite Key
+                        // Use GroupBy to handle potential DB duplicates safely (take first)
+                        // Load existing items INTO MEMORY for fast lookup
+                        // KEY: PN + PLANT + RACK + NO RACK
                         var allItems = await _context.Items.ToListAsync();
-                        var itemDict = allItems.GroupBy(i => i.VIN?.Trim().ToUpper())
-                                              .Where(g => !string.IsNullOrEmpty(g.Key))
-                                              .ToDictionary(g => g.Key!, g => g.First());
+                        var itemLookup = allItems
+                            .GroupBy(i => $"{i.CustomerPartNumber?.Trim().ToUpper()}|{i.Plant?.Trim().ToUpper()}|{i.Rack?.Trim().ToUpper()}|{i.NoRack}")
+                            .ToDictionary(g => g.Key, g => g.First());
+
+                        string lastCust = "";
+                        string lastPart = "";
+                        string lastVin = "";
+                        string lastPlant = "";
+                        string lastRack = "";
+                        int? lastNoRack = null;
 
                         foreach (var row in rows)
                         {
@@ -271,40 +308,111 @@ namespace DeliveryControl.Controllers
                             string partNo = row.Cell(colPart).GetString().Trim();
                             string vin = row.Cell(colVin).GetString().Trim();
 
-                            if (string.IsNullOrEmpty(vin)) continue;
+                            // Carry-over for merged cells
+                            if (string.IsNullOrEmpty(cust)) cust = lastCust; else lastCust = cust;
+                            if (string.IsNullOrEmpty(partNo)) partNo = lastPart; else lastPart = partNo;
+                            if (string.IsNullOrEmpty(vin)) vin = lastVin; else lastVin = vin;
 
-                            string vinKey = vin.ToUpper();
+                            if (string.IsNullOrEmpty(partNo)) continue;
 
-                            if (itemDict.TryGetValue(vinKey, out var existing))
+                            int? qpc = null;
+                            if (colQpc != -1)
                             {
-                                // Update existing item
-                                existing.Customer = cust;
-                                existing.CustomerPartNumber = partNo;
-                                existing.UpdatedDate = DateTime.Now;
-                                _context.Update(existing);
+                                string valStr = row.Cell(colQpc).GetString().Trim();
+                                if (int.TryParse(valStr, out int valQpc)) qpc = valQpc;
+                            }
+
+                            string? plant = colPlant != -1 ? row.Cell(colPlant).GetString().Trim() : null;
+                            string? rack = colRack != -1 ? row.Cell(colRack).GetString().Trim() : null;
+                            
+                            // Carry-over for Location
+                            if (string.IsNullOrEmpty(plant)) plant = lastPlant; else lastPlant = plant;
+                            if (string.IsNullOrEmpty(rack)) rack = lastRack; else lastRack = rack;
+
+                            int? noRack = null;
+                            if (colNoRack != -1)
+                            {
+                                string valStr = row.Cell(colNoRack).GetString().Trim();
+                                if (int.TryParse(valStr, out int valNoRack)) noRack = valNoRack;
+                            }
+                            if (noRack == null) noRack = lastNoRack; else lastNoRack = noRack;
+
+                            string? kanban = colKanban != -1 ? row.Cell(colKanban).GetString().Trim() : null;
+
+                            int? min = null;
+                            if (colMin != -1)
+                            {
+                                string valStr = row.Cell(colMin).GetString().Trim();
+                                if (int.TryParse(valStr, out int valMin)) min = valMin;
+                            }
+                            // ... (ROP, MAX logic remains same below)
+
+                            int? rop = null;
+                            if (colRop != -1)
+                            {
+                                string valStr = row.Cell(colRop).GetString().Trim();
+                                if (int.TryParse(valStr, out int valRop)) rop = valRop;
+                            }
+
+                            int? max = null;
+                            if (colMax != -1)
+                            {
+                                string valStr = row.Cell(colMax).GetString().Trim();
+                                if (int.TryParse(valStr, out int valMax)) max = valMax;
+                            }
+
+
+                            // CHECK MAPPING: Does this PN + Location already exist?
+                            var key = $"{partNo.ToUpper()}|{plant?.ToUpper()}|{rack?.ToUpper()}|{noRack}";
+                            if (itemLookup.TryGetValue(key, out var existingItem))
+                            {
+                                // UPDATE EXISTING ITEM (Enrich with Excel Data)
+                                existingItem.Customer = cust;
+                                existingItem.CustomerPartNumber = partNo;
+                                existingItem.VIN = vin; // Mandatory update
+                                if (qpc.HasValue) existingItem.QtyLot = qpc;
+                                if (!string.IsNullOrEmpty(plant)) existingItem.Plant = plant;
+                                if (!string.IsNullOrEmpty(rack)) existingItem.Rack = rack;
+                                if (noRack.HasValue) existingItem.NoRack = noRack;
+                                if (!string.IsNullOrEmpty(kanban)) existingItem.KanbanType = kanban;
+                                if (min.HasValue) existingItem.RackMin = min;
+                                if (rop.HasValue) existingItem.ROP = rop;
+                                if (max.HasValue) existingItem.RackMax = max;
+                                
+                                existingItem.UpdatedDate = DateTime.Now;
+                                successCount++;
                             }
                             else
                             {
-                                // Create new item mapping
+                                // CREATE NEW ITEM (Unique row per PN)
                                 var newItem = new Item
                                 {
                                     ItemCode = Guid.NewGuid().ToString().ToUpper(),
-                                    ItemName = "MAPPING-ONLY", // Required by DB schema
+                                    ItemName = $"{rack} @ {noRack}", // Standard Display Location
                                     Customer = cust,
                                     CustomerPartNumber = partNo,
                                     VIN = vin,
+                                    QtyLot = qpc,
+                                    Plant = plant,
+                                    Rack = rack,
+                                    NoRack = noRack,
+                                    KanbanType = kanban,
+                                    RackMin = min,
+                                    ROP = rop,
+                                    RackMax = max,
                                     IsActive = true,
                                     CreatedDate = DateTime.Now
                                 };
+                                
                                 _context.Items.Add(newItem);
-                                itemDict[vinKey] = newItem; // Track within this loop
+                                itemLookup[key] = newItem; 
+                                successCount++;
                             }
-                            successCount++;
                         }
                         await _context.SaveChangesAsync();
                     }
                 }
-                TempData["SuccessMessage"] = $"Berhasil memproses {successCount} mapping!";
+                TempData["SuccessMessage"] = $"Berhasil memproses {successCount} mapping baru!";
             }
             catch (Exception ex)
             {
@@ -321,14 +429,19 @@ namespace DeliveryControl.Controllers
         {
             try
             {
-                // To prevent "Ghost Data", we must clear related transactions first if we are deleting items
-                _context.PreparationRecords.RemoveRange(_context.PreparationRecords);
-                _context.DeliveryItems.RemoveRange(_context.DeliveryItems);
-                _context.Items.RemoveRange(_context.Items);
+                // USER REQUEST: Only delete Item Mapping data.
+                // NOTE: This will fail if Items are used in transactions (DeliveryItems) due to FK constraints.
+                // We catch the exception to inform the user instead of cascading delete.
                 
+                _context.Items.RemoveRange(_context.Items);
                 await _context.SaveChangesAsync();
                 
-                TempData["SuccessMessage"] = "Berhasil menghapus seluruh data mapping dan transaksi terkait!";
+                TempData["SuccessMessage"] = "Berhasil menghapus seluruh data Master Item Mapping!";
+            }
+            catch (DbUpdateException)
+            {
+                // Catch Foreign Key violation
+                TempData["ErrorMessage"] = "Gagal menghapus! Beberapa Item sedang digunakan dalam transaksi/jadwal. Hapus data transaksi terlebih dahulu jika ingin mereset master item.";
             }
             catch (Exception ex)
             {

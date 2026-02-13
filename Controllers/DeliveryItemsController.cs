@@ -15,6 +15,28 @@ namespace DeliveryControl.Controllers
             _context = context;
         }
 
+        private async Task RecalculateScheduleTotals(int scheduleId)
+        {
+            var schedule = await _context.DeliverySchedules
+                .Include(s => s.DeliveryItems)
+                .FirstOrDefaultAsync(s => s.ScheduleId == scheduleId);
+
+            if (schedule != null)
+            {
+                schedule.TotalTargetQuantity = schedule.DeliveryItems.Sum(di => di.Quantity);
+                schedule.TotalActualQuantity = schedule.DeliveryItems.Sum(di => di.ActualQuantity ?? 0);
+                
+                // Also update status if all items are prepared
+                if (schedule.DeliveryItems.Any() && schedule.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity))
+                {
+                    schedule.PreparationStatus = "Prepared";
+                    schedule.Status = "Completed";
+                }
+                
+                await _context.SaveChangesAsync();
+            }
+        }
+
         // GET: DeliveryItems/Index/5 (by ScheduleId)
         public async Task<IActionResult> Index(int? scheduleId)
         {
@@ -83,6 +105,9 @@ namespace DeliveryControl.Controllers
                 deliveryItem.CreatedDate = DateTime.Now;
                 _context.Add(deliveryItem);
                 await _context.SaveChangesAsync();
+                
+                await RecalculateScheduleTotals(deliveryItem.ScheduleId);
+
                 TempData["SuccessMessage"] = "Item delivery berhasil ditambahkan!";
                 return RedirectToAction(nameof(Index), new { scheduleId = deliveryItem.ScheduleId });
             }
@@ -137,6 +162,9 @@ namespace DeliveryControl.Controllers
                     deliveryItem.UpdatedDate = DateTime.Now;
                     _context.Update(deliveryItem);
                     await _context.SaveChangesAsync();
+                    
+                    await RecalculateScheduleTotals(deliveryItem.ScheduleId);
+
                     TempData["SuccessMessage"] = "Item delivery berhasil diupdate!";
                 }
                 catch (DbUpdateConcurrencyException)
@@ -194,6 +222,9 @@ namespace DeliveryControl.Controllers
                 scheduleId = deliveryItem.ScheduleId;
                 _context.DeliveryItems.Remove(deliveryItem);
                 await _context.SaveChangesAsync();
+                
+                await RecalculateScheduleTotals(scheduleId);
+
                 TempData["SuccessMessage"] = "Item delivery berhasil dihapus!";
             }
 

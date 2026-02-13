@@ -6,10 +6,10 @@
 
 ```powershell
 # Windows Authentication
-.\Deploy-ToProduction.ps1 -ServerName "localhost" -DatabaseName "DeliveryControlDB" -UseWindowsAuth -CreateDatabase -BackupFirst
+.\Deploy-ToProduction.ps1 -ServerName "localhost" -DatabaseName "PPIC_DeliveryControl" -UseWindowsAuth -CreateDatabase -BackupFirst
 
 # SQL Authentication
-.\Deploy-ToProduction.ps1 -ServerName "localhost" -DatabaseName "DeliveryControlDB" -Username "sa" -Password "YourPassword" -CreateDatabase -BackupFirst
+.\Deploy-ToProduction.ps1 -ServerName "localhost" -DatabaseName "PPIC_DeliveryControl" -Username "sa" -Password "YourPassword" -CreateDatabase -BackupFirst
 ```
 
 ### Metode 2: Menggunakan SQL Server Management Studio
@@ -18,20 +18,20 @@
 2. Connect ke SQL Server production
 3. Buat database (jika belum ada):
    ```sql
-   CREATE DATABASE DeliveryControlDB;
+   CREATE DATABASE PPIC_DeliveryControl;
    ```
 4. Buka file `Migrations\Production_Migration.sql`
-5. Pastikan database `DeliveryControlDB` dipilih
+5. Pastikan database `PPIC_DeliveryControl` dipilih
 6. Klik **Execute** (F5)
 
 ### Metode 3: Menggunakan Command Line
 
 ```powershell
 # Windows Authentication
-sqlcmd -S localhost -E -d DeliveryControlDB -i "Migrations\Production_Migration.sql"
+sqlcmd -S localhost -E -d PPIC_DeliveryControl -i "Migrations\Production_Migration.sql"
 
 # SQL Authentication
-sqlcmd -S localhost -U sa -P YourPassword -d DeliveryControlDB -i "Migrations\Production_Migration.sql"
+sqlcmd -S localhost -U sa -P YourPassword -d PPIC_DeliveryControl -i "Migrations\Production_Migration.sql"
 ```
 
 ---
@@ -43,14 +43,14 @@ Edit `appsettings.Production.json`:
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=NAMA_SERVER;Database=DeliveryControlDB;User Id=USERNAME;Password=PASSWORD;TrustServerCertificate=true;MultipleActiveResultSets=true"
+    "DefaultConnection": "Server=NAMA_SERVER;Database=PPIC_DeliveryControl;User Id=USERNAME;Password=PASSWORD;TrustServerCertificate=true;MultipleActiveResultSets=true"
   }
 }
 ```
 
 **Contoh:**
-- Windows Auth: `Server=localhost;Database=DeliveryControlDB;Trusted_Connection=true;TrustServerCertificate=true;MultipleActiveResultSets=true`
-- SQL Auth: `Server=localhost;Database=DeliveryControlDB;User Id=sa;Password=Pass123;TrustServerCertificate=true;MultipleActiveResultSets=true`
+- Windows Auth: `Server=localhost;Database=PPIC_DeliveryControl;Trusted_Connection=true;TrustServerCertificate=true;MultipleActiveResultSets=true`
+- SQL Auth: `Server=localhost;Database=PPIC_DeliveryControl;User Id=sa;Password=Pass123;TrustServerCertificate=true;MultipleActiveResultSets=true`
 
 ---
 

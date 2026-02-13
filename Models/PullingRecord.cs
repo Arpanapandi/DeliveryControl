@@ -3,11 +3,10 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DeliveryControl.Models
 {
-    [Table("PoolingRecords")]
+    [Table("PullingRecords")]
     public class PullingRecord
     {
         [Key]
-        [Column("PoolingId")]
         public int PullingId { get; set; }
 
         [StringLength(20)]

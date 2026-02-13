@@ -478,7 +478,13 @@ namespace DeliveryControl.Controllers
                                 string nrk  = GetSafeString(row, colMap.NoRak);
                                 string cst  = GetSafeString(row, colMap.Cust);
 
-                                if (string.IsNullOrEmpty(vin)) continue;
+                                // Filter out invalid rows (Excel Errors or Empty Keys)
+                                if (string.IsNullOrEmpty(vin) || 
+                                    vin.Contains("#N/A") || vin.Contains("#REF!") || vin.Contains("#VALUE!") ||
+                                    lok.Contains("#N/A") || cst.Contains("#N/A"))
+                                {
+                                    continue;
+                                }
 
                                 // v9.0 Composite Key Construction
                                 string compositeKey = $"{NormalizeKey(vin)}|{NormalizeKey(lok)}|{NormalizeKey(plt)}|{NormalizeKey(rak)}|{NormalizeKey(nrk)}|{NormalizeKey(cst)}";
@@ -502,7 +508,7 @@ namespace DeliveryControl.Controllers
                                     Plant     = plt,
                                     Rack      = rak,
                                     NoRackStr = nrk,
-                                    Customer  = cst,
+                                    Customer  = cst, // RE-ENABLED: User wants this populated
                                     StatusStr = GetSafeString(row, colMap.Status),
                                     Category  = GetSafeString(row, colMap.Prod),
                                     VIN       = vin,
@@ -667,7 +673,7 @@ namespace DeliveryControl.Controllers
             item.Plant    = data.Plant;
             item.Rack     = data.Rack;
             item.NoRack   = ParseInt(data.NoRackStr);
-            item.Customer = data.Customer;
+            item.Customer = data.Customer; // RE-ENABLED: User wants this populated in Master Items
             item.Category = data.Category;
             item.VIN      = data.VIN;
             item.QtyLot   = ParseInt(data.QpcStr);
@@ -687,7 +693,7 @@ namespace DeliveryControl.Controllers
                 Plant       = data.Plant,
                 Rack        = data.Rack,
                 NoRack      = ParseInt(data.NoRackStr),
-                Customer    = data.Customer,
+                Customer    = data.Customer, // RE-ENABLED
                 Category    = data.Category,
                 VIN         = data.VIN,
                 QtyLot      = ParseInt(data.QpcStr),

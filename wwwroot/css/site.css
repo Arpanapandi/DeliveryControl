@@ -800,18 +800,44 @@ body.futuristic-body::before {
   .datetime-container {
     display: none;
   }
-
-  .header-main-row {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 15px !important;
-  }
-
-  .custom-filter-bar {
-    flex-wrap: wrap !important;
-    gap: 8px !important;
-  }
 }
+
+/* ==================== MOBILE CARDS ==================== */
+.cyber-mobile-card {
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.cyber-mobile-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 12px -3px rgba(0, 0, 0, 0.3);
+  border-color: var(--primary-blue);
+}
+
+.cyber-mobile-card-header {
+  border-bottom-color: var(--border-color) !important;
+}
+
+.cyber-mobile-card-body {
+  color: var(--text-primary);
+}
+
+.header-main-row {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 15px !important;
+}
+
+.custom-filter-bar {
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
 
 @media (max-width: 767.98px) {
   .btn-custom-excel span {

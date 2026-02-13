@@ -14,18 +14,23 @@
         <h2><i class="bi bi-building"></i> Master Customer</h2>
     </div>
     <div class="col-md-6 text-end">
-        <button type="button" class="btn btn-danger me-2" id="bulkDeleteBtn" style="display:none;" onclick="confirmBulkDelete()">
-            <i class="bi bi-trash"></i> Hapus Terpilih (<span id="selectedCount">0</span>)
-        </button>
-        <a asp-action="ExportExcel" class="btn btn-warning me-2">
-            <i class="bi bi-file-earmark-excel"></i> Export Semua
-        </a>
-        <a asp-action="DownloadTemplate" class="btn btn-success me-2">
-            <i class="bi bi-download"></i> Template Import
-        </a>
-        <a asp-action="Create" class="btn btn-primary">
-            <i class="bi bi-plus-circle"></i> Tambah Customer
-        </a>
+        <div class="d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-danger" id="bulkDeleteBtn" style="display:none;" onclick="confirmBulkDelete()">
+                <i class="bi bi-trash"></i> Hapus (<span id="selectedCount">0</span>)
+            </button>
+            <a asp-action="ExportExcel" class="btn btn-warning">
+                <i class="bi bi-file-earmark-excel"></i> Export
+            </a>
+            <a asp-action="DownloadTemplate" class="btn btn-outline-info">
+                <i class="bi bi-download"></i> Template
+            </a>
+            <button type="button" class="btn btn-info text-white" data-bs-toggle="modal" data-bs-target="#importModal">
+                <i class="bi bi-upload"></i> Import
+            </button>
+            <a asp-action="Create" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> Tambah
+            </a>
+        </div>
     </div>
 </div>
 
@@ -34,7 +39,7 @@
         <form asp-action="Index" method="get" class="row g-3">
             <div class="col-md-10">
                 <input type="text" class="form-control" name="searchString" value="@ViewData["CurrentFilter"]" 
-                       placeholder="Cari kode atau nama customer..." />
+                       placeholder="Cari NAMA CUSTOMER atau DOCK..." />
             </div>
             <div class="col-md-2">
                 <button type="submit" class="btn btn-primary w-100">
@@ -47,8 +52,6 @@
 
 <div class="card">
     <div class="card-body">
-        @if (Model.Any())
-        {
             <div class="master-table-wrapper">
                 <table class="table table-hover mb-0" id="customersTable">
                     <thead>
@@ -56,8 +59,9 @@
                             <th style="width: 40px;">
                                 <input type="checkbox" id="selectAll" class="form-check-input" title="Pilih Semua">
                             </th>
-                            <th>Kode Customer</th>
-                            <th>Nama Customer</th>
+                            <th>KODE</th>
+                            <th>@Html.DisplayNameFor(model => model.CustomerCode)</th>
+                            <th>@Html.DisplayNameFor(model => model.CustomerName)</th>
                             <th>Route</th>
                             <th>Cycle</th>
                             <th>Docking</th>
@@ -77,6 +81,7 @@
                                 <td>
                                     <input type="checkbox" class="form-check-input row-checkbox" value="@item.CustomerId">
                                 </td>
+                                <td class="fw-bold text-warning">@(item.AutoCode ?? "-")</td>
                                 <td class="fw-bold" style="color: var(--primary-blue);">@item.CustomerCode</td>
                                 <td>@item.CustomerName</td>
                                 <td>@(item.Route ?? "-")</td>
@@ -134,13 +139,14 @@
                     </tbody>
                 </table>
             </div>
-        }
-        else
-        {
-            <div class="alert alert-info">
-                <i class="bi bi-info-circle"></i> Tidak ada data customer yang ditemukan.
             </div>
-        }
+            
+            @if (!Model.Any())
+            {
+                <div class="alert alert-info mt-3">
+                    <i class="bi bi-info-circle"></i> Tidak ada data customer yang ditemukan.
+                </div>
+            }
     </div>
 </div>
 
@@ -198,6 +204,87 @@
         </div>
     </div>
 }
+
+<!-- Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="importModalLabel"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Import Data Customer</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form asp-action="ImportExcel" method="post" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="alert alert-info border-info text-dark">
+                        <small><i class="bi bi-info-circle-fill me-1"></i> Pastikan format file sesuai dengan template.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="excelFile" class="form-label">Pilih File Excel (.xlsx)</label>
+                        <input class="form-control bg-secondary text-white border-0" type="file" id="excelFile" name="file" accept=".xlsx" required>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-upload me-1"></i> Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="importModalLabel"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Import Data Customer</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form asp-action="ImportExcel" method="post" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="alert alert-info border-info text-dark">
+                        <small><i class="bi bi-info-circle-fill me-1"></i> Pastikan format file sesuai dengan template.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="excelFile" class="form-label">Pilih File Excel (.xlsx)</label>
+                        <input class="form-control bg-secondary text-white border-0" type="file" id="excelFile" name="file" accept=".xlsx" required>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-upload me-1"></i> Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="importModalLabel"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Import Data Customer</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form asp-action="ImportExcel" method="post" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="alert alert-info border-info text-dark">
+                        <small><i class="bi bi-info-circle-fill me-1"></i> Pastikan format file sesuai dengan template.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="excelFile" class="form-label">Pilih File Excel (.xlsx)</label>
+                        <input class="form-control bg-secondary text-white border-0" type="file" id="excelFile" name="file" accept=".xlsx" required>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-upload me-1"></i> Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 @section Scripts {
     <script>
@@ -303,7 +390,7 @@
                 return cb.value; 
             }).join(',');
             
-            if (confirm('Anda yakin ingin menghapus ' + checkedBoxes.length + ' customer terpilih?\n\nData yang memiliki relasi (Dock/Schedule) tidak akan dihapus.')) {
+            if (confirm('PERINGATAN: Anda akan menghapus ' + checkedBoxes.length + ' customer terpilih.\n\nSEMUA data terkait (Delivery Schedule & Items) akan IKUT TERHAPUS secara permanen.\n\nApakah Anda yakin ingin melanjutkan?')) {
                 const form = document.createElement('form');
                 form.method = 'POST';
                 form.action = '@Url.Action("BulkDelete", "Customers")';

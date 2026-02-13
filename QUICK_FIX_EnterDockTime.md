@@ -24,7 +24,7 @@ Jalankan salah satu script berikut di SQL Server Management Studio:
 **Cara menggunakan:**
 1. Buka SQL Server Management Studio
 2. Connect ke database production
-3. Pastikan database `DeliveryControlDB` dipilih
+3. Pastikan database `PPIC_DeliveryControl` dipilih
 4. Buka file `Fix_EnterDockTime_Column.sql` atau `Fix_All_Missing_Columns.sql`
 5. Klik **Execute** (F5)
 
@@ -35,7 +35,7 @@ Jalankan salah satu script berikut di SQL Server Management Studio:
 Jalankan query berikut di SQL Server Management Studio:
 
 ```sql
-USE [DeliveryControlDB];
+USE [PPIC_DeliveryControl];
 GO
 
 -- Cek apakah tabel ada
@@ -72,12 +72,12 @@ GO
 ### Opsi 3: Menggunakan Command Line
 
 ```powershell
-sqlcmd -S NAMA_SERVER -d DeliveryControlDB -i "Fix_EnterDockTime_Column.sql" -E
+sqlcmd -S NAMA_SERVER -d PPIC_DeliveryControl -i "Fix_EnterDockTime_Column.sql" -E
 ```
 
 Atau dengan SQL Authentication:
 ```powershell
-sqlcmd -S NAMA_SERVER -d DeliveryControlDB -i "Fix_EnterDockTime_Column.sql" -U USERNAME -P PASSWORD
+sqlcmd -S NAMA_SERVER -d PPIC_DeliveryControl -i "Fix_EnterDockTime_Column.sql" -U USERNAME -P PASSWORD
 ```
 
 ---
@@ -87,7 +87,7 @@ sqlcmd -S NAMA_SERVER -d DeliveryControlDB -i "Fix_EnterDockTime_Column.sql" -U 
 Setelah menjalankan script, verifikasi dengan query berikut:
 
 ```sql
-USE [DeliveryControlDB];
+USE [PPIC_DeliveryControl];
 GO
 
 -- Cek kolom EnterDockTime

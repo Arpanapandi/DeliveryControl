@@ -219,12 +219,10 @@
 </style>
 
 <div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
+    <div class="row mb-4">
+        <div class="col-12 text-center">
             <h2 class="text-white fw-bold mb-1"><i class="bi bi-upc-scan me-2 text-warning"></i> Input Progress Preparation</h2>
-            <p class="text-secondary mb-0">Scan VIN (Tag), Label, dan Kanban untuk update progres.</p>
         </div>
-
     </div>
 
     <!-- Scanner Section (Refactored to match Pulling UI) -->
@@ -302,76 +300,6 @@
         </div>
     </div>
 
-    <!-- Progress Table (Restored) -->
-    <div class="progress-table-container shadow-lg">
-        <table class="cyber-table">
-            <!-- Header removed per User Request -->
-            <tbody>
-                @if (Model != null && Model.Any())
-                {
-                    foreach (var schedule in Model)
-                    {
-                        foreach (var item in schedule.DeliveryItems)
-                        {
-                            var percent = (item.Quantity > 0) ? ((double)(item.ActualQuantity ?? 0) / (double)item.Quantity * 100) : 0;
-                            <tr class="item-row" data-schedule-id="@schedule.ScheduleId">
-                                <td>
-                                    <div class="fw-bold text-warning">@schedule.ScheduleNumber</div>
-                                    <small class="text-white-50">@schedule.ScheduledDate.ToString("dd MMM yyyy")</small>
-                                </td>
-                                <td>
-                                    <div class="text-white fw-bold">@schedule.Customer?.CustomerName</div>
-                                    <span class="badge bg-secondary opacity-75" style="font-size: 0.65rem;">
-                                        Dock: @(string.IsNullOrEmpty(schedule.Area) ? (schedule.Customer?.Docking ?? "-") : schedule.Area)
-                                    </span>
-                                </td>
-                                <td>
-                                    <div class="d-flex flex-column">
-                                        @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber) && !string.IsNullOrEmpty(item.Item?.VIN))
-                                        {
-                                            <span class="text-info fw-bold fs-6">@item.Item.CustomerPartNumber/@item.Item.VIN</span>
-                                        }
-                                        else if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
-                                        {
-                                            <span class="text-info fw-bold">@item.Item.CustomerPartNumber</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-info fw-bold">@(item.Item?.VIN ?? "-")</span>
-                                        }
-                                    </div>
-                                </td>
-                                <td style="min-width: 150px;">
-                                    <div class="d-flex justify-content-between small mb-1">
-                                        <span class="text-white-50 font-monospace">@((item.ActualQuantity ?? 0).ToString("G29")) / @item.Quantity.ToString("G29")</span>
-                                        <span class="@(percent >= 100 ? "text-success" : "text-info")">@percent.ToString("0")%</span>
-                                    </div>
-                                    <div class="progress progress-mini">
-                                        <div class="progress-bar @(percent >= 100 ? "bg-success" : "bg-info")" 
-                                             role="progressbar" style="width: @percent%"></div>
-                                    </div>
-                                </td>
-                                <td class="text-center">
-                                    @if (percent >= 100) { <span class="status-badge bg-success text-white">READY</span> }
-                                    else if (percent > 0) { <span class="status-badge bg-warning text-dark">PROGRESS</span> }
-                                    else { <span class="status-badge bg-secondary opacity-50">WAITING</span> }
-                                </td>
-                            </tr>
-                        }
-                    }
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="5" class="text-center py-5">
-                            <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
-                            <span class="text-secondary">Tidak ada jadwal aktif untuk saat ini.</span>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
 
     <!-- Success Progress Popup -->
     <div id="progressDetailArea" class="progress-detail-container">
@@ -403,6 +331,8 @@
             </div>
         </div>
     </div>
+</div>
+
 </div>
 
 @section Scripts {
@@ -520,7 +450,6 @@
                 $('#idStatusSection').slideUp();
                 $('#labelInput, #kanbanInput, .btn-scan-trigger[data-target="labelInput"], .btn-scan-trigger[data-target="kanbanInput"]').prop('disabled', true);
                 currentScheduleId = null;
-                $('.item-row').removeClass('highlight-row');
             }
 
             function performLookup() {
@@ -539,18 +468,9 @@
                             if (res.found) {
                                 currentScheduleId = res.schedule.scheduleId;
                                 $('#idStatusSection').slideDown();
-                                $('#idStatusText').text("Ditemukan: " + res.schedule.customerName);
+                                $('#idStatusText').html(`Ditemukan: ${res.schedule.customerName} <br><small class='text-warning fw-bold'>QPC: ${res.item.qtyLot || 0}</small>`);
                                 $('#idTargetInfo').text(res.schedule.scheduleNumber);
                                 
-                                // Highlight
-                                $('.item-row').removeClass('highlight-row');
-                                $(`.item-row[data-schedule-id="${currentScheduleId}"]`).addClass('highlight-row');
-                                
-                                const $firstRow = $(`.item-row[data-schedule-id="${currentScheduleId}"]`).first();
-                                if ($firstRow.length) {
-                                    $('html, body').animate({ scrollTop: $firstRow.offset().top - 200 }, 500);
-                                }
-
                                 // Enable All
                                 $('#labelInput, #kanbanInput, .btn-scan-trigger').prop('disabled', false);
 
@@ -579,7 +499,7 @@
                                 }
 
                                 $('#idStatusSection').slideDown();
-                                $('#idStatusText').text("Item: " + res.item.itemName);
+                                $('#idStatusText').html(`Item: ${res.item.itemName} <br><small class='text-warning fw-bold'>QPC: ${res.item.qtyLot || 0}</small>`);
                                 $('#idTargetInfo').text(res.item.vin);
                                 
                                 // Always enable Label if Tag is valid

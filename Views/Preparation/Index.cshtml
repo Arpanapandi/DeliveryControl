@@ -11,6 +11,7 @@
         --cyber-yellow: #facc15;
         --cyber-bg: #0f172a;
         --cyber-card-bg: #1e293b;
+        --cyber-header-bg: #1e293b;
         --cyber-border: #334155;
         --cyber-text-muted: #94a3b8;
     }
@@ -22,7 +23,7 @@
 
     .gallery-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); /* Better fit for tablet */
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
         gap: 1.5rem;
         padding: 1rem 0;
     }
@@ -30,7 +31,7 @@
     .prep-card {
         background: var(--cyber-card-bg);
         border: 2px solid var(--cyber-border);
-        border-radius: 12px;
+        border-radius: 16px;
         overflow: hidden;
         transition: transform 0.2s, box-shadow 0.2s;
         height: 100%;
@@ -41,53 +42,79 @@
 
     .prep-card:hover {
         transform: translateY(-5px);
-        border-color: var(--cyber-yellow);
         box-shadow: 0 0 20px rgba(250, 204, 21, 0.2);
     }
 
+    .prep-card.border-warning { border-color: var(--cyber-yellow) !important; }
+    .prep-card.border-info { border-color: #06b6d4 !important; }
+    .prep-card.border-success { border-color: #10b981 !important; }
+
     .prep-card-header {
-        padding: 12px 15px; /* More padding */
+        padding: 12px 20px;
         display: flex;
         justify-content: space-between;
         align-items: center;
         font-weight: 800;
-        font-size: 1rem; /* Larger font */
+        font-size: 1.1rem;
     }
 
     .header-scheduled { background: var(--cyber-yellow); color: #000; }
-    .header-preparing { background: #06b6d4; color: white; } /* Cyan-500 equivalent */
-    .header-prepared { background: #198754; color: white; }
+    .header-preparing { background: #06b6d4; color: white; }
+    .header-prepared { background: #10b981; color: white; }
 
     .prep-card-body {
-        padding: 20px; /* More padding */
+        padding: 24px;
         flex-grow: 1;
         color: white;
     }
 
     .customer-name {
-        font-size: 1.4rem; /* Larger name */
+        font-size: 1.5rem;
         font-weight: 700;
-        margin-bottom: 15px;
+        margin-bottom: 20px;
         display: flex;
         align-items: center;
         gap: 12px;
         text-transform: uppercase;
     }
 
+    .delivery-banner {
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 20px;
+    }
+
+    .cycle-label {
+        font-size: 0.85rem;
+        color: var(--cyber-text-muted);
+        text-transform: uppercase;
+        margin-bottom: 4px;
+    }
+
+    .cycle-value {
+        font-size: 1.8rem;
+        font-weight: 800;
+        line-height: 1.2;
+        margin-bottom: 15px;
+    }
+
     .detail-row {
         display: flex;
-        margin-bottom: 8px; /* More spacing */
-        font-size: 1rem; /* Base 16px equivalent */
+        flex-direction: column;
+        margin-bottom: 15px;
     }
 
     .detail-label {
         color: var(--cyber-text-muted);
-        width: 150px; /* Wider label */
-        flex-shrink: 0;
+        font-size: 0.85rem;
+        margin-bottom: 2px;
     }
 
     .detail-value {
         font-weight: 600;
+        font-size: 1.1rem;
     }
 
     .icon-spacing {
@@ -95,71 +122,39 @@
         display: inline-block;
         text-align: center;
         margin-right: 8px;
+        color: var(--cyber-yellow);
     }
 
     .prep-card-footer {
-        padding: 15px;
-        background: rgba(0,0,0,0.2);
+        padding: 20px;
+        background: rgba(0,0,0,0.25);
         border-top: 1px solid var(--cyber-border);
-    }
-
-    .btn-dock {
-        background: var(--cyber-yellow);
-        border: none;
-        color: black;
-        font-weight: 700;
-        width: 100%;
-        padding: 14px; /* Larger button */
-        border-radius: 8px;
-        text-transform: uppercase;
-        font-size: 1rem; /* Larger font */
-        display: block;
-        text-align: center;
-        text-decoration: none;
-        transition: 0.3s;
-    }
-
-    .btn-dock:hover {
-        background: #eab308;
-        color: #000;
-    }
-
-    .quick-status {
-        font-size: 0.85rem;
-        color: var(--cyber-yellow);
-        text-align: center;
-        margin-top: 10px;
-        font-weight: 600;
-        cursor: pointer;
-        background: transparent;
-        border: none;
-        width: 100%;
     }
 
     .badge-status {
         background: white;
         color: #1e293b;
-        padding: 4px 10px;
-        border-radius: 12px;
+        padding: 4px 12px;
+        border-radius: 8px;
         font-size: 0.8rem;
-        font-weight: 700;
+        font-weight: 800;
     }
 
     .card-items-list {
-        margin-top: 15px;
+        margin-top: 20px;
         border-top: 1px solid rgba(255,255,255,0.1);
-        padding-top: 10px;
+        padding-top: 15px;
     }
 
     .card-item-progress {
-        margin-bottom: 10px;
+        margin-bottom: 12px;
     }
 
     .item-info {
         display: flex;
         justify-content: space-between;
-        font-size: 0.75rem;
-        margin-bottom: 2px;
+        font-size: 0.85rem;
+        margin-bottom: 4px;
     }
 
     .item-vin {
@@ -172,9 +167,9 @@
     }
 
     .progress-mini {
-        height: 6px;
+        height: 8px;
         background: rgba(255,255,255,0.05);
-        border-radius: 3px;
+        border-radius: 4px;
     }
 
     .filter-bar {
@@ -189,17 +184,6 @@
         background: rgba(15, 23, 42, 0.6) !important;
         border: 1px solid var(--cyber-border) !important;
         color: white !important;
-    }
-
-    .btn-cyber-outline {
-        border: 1px solid var(--cyber-yellow);
-        color: var(--cyber-yellow);
-        transition: 0.3s;
-    }
-
-    .btn-cyber-outline:hover {
-        background: var(--cyber-yellow);
-        color: black;
     }
 
     @@keyframes glow-pulse {
@@ -220,7 +204,6 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="text-white fw-bold mb-1"><i class="bi bi-box-seam me-2 text-warning"></i> Portal Preparation</h2>
-            <p class="text-secondary mb-0">Rangkuman detail item dan konfirmasi masuk dock.</p>
         </div>
         <div class="text-end">
             <h5 class="text-yellow mb-0">@dayName</h5>
@@ -288,39 +271,69 @@
                 if (schedule.PreparationStatus == "Preparing" || schedule.PreparationStatus == "In Progress" || schedule.Status == "Preparing" || schedule.Status == "In Progress") { headerClass = "header-preparing"; }
                 if (schedule.PreparationStatus == "Prepared" || schedule.Status == "Completed") { headerClass = "header-prepared"; }
 
-                <div class="prep-card @(schedule.Status == "Preparing" || schedule.Status == "In Progress" ? "highlight-card" : "")" 
+                <div class="prep-card @(schedule.Status == "Preparing" || schedule.Status == "In Progress" ? "highlight-card border-info" : (schedule.PreparationStatus == "Prepared" || schedule.Status == "Completed" ? "border-success" : "border-warning"))" 
                      id="card-@schedule.ScheduleId" 
                      data-schedule-number="@schedule.ScheduleNumber">
                     <div class="prep-card-header @headerClass">
                         <span>@schedule.ScheduleNumber</span>
-                        <span class="badge-status">@schedule.Status?.ToUpper()</span>
+                        <span class="badge-status">@((schedule.Status == "In Progress" || schedule.Status == "Preparing" || schedule.PreparationStatus == "In Progress" || schedule.PreparationStatus == "Preparing") ? "PREPARING" : schedule.Status?.ToUpper())</span>
                     </div>
+                    
                     <div class="prep-card-body">
-                        <div class="customer-name">
+                        <div class="customer-name mb-1">
                             <i class="bi bi-building"></i> @(schedule.Customer?.CustomerName ?? "Unknown")
                         </div>
-                        
-                        <div class="detail-row">
-                            <div class="detail-label">Cycle:</div>
-                            <div class="detail-value">@schedule.Cycle</div>
+
+                        <!-- DELIVERY BANNER -->
+                        @if (schedule.PickupTime.HasValue)
+                        {
+                            var pickupDate = schedule.PickupTime.Value.Date;
+                            var isToday = pickupDate == DateTime.Today;
+                            var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
+                            var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
+                            var badgeColor = isToday ? "bg-success" : (isTomorrow ? "bg-info" : "bg-secondary");
+                            
+                            <div class="delivery-banner">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-white-50">
+                                        <i class="bi bi-calendar-check me-1"></i> <strong>Tanggal Delivery:</strong>
+                                    </small>
+                                    <span class="badge @badgeColor">
+                                        @dateLabel - @schedule.PickupTime.Value.ToString("HH:mm")
+                                    </span>
+                                </div>
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <div class="cycle-label">Cycle:</div>
+                            <div class="cycle-value">@schedule.Cycle</div>
                         </div>
+
                         <div class="detail-row">
                             <div class="detail-label">Route:</div>
-                            <div class="detail-value text-info">@schedule.Route</div>
+                            <div class="detail-value text-info fw-bold">@schedule.Route</div>
                         </div>
+
                         <div class="detail-row">
-                            <div class="detail-label"><span class="icon-spacing"><i class="bi bi-geo-alt-fill"></i></span>Area:</div>
-                            <div class="detail-value">@schedule.Area</div>
+                            <div class="detail-label">Area:</div>
+                            <div class="detail-value"><i class="bi bi-geo-alt-fill icon-spacing"></i>@schedule.Area</div>
                         </div>
                         
-                        <div class="mt-3 pt-2 border-top border-secondary border-opacity-25">
-                            <div class="detail-row">
-                                <div class="detail-label"><span class="icon-spacing"><i class="bi bi-box-arrow-in-right"></i></span>Enter Dock Time:</div>
-                                <div class="detail-value">@(schedule.EnterDockTime?.ToString("HH:mm") ?? "-")</div>
+                        <hr class="border-secondary opacity-25">
+
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="detail-row mb-0">
+                                    <div class="detail-label"><i class="bi bi-box-arrow-in-right icon-spacing"></i>Enter Dock:</div>
+                                    <div class="detail-value">@(schedule.EnterDockTime?.ToString("HH:mm") ?? "-")</div>
+                                </div>
                             </div>
-                            <div class="detail-row">
-                                <div class="detail-label"><span class="icon-spacing"><i class="bi bi-truck"></i></span>Pickup Time:</div>
-                                <div class="detail-value">@(schedule.PickupTime?.ToString("HH:mm") ?? "-")</div>
+                            <div class="col-6">
+                                <div class="detail-row mb-0">
+                                    <div class="detail-label"><i class="bi bi-truck icon-spacing"></i>Pickup Time:</div>
+                                    <div class="detail-value">@(schedule.PickupTime?.ToString("HH:mm") ?? "-")</div>
+                                </div>
                             </div>
                         </div>
 
@@ -361,15 +374,15 @@
                     <div class="prep-card-footer">
                         @if (!hasEnteredDock)
                         {
-                            <div class="text-center py-2 text-white-50">
+                            <div class="text-center text-white-50">
                                 <small><i class="bi bi-upc-scan me-1"></i> SCAN SEMUA ITEM UNTUK SELESAI</small>
                             </div>
                         }
                         else
                         {
-                            <div class="text-center py-2">
-                                <span class="badge bg-success w-100 py-2">
-                                    <i class="bi bi-check-circle-fill me-1"></i> MASUK DOCK: @(schedule.ActualEnterDockTime?.ToString("HH:mm") ?? "-")
+                            <div class="text-center">
+                                <span class="badge bg-success w-100 py-3" style="font-size: 0.9rem; border-radius: 8px;">
+                                    <i class="bi bi-check-circle-fill me-2"></i> MASUK DOCK: @(schedule.ActualEnterDockTime?.ToString("HH:mm") ?? "-")
                                 </span>
                             </div>
                         }

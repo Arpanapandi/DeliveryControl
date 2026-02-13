@@ -75,7 +75,7 @@ Sistem monitoring dan kontrol jadwal delivery untuk warehouse dengan multiple cu
    ```json
    {
      "ConnectionStrings": {
-       "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=DeliveryControlDB;Trusted_Connection=true;MultipleActiveResultSets=true;TrustServerCertificate=true"
+       "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=PPIC_DeliveryControl;Trusted_Connection=true;MultipleActiveResultSets=true;TrustServerCertificate=true"
      }
    }
    ```

@@ -26,14 +26,15 @@
                 <form asp-action="Create" method="post">
                     <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
                     
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i>
-                        <strong>Kode Customer akan di-generate otomatis</strong> (CUST001, CUST002, dst)
+                    <div class="mb-3">
+                        <label asp-for="CustomerCode" class="form-label"></label>
+                        <input asp-for="CustomerCode" class="form-control" placeholder="Nama Customer (PT...)" required />
+                        <span asp-validation-for="CustomerCode" class="text-danger"></span>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label asp-for="CustomerName" class="form-label"></label>
-                        <input asp-for="CustomerName" class="form-control" placeholder="Nama Customer" />
+                        <input asp-for="CustomerName" class="form-control" placeholder="Dock..." />
                         <span asp-validation-for="CustomerName" class="text-danger"></span>
                     </div>
 
@@ -114,10 +115,10 @@
                 <h6 class="mb-0"><i class="bi bi-info-circle"></i> Informasi</h6>
             </div>
             <div class="card-body">
-                <div class="alert alert-success">
-                    <i class="bi bi-magic"></i>
-                    <strong>Auto Generate!</strong><br/>
-                    Kode Customer akan dibuat otomatis oleh sistem
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-circle"></i>
+                    <strong>Perhatian!</strong><br/>
+                    Kode Customer (NAMA CUSTOMER) harus diisi manual dan tidak boleh duplikat.
                 </div>
                 <p class="small text-muted">
                     <strong>Nama Customer:</strong> Nama lengkap perusahaan atau customer (wajib diisi).

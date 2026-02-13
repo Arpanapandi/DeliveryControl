@@ -116,19 +116,35 @@
                     <div class="col-md-4"><strong>SKID:</strong></div>
                     <div class="col-md-8">@(Model.SKID?.ToString() ?? "-")</div>
                 </div>
+                @{
+                    double totalKbnTarget = 0;
+                    double totalKbnActual = 0;
+                    if (Model.DeliveryItems != null)
+                    {
+                        foreach(var di in Model.DeliveryItems)
+                        {
+                            var qpc = di.Item?.QtyLot ?? 1;
+                            if (qpc > 0)
+                            {
+                                totalKbnTarget += (double)di.Quantity / qpc;
+                                totalKbnActual += (double)(di.ActualQuantity ?? 0) / qpc;
+                            }
+                        }
+                    }
+                }
                 <div class="row mb-2">
-                    <div class="col-md-4"><strong>Target Qty (Box):</strong></div>
-                    <div class="col-md-8">@Model.TotalTargetQuantity.ToString("N0")</div>
+                    <div class="col-md-4"><strong>Target Kanban:</strong></div>
+                    <div class="col-md-8">@totalKbnTarget.ToString("N1") KBN</div>
                 </div>
                 <div class="row mb-2">
-                    <div class="col-md-4"><strong>Actual Qty (Box):</strong></div>
+                    <div class="col-md-4"><strong>Actual Kanban:</strong></div>
                     <div class="col-md-8">
                         <span class="@(Model.TotalActualQuantity >= Model.TotalTargetQuantity && Model.TotalTargetQuantity > 0 ? "text-success" : (Model.TotalActualQuantity > 0 ? "text-warning" : "")) fw-bold">
-                            @Model.TotalActualQuantity.ToString("N0")
+                            @totalKbnActual.ToString("N1") KBN
                         </span>
-                        @if (Model.TotalTargetQuantity > 0)
+                        @if (totalKbnTarget > 0)
                         {
-                            var pct = (double)Model.TotalActualQuantity * 100 / (double)Model.TotalTargetQuantity;
+                            var pct = (totalKbnActual * 100) / totalKbnTarget;
                             <small class="text-muted ms-2">(@pct.ToString("F1")%)</small>
                         }
                     </div>
@@ -239,9 +255,9 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>Item</th>
-                                    <th>Quantity Plan</th>
-                                    <th>Quantity Actual</th>
-                                    <th>Variance</th>
+                                    <th>Target Kanban</th>
+                                    <th>Actual Kanban</th>
+                                    <th>Variance (KBN)</th>
                                     <th>Unit</th>
                                     <th>Status</th>
                                     <th>Action</th>
@@ -255,20 +271,23 @@
                                             <strong>@item.Item.ItemName</strong><br />
                                             <small class="text-muted">@item.Item.ItemCode</small>
                                         </td>
-                                        <td>@item.Quantity.ToString("N2")</td>
-                                        <td>@(item.ActualQuantity?.ToString("N2") ?? "-")</td>
                                         <td>
-                                            @if (item.VarianceQuantity.HasValue)
-                                            {
-                                                var varianceClass = item.VarianceQuantity.Value >= 0 ? "text-success" : "text-danger";
-                                                <span class="@varianceClass">@item.VarianceQuantity.Value.ToString("N2")</span>
+                                            @{
+                                                var qpc = item.Item?.QtyLot ?? 1;
+                                                var kbnPlan = (double)item.Quantity / (qpc > 0 ? qpc : 1);
+                                                var kbnActual = (double)(item.ActualQuantity ?? 0) / (qpc > 0 ? qpc : 1);
+                                                var kbnVariance = kbnActual - kbnPlan;
                                             }
-                                            else
-                                            {
-                                                <span class="text-muted">-</span>
-                                            }
+                                            @kbnPlan.ToString("N1")
                                         </td>
-                                        <td>@item.Unit</td>
+                                        <td>@kbnActual.ToString("N1")</td>
+                                        <td>
+                                            @{
+                                                var varianceClass = kbnVariance >= 0 ? "text-success" : "text-danger";
+                                            }
+                                            <span class="@varianceClass">@kbnVariance.ToString("N1")</span>
+                                        </td>
+                                        <td>KBN</td>
                                         <td>
                                             @if (item.IsCompleted)
                                             {

@@ -13,7 +13,7 @@ dotnet ef migrations add InitialCreate
 dotnet ef database update
 ```
 
-✅ Database `DeliveryControlDB` akan dibuat dengan sample data!
+✅ Database `PPIC_DeliveryControl` akan dibuat dengan sample data!
 
 ### 2️⃣ Jalankan Aplikasi (1 menit)
 
@@ -89,7 +89,7 @@ Buka browser dan akses:
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=DeliveryControlDB;Trusted_Connection=true;MultipleActiveResultSets=true;TrustServerCertificate=true"
+    "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=PPIC_DeliveryControl;Trusted_Connection=true;MultipleActiveResultSets=true;TrustServerCertificate=true"
   }
 }
 ```
@@ -101,7 +101,7 @@ Edit file `appsettings.json`:
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=NAMA_SERVER;Database=DeliveryControlDB;User Id=username;Password=password;TrustServerCertificate=true"
+    "DefaultConnection": "Server=NAMA_SERVER;Database=PPIC_DeliveryControl;User Id=username;Password=password;TrustServerCertificate=true"
   }
 }
 ```

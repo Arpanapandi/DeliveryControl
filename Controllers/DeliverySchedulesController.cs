@@ -719,19 +719,29 @@ namespace DeliveryControl.Controllers
                 
                 if (schedules.Any())
                 {
-                    _context.DeliverySchedules.AddRange(schedules);
-                    await _context.SaveChangesAsync();
-                    
-                    // Notify Dashboard via SignalR
-                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    using var transaction = await _context.Database.BeginTransactionAsync();
+                    try
                     {
-                        Action = "bulk_create",
-                        Message = $"Berhasil membuat {schedules.Count} schedule delivery untuk tanggal {model.ScheduledDate:dd/MM/yyyy}",
-                        Timestamp = DateTime.Now
-                    });
+                        _context.DeliverySchedules.AddRange(schedules);
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+                        
+                        // Notify Dashboard via SignalR
+                        await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                        {
+                            Action = "bulk_create",
+                            Message = $"Berhasil membuat {schedules.Count} schedule delivery untuk tanggal {model.ScheduledDate:dd/MM/yyyy}",
+                            Timestamp = DateTime.Now
+                        });
 
-                    TempData["SuccessMessage"] = $"✅ Berhasil membuat {schedules.Count} schedule delivery untuk tanggal {model.ScheduledDate:dd/MM/yyyy}!";
-                    return RedirectToAction(nameof(Index), new { startDate = model.ScheduledDate.ToString("yyyy-MM-dd"), endDate = model.ScheduledDate.ToString("yyyy-MM-dd") });
+                        TempData["SuccessMessage"] = $"✅ Berhasil membuat {schedules.Count} schedule delivery untuk tanggal {model.ScheduledDate:dd/MM/yyyy}!";
+                        return RedirectToAction(nameof(Index), new { startDate = model.ScheduledDate.ToString("yyyy-MM-dd"), endDate = model.ScheduledDate.ToString("yyyy-MM-dd") });
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
                 }
             }
             catch (Exception ex)
@@ -956,29 +966,48 @@ namespace DeliveryControl.Controllers
             
             if (ModelState.IsValid)
             {
-                // Generate Schedule Number if not provided
-                if (string.IsNullOrEmpty(schedule.ScheduleNumber) || schedule.ScheduleNumber == "SCH-001")
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    var sequence = await GetNextSequenceInternal(schedule.ScheduledDate);
-                    schedule.ScheduleNumber = $"SCH-{schedule.ScheduledDate:yyyyMMdd}{sequence:D3}";
+                    // Generate Schedule Number if not provided
+                    if (string.IsNullOrEmpty(schedule.ScheduleNumber) || schedule.ScheduleNumber == "SCH-001")
+                    {
+                        var sequence = await GetNextSequenceInternal(schedule.ScheduledDate);
+                        schedule.ScheduleNumber = $"SCH-{schedule.ScheduledDate:yyyyMMdd}{sequence:D3}";
+                    }
+
+                    // Check for collision and retry once if needed
+                    var exists = await _context.DeliverySchedules.AnyAsync(s => s.ScheduleNumber == schedule.ScheduleNumber);
+                    if (exists)
+                    {
+                        var sequence = await GetNextSequenceInternal(schedule.ScheduledDate);
+                        schedule.ScheduleNumber = $"SCH-{schedule.ScheduledDate:yyyyMMdd}{sequence:D3}";
+                    }
+
+                    schedule.CreatedDate = DateTime.Now;
+                    schedule.CreatedBy = User.Identity?.Name ?? "System";
+                    _context.Add(schedule);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    
+                    // Notify Dashboard via SignalR
+                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    {
+                        ScheduleNumber = schedule.ScheduleNumber,
+                        Action = "create",
+                        Message = $"Schedule baru {schedule.ScheduleNumber} telah dibuat",
+                        Timestamp = DateTime.Now
+                    });
+
+                    TempData["SuccessMessage"] = "Schedule berhasil ditambahkan!";
+                    return RedirectToAction(nameof(Index), new { startDate = schedule.ScheduledDate.ToString("yyyy-MM-dd"), endDate = schedule.ScheduledDate.ToString("yyyy-MM-dd") });
                 }
-
-                schedule.CreatedDate = DateTime.Now;
-                schedule.CreatedBy = User.Identity?.Name ?? "System";
-                _context.Add(schedule);
-                await _context.SaveChangesAsync();
-                
-                // Notify Dashboard via SignalR
-                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                catch (Exception ex)
                 {
-                    ScheduleNumber = schedule.ScheduleNumber,
-                    Action = "create",
-                    Message = $"Schedule baru {schedule.ScheduleNumber} telah dibuat",
-                    Timestamp = DateTime.Now
-                });
-
-                TempData["SuccessMessage"] = "Schedule berhasil ditambahkan!";
-                return RedirectToAction(nameof(Index), new { startDate = schedule.ScheduledDate.ToString("yyyy-MM-dd"), endDate = schedule.ScheduledDate.ToString("yyyy-MM-dd") });
+                    await transaction.RollbackAsync();
+                    TempData["ErrorMessage"] = $"Gagal menyimpan schedule: {ex.Message}";
+                    // Fallthrough to return view
+                }
             }
             
             // Log errors for debugging
@@ -1421,7 +1450,11 @@ namespace DeliveryControl.Controllers
                 var schedules = new List<DeliverySchedule>();
                 var errors = new List<string>();
                 var batchSequences = new Dictionary<string, int>();
-                var customers = await _context.Customers.ToDictionaryAsync(c => c.CustomerCode, c => c.CustomerId);
+                var allCustomers = await _context.Customers.AsNoTracking().ToListAsync();
+                var customersByCode = allCustomers
+                    .Where(c => !string.IsNullOrWhiteSpace(c.CustomerCode))
+                    .GroupBy(c => c.CustomerCode.Trim().ToUpper())
+                    .ToDictionary(g => g.Key, g => g.First());
 
                 using var stream = new MemoryStream();
                 await file.CopyToAsync(stream);
@@ -1448,13 +1481,14 @@ namespace DeliveryControl.Controllers
                         var targetQtyStr = row.Cell(10).GetString().Trim();
 
                         // Validasi customer
-                        if (!customers.ContainsKey(custCode))
+                        if (!customersByCode.ContainsKey(custCode))
                         {
                             errors.Add($"Baris {rowNumber}: Customer '{custCode}' tidak ditemukan!");
                             continue;
                         }
 
-                        var customerId = customers[custCode];
+                        var customer = customersByCode[custCode];
+                        var customerId = customer.CustomerId;
 
                         // Parse datetime
                         DateTime? enterDockTime = null;
@@ -1504,14 +1538,14 @@ namespace DeliveryControl.Controllers
                         {
                             ScheduleNumber = scheduleNumber,
                             CustomerId = customerId,
-                            Route = route,
-                            Cycle = cycle,
-                            EnterDockTime = enterDockTime,
-                            PickupTime = pickupTime,
-                            ETD = etd,
-                            Range = range,
-                            SKID = skid,
-                            Area = area,
+                            Route = string.IsNullOrWhiteSpace(route) ? customer.Route : route,
+                            Cycle = string.IsNullOrWhiteSpace(cycle) ? customer.Cycle : cycle,
+                            EnterDockTime = ParseTimeToDateTime(customer.Docking, scheduledDate),
+                            PickupTime = pickupTime ?? ParseTimeToDateTime(customer.Pickup, scheduledDate),
+                            ETD = etd ?? ParseTimeToDateTime(customer.ETD, scheduledDate),
+                            Range = string.IsNullOrWhiteSpace(range) ? customer.Range : range,
+                            SKID = skid ?? customer.SKID,
+                            Area = string.IsNullOrWhiteSpace(area) ? enterDockStr : area,
                             TotalTargetQuantity = targetQty,
                             ScheduledDate = etd?.Date ?? DateTime.Today,
                             Status = "Scheduled",
@@ -1535,8 +1569,12 @@ namespace DeliveryControl.Controllers
 
                 if (schedules.Any())
                 {
-                    _context.DeliverySchedules.AddRange(schedules);
-                    await _context.SaveChangesAsync();
+                    using var transaction = await _context.Database.BeginTransactionAsync();
+                    try
+                    {
+                        _context.DeliverySchedules.AddRange(schedules);
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
 
                     // Notify Dashboard via SignalR
                     await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
@@ -1546,7 +1584,13 @@ namespace DeliveryControl.Controllers
                         Timestamp = DateTime.Now
                     });
 
-                    TempData["SuccessMessage"] = $"Berhasil import {schedules.Count} schedule dari Excel!";
+                        TempData["SuccessMessage"] = $"Berhasil import {schedules.Count} schedule dari Excel!";
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
                 }
                 else
                 {

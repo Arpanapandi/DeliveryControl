@@ -1,10 +1,10 @@
 # Script PowerShell untuk menambahkan kolom ActualEnterDockTime
 # Pastikan aplikasi sudah di-stop sebelum menjalankan script ini
 
-$connectionString = "Server=(localdb)\mssqllocaldb;Database=DeliveryControlDB;Trusted_Connection=true;MultipleActiveResultSets=true;TrustServerCertificate=true"
+$connectionString = "Server=(localdb)\mssqllocaldb;Database=PPIC_DeliveryControl;Trusted_Connection=true;MultipleActiveResultSets=true;TrustServerCertificate=true"
 
 # Extract database name from connection string
-$dbName = "DeliveryControlDB"
+$dbName = "PPIC_DeliveryControl"
 $serverName = "(localdb)\mssqllocaldb"
 
 # SQL Command

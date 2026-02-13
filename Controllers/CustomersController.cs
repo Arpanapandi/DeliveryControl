@@ -61,16 +61,37 @@ namespace DeliveryControl.Controllers
         // POST: Customers/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("CustomerId,CustomerName,Route,Cycle,Docking,Pickup,ETD,SKID,Area,IsActive")] Customer customer)
+        public async Task<IActionResult> Create([Bind("CustomerId,CustomerCode,CustomerName,Route,Cycle,Docking,Pickup,ETD,SKID,Area,IsActive")] Customer customer)
         {
             // Remove CustomerCode from ModelState since it's auto-generated
-            ModelState.Remove("CustomerCode");
             ModelState.Remove("Range"); // Range is auto-calculated
             
             if (ModelState.IsValid)
             {
-                // Auto-generate CustomerCode
-                customer.CustomerCode = await GenerateCustomerCodeAsync();
+                // Check for duplicates
+                if (await _context.Customers.AnyAsync(c => c.CustomerCode == customer.CustomerCode && c.CustomerName == customer.CustomerName && c.Route == customer.Route))
+                {
+                    ModelState.AddModelError("CustomerCode", $"Kombinasi Customer, Dock, dan Route sudah ada.");
+                    return View(customer);
+                }
+
+                // Generate AutoCode
+                var lastCode = await _context.Customers
+                    .Where(c => c.AutoCode != null && c.AutoCode.StartsWith("C-"))
+                    .OrderByDescending(c => c.AutoCode)
+                    .Select(c => c.AutoCode)
+                    .FirstOrDefaultAsync();
+
+                int nextNum = 1;
+                if (!string.IsNullOrEmpty(lastCode))
+                {
+                    if (int.TryParse(lastCode.Replace("C-", ""), out int lastNum))
+                    {
+                        nextNum = lastNum + 1;
+                    }
+                }
+                customer.AutoCode = $"C-{nextNum:D4}";
+
                 customer.CreatedDate = DateTime.Now;
                 
                 // Auto-calculate Range dari ETD - Pickup
@@ -78,40 +99,13 @@ namespace DeliveryControl.Controllers
                 
                 _context.Add(customer);
                 await _context.SaveChangesAsync();
-                TempData["SuccessMessage"] = $"Customer berhasil ditambahkan dengan kode {customer.CustomerCode}!";
+                TempData["SuccessMessage"] = $"Customer berhasil ditambahkan dengan Kode: {customer.AutoCode}!";
                 return RedirectToAction(nameof(Index));
             }
             return View(customer);
         }
         
-        // Helper method to generate CustomerCode
-        private async Task<string> GenerateCustomerCodeAsync()
-        {
-            var lastCustomer = await _context.Customers
-                .OrderByDescending(c => c.CustomerId)
-                .FirstOrDefaultAsync();
-            
-            if (lastCustomer == null)
-            {
-                return "CUST001";
-            }
-            
-            // Extract number from last code (e.g., CUST001 -> 001)
-            var lastCode = lastCustomer.CustomerCode;
-            if (lastCode.StartsWith("CUST") && lastCode.Length > 4)
-            {
-                var numberPart = lastCode.Substring(4);
-                if (int.TryParse(numberPart, out int lastNumber))
-                {
-                    var newNumber = lastNumber + 1;
-                    return $"CUST{newNumber:D3}"; // Format: CUST001, CUST002, etc.
-                }
-            }
-            
-            // Fallback: count total + 1
-            var totalCount = await _context.Customers.CountAsync();
-            return $"CUST{(totalCount + 1):D3}";
-        }
+
 
         // GET: Customers/Edit/5
         public async Task<IActionResult> Edit(int? id)
@@ -356,17 +350,29 @@ namespace DeliveryControl.Controllers
 
             foreach (var customer in customersToDelete)
             {
-                // Cek relasi
-
-                if (customer.DeliverySchedules.Any())
-                {
-                    errorMessages.Add($"{customer.CustomerCode}: Masih ada {customer.DeliverySchedules.Count} schedule");
-                    errorCount++;
-                    continue;
-                }
-
                 try
                 {
+                    // CASCADE DELETE: Delete related schedules and items first
+                    if (customer.DeliverySchedules != null && customer.DeliverySchedules.Any())
+                    {
+                        // 1. Get all schedule IDs to find items
+                        var scheduleIds = customer.DeliverySchedules.Select(s => s.ScheduleId).ToList();
+                        
+                        // 2. Find and delete related DeliveryItems
+                        var relatedItems = await _context.DeliveryItems
+                            .Where(di => scheduleIds.Contains(di.ScheduleId))
+                            .ToListAsync();
+                            
+                        if (relatedItems.Any())
+                        {
+                            _context.DeliveryItems.RemoveRange(relatedItems);
+                        }
+
+                        // 3. Delete the schedules
+                        _context.DeliverySchedules.RemoveRange(customer.DeliverySchedules);
+                    }
+
+                    // 4. Finally delete the customer
                     _context.Customers.Remove(customer);
                     successCount++;
                 }
@@ -400,7 +406,7 @@ namespace DeliveryControl.Controllers
 
                 // Header matches the application table
                 var headers = new[] { 
-                    "KODE CUSTOMER", "NAMA CUSTOMER", "ROUTE", "CYCLE", 
+                    "KODE", "NAMA CUSTOMER", "DOCK", "ROUTE", "CYCLE", 
                     "DOCKING", "PICKUP", "ETD", "RANGE", "SKID", "AREA" 
                 };
 
@@ -421,38 +427,39 @@ namespace DeliveryControl.Controllers
                 var sampleCustomer = _context.Customers.FirstOrDefault();
                 if (sampleCustomer != null)
                 {
-                    worksheet.Cell(2, 1).Value = sampleCustomer.CustomerCode;
-                    worksheet.Cell(2, 2).Value = sampleCustomer.CustomerName;
-                    worksheet.Cell(2, 3).Value = sampleCustomer.Route;
-                    worksheet.Cell(2, 4).Value = sampleCustomer.Cycle;
-                    worksheet.Cell(2, 5).Value = sampleCustomer.Docking;
-                    worksheet.Cell(2, 6).Value = sampleCustomer.Pickup;
-                    worksheet.Cell(2, 7).Value = sampleCustomer.ETD;
-                    // Range might be null or computed
-                    worksheet.Cell(2, 8).Value = sampleCustomer.Range ?? ""; 
-                    worksheet.Cell(2, 9).Value = sampleCustomer.SKID;
-                    worksheet.Cell(2, 10).Value = sampleCustomer.Area;
+                    worksheet.Cell(2, 1).Value = sampleCustomer.AutoCode;
+                    worksheet.Cell(2, 2).Value = sampleCustomer.CustomerCode;
+                    worksheet.Cell(2, 3).Value = sampleCustomer.CustomerName;
+                    worksheet.Cell(2, 4).Value = sampleCustomer.Route;
+                    worksheet.Cell(2, 5).Value = sampleCustomer.Cycle;
+                    worksheet.Cell(2, 6).Value = sampleCustomer.Docking;
+                    worksheet.Cell(2, 7).Value = sampleCustomer.Pickup;
+                    worksheet.Cell(2, 8).Value = sampleCustomer.ETD;
+                    worksheet.Cell(2, 9).Value = sampleCustomer.Range ?? ""; 
+                    worksheet.Cell(2, 10).Value = sampleCustomer.SKID;
+                    worksheet.Cell(2, 11).Value = sampleCustomer.Area;
                 }
                 else
                 {
                     // Fallback
-                    worksheet.Cell(2, 1).Value = "CUST001"; 
-                    worksheet.Cell(2, 2).Value = "PT. ORIGINAL EQUIPMENT";
-                    worksheet.Cell(2, 3).Value = "RC25";
-                    worksheet.Cell(2, 4).Value = "C1";
-                    worksheet.Cell(2, 5).Value = "21:00";
-                    worksheet.Cell(2, 6).Value = "04:00";
-                    worksheet.Cell(2, 7).Value = "04:30";
-                    worksheet.Cell(2, 8).Value = "30 Menit";
-                    worksheet.Cell(2, 9).Value = "4 - 8"; 
-                    worksheet.Cell(2, 10).Value = "A1-2"; 
+                    worksheet.Cell(2, 1).Value = "C-0001";
+                    worksheet.Cell(2, 2).Value = "PT. ASTRA HONDA MOTOR"; 
+                    worksheet.Cell(2, 3).Value = "DOCK 42";
+                    worksheet.Cell(2, 4).Value = "RC25";
+                    worksheet.Cell(2, 5).Value = "C1";
+                    worksheet.Cell(2, 6).Value = "21:00";
+                    worksheet.Cell(2, 7).Value = "04:00";
+                    worksheet.Cell(2, 8).Value = "04:30";
+                    worksheet.Cell(2, 9).Value = "30 Menit";
+                    worksheet.Cell(2, 10).Value = "4 - 8"; 
+                    worksheet.Cell(2, 11).Value = "A1-2"; 
                 }
 
                 // Instructions
                 worksheet.Cell(4, 2).Value = "CATATAN PENGISIAN UNTUK IMPORT BARU:"; 
                 worksheet.Cell(5, 2).Value = "• Gunakan template ini untuk MENAMBAH data baru.";
-                worksheet.Cell(6, 2).Value = "• KODE CUSTOMER: Boleh dikosongkan (Sistem akan generate otomatis)";
-                worksheet.Cell(7, 2).Value = "• NAMA CUSTOMER: Wajib diisi";
+                worksheet.Cell(6, 2).Value = "• NAMA CUSTOMER: Wajib diisi (Manual Input)";
+                worksheet.Cell(7, 2).Value = "• DOCK: Wajib diisi";
 
                 worksheet.Columns().AdjustToContents();
 
@@ -476,7 +483,7 @@ namespace DeliveryControl.Controllers
 
                 // Headers
                 var headers = new[] { 
-                    "KODE CUSTOMER", "NAMA CUSTOMER", "ROUTE", "CYCLE", 
+                    "KODE", "NAMA CUSTOMER", "DOCK", "ROUTE", "CYCLE", 
                     "DOCKING", "PICKUP", "ETD", "RANGE", "SKID", "AREA" 
                 };
 
@@ -493,20 +500,21 @@ namespace DeliveryControl.Controllers
                 headerRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
 
                 // Data Rows
-                int row = 2;
-                foreach (var item in customers)
+                int rowIdx = 2;
+                foreach (var c in customers)
                 {
-                    worksheet.Cell(row, 1).Value = item.CustomerCode;
-                    worksheet.Cell(row, 2).Value = item.CustomerName;
-                    worksheet.Cell(row, 3).Value = item.Route;
-                    worksheet.Cell(row, 4).Value = item.Cycle;
-                    worksheet.Cell(row, 5).Value = item.Docking;
-                    worksheet.Cell(row, 6).Value = item.Pickup;
-                    worksheet.Cell(row, 7).Value = item.ETD;
-                    worksheet.Cell(row, 8).Value = item.Range;
-                    worksheet.Cell(row, 9).Value = item.SKID;
-                    worksheet.Cell(row, 10).Value = item.Area;
-                    row++;
+                    worksheet.Cell(rowIdx, 1).Value = c.AutoCode;
+                    worksheet.Cell(rowIdx, 2).Value = c.CustomerCode;
+                    worksheet.Cell(rowIdx, 3).Value = c.CustomerName;
+                    worksheet.Cell(rowIdx, 4).Value = c.Route;
+                    worksheet.Cell(rowIdx, 5).Value = c.Cycle;
+                    worksheet.Cell(rowIdx, 6).Value = c.Docking;
+                    worksheet.Cell(rowIdx, 7).Value = c.Pickup;
+                    worksheet.Cell(rowIdx, 8).Value = c.ETD;
+                    worksheet.Cell(rowIdx, 9).Value = c.Range;
+                    worksheet.Cell(rowIdx, 10).Value = c.SKID;
+                    worksheet.Cell(rowIdx, 11).Value = c.Area;
+                    rowIdx++;
                 }
 
                 worksheet.Columns().AdjustToContents();
@@ -520,7 +528,13 @@ namespace DeliveryControl.Controllers
             }
         }
 
-        // Import Excel
+        private string NormalizeHeader(string header)
+        {
+            if (string.IsNullOrEmpty(header)) return "";
+            return new string(header.ToUpper().Where(c => char.IsLetterOrDigit(c)).ToArray());
+        }
+
+        // Import Excel Mapping
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ImportExcel(IFormFile file)
@@ -542,6 +556,8 @@ namespace DeliveryControl.Controllers
             var errorMessages = new List<string>();
             int successCount = 0;
             int errorCount = 0;
+            int totalRows = 0;
+            int skippedBlank = 0;
 
             try
             {
@@ -551,116 +567,194 @@ namespace DeliveryControl.Controllers
                     using (var workbook = new ClosedXML.Excel.XLWorkbook(stream))
                     {
                         var worksheet = workbook.Worksheet(1);
+                        var firstRow = worksheet.Row(1);
+                        
+                        // Dynamic Header Detection
+                        var headerMap = new Dictionary<string, int>();
+                        for (int c = 1; c <= worksheet.ColumnsUsed().Count(); c++)
+                        {
+                            var h = NormalizeHeader(firstRow.Cell(c).GetString());
+                            if (!string.IsNullOrEmpty(h) && !headerMap.ContainsKey(h)) headerMap[h] = c;
+                        }
+
+                        int FindCol(params string[] keywords)
+                        {
+                            foreach (var kw in keywords)
+                            {
+                                var normalizedKw = NormalizeHeader(kw);
+                                if (headerMap.ContainsKey(normalizedKw)) return headerMap[normalizedKw];
+                            }
+                            return -1;
+                        }
+
+                        // Map columns
+                        int colCust = FindCol("NAMA CUSTOMER", "CUSTOMER", "KODE", "PELANGGAN");
+                        int colDock = FindCol("DOCK", "DOCKNAME", "NAMA DOCK"); // Removed DOCKING
+                        int colRoute = FindCol("ROUTE", "RUTE");
+                        int colCycle = FindCol("CYCLE");
+                        int colDocking = FindCol("DOCKING", "WAKTU DOCKING");
+                        int colPickup = FindCol("PICKUP", "WAKTU PICKUP");
+                        int colEtd = FindCol("ETD");
+                        int colRange = FindCol("RANGE", "JARAK");
+                        int colSkid = FindCol("SKID", "QTY SKID");
+                        int colArea = FindCol("AREA", "LOKASI");
+
+                        if (colCust == -1 || colDock == -1)
+                        {
+                            TempData["ErrorMessage"] = "Format header tidak dikenali! Pastikan ada kolom NAMA CUSTOMER dan DOCK.";
+                            return RedirectToAction(nameof(Index));
+                        }
+
                         var rows = worksheet.RowsUsed().Skip(1); // Skip header
                         
-                        // Get starting customer code ONCE before loop
-                        var lastCustomer = await _context.Customers
-                            .OrderByDescending(c => c.CustomerId)
-                            .FirstOrDefaultAsync();
+                        // Load existing customers to avoid unique constraint violations
+                        var existingCustomers = await _context.Customers.ToListAsync();
                         
-                        int startNumber = 1;
-                        if (lastCustomer != null && lastCustomer.CustomerCode.StartsWith("CUST"))
+                        // Get current max AutoCode number
+                        var lastAutoCode = existingCustomers
+                            .Where(c => !string.IsNullOrEmpty(c.AutoCode) && c.AutoCode.StartsWith("C-"))
+                            .OrderByDescending(c => c.AutoCode)
+                            .Select(c => c.AutoCode)
+                            .FirstOrDefault();
+                        
+                        int nextAutoCodeNum = 1;
+                        if (!string.IsNullOrEmpty(lastAutoCode))
                         {
-                            var numberPart = lastCustomer.CustomerCode.Substring(4);
-                            if (int.TryParse(numberPart, out int lastNumber))
+                            var numStr = lastAutoCode.Replace("C-", "");
+                            if (int.TryParse(numStr, out int lastNum))
                             {
-                                startNumber = lastNumber + 1;
+                                nextAutoCodeNum = lastNum + 1;
                             }
                         }
 
-                        int currentNumber = startNumber;
+                        var customerLookup = existingCustomers
+                            .GroupBy(c => $"{c.CustomerCode?.Trim().ToUpper()}|{c.CustomerName?.Trim().ToUpper()}|{c.Route?.Trim().ToUpper()}|{c.Cycle?.Trim().ToUpper()}|{c.Docking?.Trim().ToUpper()}|{c.Pickup?.Trim().ToUpper()}|{c.ETD?.Trim().ToUpper()}|{c.Range?.Trim().ToUpper()}|{c.SKID?.Trim().ToUpper()}|{c.Area?.Trim().ToUpper()}")
+                            .ToDictionary(g => g.Key, g => g.First());
+
+                        string lastCustomerCode = "";
 
                         foreach (var row in rows)
                         {
+                            totalRows++;
                             try
                             {
-                                // Updated Mapping (Matches User Request):
-                                // 1: KODE (Ignored/System Gen)
-                                // 2: NAMA CUSTOMER
-                                // 3: ROUTE
-                                // 4: CYCLE
-                                // 5: DOCKING
-                                // 6: PICKUP
-                                // 7: ETD
-                                // 8: RANGE (Ignored/Auto Calc)
-                                // 9: SKID
-                                // 10: AREA
-
-                                var customerName = row.Cell(2).GetString().Trim();
-                                var route = row.Cell(3).GetString().Trim();
-                                var cycle = row.Cell(4).GetString().Trim();
-                                var docking = row.Cell(5).GetString().Trim();
-                                var pickup = row.Cell(6).GetString().Trim();
-                                var etd = row.Cell(7).GetString().Trim();
-                                // Col 8 is Range
-                                var skidStr = row.Cell(9).GetString().Trim();
-                                var area = row.Cell(10).GetString().Trim();
-
-                                // Skip invalid rows
-                                if (string.IsNullOrWhiteSpace(customerName) || 
-                                    customerName.StartsWith("Catatan", StringComparison.OrdinalIgnoreCase) ||
-                                    customerName.StartsWith("-", StringComparison.OrdinalIgnoreCase))
+                                // Get values using dynamic columns
+                                var customerCode = colCust != -1 ? row.Cell(colCust).GetString().Trim() : "";
+                                var customerName = colDock != -1 ? row.Cell(colDock).GetString().Trim() : "";
+                                var rangeExcel = colRange != -1 ? row.Cell(colRange).GetString().Trim() : "";
+                                
+                                // Carry-over logic for Merged Cells (Customer Name)
+                                if (string.IsNullOrWhiteSpace(customerCode) && !string.IsNullOrWhiteSpace(lastCustomerCode))
                                 {
+                                    customerCode = lastCustomerCode;
+                                }
+
+                                if (string.IsNullOrWhiteSpace(customerCode)) 
+                                {
+                                    skippedBlank++;
+                                    continue;
+                                }
+                                
+                                lastCustomerCode = customerCode; // Remember for next row if it's blank
+
+                                // EXPLICIT CHECK: CustomerName (DOCK) is REQUIRED
+                                if (string.IsNullOrWhiteSpace(customerName))
+                                {
+                                    skippedBlank++;
+                                    errorMessages.Add($"Baris {row.RowNumber()}: DOCK (kolom {colDock}) kosong. Baris dilewati.");
                                     continue;
                                 }
 
-                                if (customerName.Length < 3)
+                                var route = colRoute != -1 ? row.Cell(colRoute).GetString().Trim() : "";
+                                var cycle = colCycle != -1 ? row.Cell(colCycle).GetString().Trim() : "";
+                                var docking = colDocking != -1 ? row.Cell(colDocking).GetString().Trim() : "";
+                                var pickup = colPickup != -1 ? row.Cell(colPickup).GetString().Trim() : "";
+                                var etd = colEtd != -1 ? row.Cell(colEtd).GetString().Trim() : "";
+                                var skidStr = colSkid != -1 ? row.Cell(colSkid).GetString().Trim() : "";
+                                var area = colArea != -1 ? row.Cell(colArea).GetString().Trim() : "";
+
+                                var key = $"{customerCode.ToUpper()}|{customerName.ToUpper()}|{route.ToUpper()}|{cycle.ToUpper()}|{docking.ToUpper()}|{pickup.ToUpper()}|{etd.ToUpper()}|{rangeExcel.ToUpper()}|{skidStr.ToUpper()}|{area.ToUpper()}";
+                                
+                                if (customerLookup.TryGetValue(key, out var existing))
                                 {
-                                    errorMessages.Add($"Baris {row.RowNumber()}: Nama customer '{customerName}' terlalu pendek.");
-                                    errorCount++;
-                                    continue;
+                                    // Update existing record
+                                    existing.Route = string.IsNullOrWhiteSpace(route) ? null : route;
+                                    existing.Cycle = string.IsNullOrWhiteSpace(cycle) ? null : cycle;
+                                    existing.Docking = string.IsNullOrWhiteSpace(docking) ? null : docking;
+                                    existing.Pickup = string.IsNullOrWhiteSpace(pickup) ? null : pickup;
+                                    existing.ETD = string.IsNullOrWhiteSpace(etd) ? null : etd;
+                                    existing.SKID = string.IsNullOrWhiteSpace(skidStr) ? null : skidStr;
+                                    existing.Area = string.IsNullOrWhiteSpace(area) ? null : area;
+                                    existing.UpdatedDate = DateTime.Now;
+                                    
+                                    if (!string.IsNullOrWhiteSpace(rangeExcel)) existing.Range = rangeExcel;
+                                    else existing.CalculateRange();
+                                    
+                                    if (existing.CustomerId > 0)
+                                    {
+                                        _context.Update(existing);
+                                    }
                                 }
-
-                                // Generate CustomerCode
-                                var customerCode = $"CUST{currentNumber:D3}";
-                                currentNumber++;
-
-                                var customer = new Customer
+                                else
                                 {
-                                    CustomerCode = customerCode,
-                                    CustomerName = customerName,
-                                    Route = string.IsNullOrWhiteSpace(route) ? null : route,
-                                    Cycle = string.IsNullOrWhiteSpace(cycle) ? null : cycle,
-                                    Docking = string.IsNullOrWhiteSpace(docking) ? null : docking,
-                                    Pickup = string.IsNullOrWhiteSpace(pickup) ? null : pickup,
-                                    ETD = string.IsNullOrWhiteSpace(etd) ? null : etd,
-                                    SKID = string.IsNullOrWhiteSpace(skidStr) ? null : skidStr,
-                                    Area = string.IsNullOrWhiteSpace(area) ? null : area,
-                                    IsActive = true,
-                                    CreatedDate = DateTime.Now
-                                };
-
-                                // Auto-calculate Range dari ETD - Pickup
-                                customer.CalculateRange();
-
-                                customers.Add(customer);
+                                    // Create new record
+                                    var customer = new Customer
+                                    {
+                                        AutoCode = $"C-{nextAutoCodeNum++:D4}",
+                                        CustomerCode = customerCode,
+                                        CustomerName = customerName,
+                                        Route = string.IsNullOrWhiteSpace(route) ? null : route,
+                                        Cycle = string.IsNullOrWhiteSpace(cycle) ? null : cycle,
+                                        Docking = string.IsNullOrWhiteSpace(docking) ? null : docking,
+                                        Pickup = string.IsNullOrWhiteSpace(pickup) ? null : pickup,
+                                        ETD = string.IsNullOrWhiteSpace(etd) ? null : etd,
+                                        SKID = string.IsNullOrWhiteSpace(skidStr) ? null : skidStr,
+                                        Area = string.IsNullOrWhiteSpace(area) ? null : area,
+                                        IsActive = true,
+                                        CreatedDate = DateTime.Now
+                                    };
+                                    
+                                    if (!string.IsNullOrWhiteSpace(rangeExcel)) customer.Range = rangeExcel;
+                                    else customer.CalculateRange();
+                                    
+                                    _context.Customers.Add(customer);
+                                    customerLookup[key] = customer; // Add to lookup to prevent duplicates in same file
+                                }
+                                
                                 successCount++;
                             }
                             catch (Exception ex)
                             {
-                                errorMessages.Add($"Baris {row.RowNumber()}: {ex.Message}");
+                                var innerMsg = ex.InnerException != null ? $" -> {ex.InnerException.Message}" : "";
+                                errorMessages.Add($"Baris {row.RowNumber()}: {ex.Message}{innerMsg}");
                                 errorCount++;
                             }
                         }
                     }
                 }
 
-                if (customers.Any())
+                await _context.SaveChangesAsync();
+
+                if (successCount > 0)
                 {
-                    _context.Customers.AddRange(customers);
-                    await _context.SaveChangesAsync();
-                    TempData["SuccessMessage"] = $"✅ Berhasil import {successCount} customer baru!";
+                    var msg = $"✅ Berhasil memproses {successCount} data customer (Total {totalRows} baris di Excel).";
+                    if (skippedBlank > 0) msg += $" Catatan: {skippedBlank} baris memiliki Customer Name kosong.";
+                    if (errorCount > 0) msg += $" Namun ada {errorCount} baris yang error.";
+                    TempData["SuccessMessage"] = msg;
+                }
+                else if (totalRows > 0)
+                {
+                    TempData["ErrorMessage"] = $"Gagal memproses data. Total baris: {totalRows}, Skipped: {skippedBlank}, Error: {errorCount}.";
                 }
                 else
                 {
-                     if (errorCount == 0 && successCount == 0)
-                        TempData["ErrorMessage"] = "File kosong atau tidak ada data yang valid.";
+                    TempData["ErrorMessage"] = "File kosong atau tidak ada data yang ditemukan.";
                 }
 
                 if (errorCount > 0)
                 {
-                    var errorDetail = string.Join("<br/>", errorMessages.Take(10));
-                    TempData["WarningMessage"] = $"{errorCount} data gagal diimport.<br/><small>{errorDetail}</small>";
+                    var errorDetail = string.Join(" | ", errorMessages.Take(5));
+                    TempData["WarningMessage"] = $"Detail Error: {errorDetail}";
                 }
 
                 return RedirectToAction(nameof(Index));
@@ -673,4 +767,3 @@ namespace DeliveryControl.Controllers
         }
     }
 }
-

@@ -1,12 +1,12 @@
 # Script PowerShell untuk Deployment Database ke Production
-# Usage: .\Deploy-ToProduction.ps1 -ServerName "localhost" -DatabaseName "DeliveryControlDB" -UseWindowsAuth
+# Usage: .\Deploy-ToProduction.ps1 -ServerName "localhost" -DatabaseName "PPIC_DeliveryControl" -UseWindowsAuth
 
 param(
     [Parameter(Mandatory=$true)]
     [string]$ServerName,
     
     [Parameter(Mandatory=$false)]
-    [string]$DatabaseName = "DeliveryControlDB",
+    [string]$DatabaseName = "PPIC_DeliveryControl",
     
     [Parameter(Mandatory=$false)]
     [string]$Username,

@@ -431,7 +431,7 @@ UpdatedBy (VARCHAR(100))
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=DeliveryControlDB;Trusted_Connection=true;MultipleActiveResultSets=true;TrustServerCertificate=true"
+    "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=PPIC_DeliveryControl;Trusted_Connection=true;MultipleActiveResultSets=true;TrustServerCertificate=true"
   }
 }
 ```
@@ -561,7 +561,7 @@ File: `appsettings.Production.json`
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=PRODUCTION_SERVER;Database=DeliveryControlDB;User Id=sa;Password=***;TrustServerCertificate=true"
+    "DefaultConnection": "Server=PRODUCTION_SERVER;Database=PPIC_DeliveryControl;User Id=sa;Password=***;TrustServerCertificate=true"
   }
 }
 ```

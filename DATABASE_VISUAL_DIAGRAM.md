@@ -1,7 +1,7 @@
 # 🗄️ DATABASE VISUAL DIAGRAM - DELIVERY CONTROL SYSTEM
 
 **Tanggal**: 20 Januari 2026  
-**Database**: DeliveryControlDB  
+**Database**: PPIC_DeliveryControl  
 **Total Tables**: 7
 
 ---
@@ -413,7 +413,7 @@
 ╔═══════════════════════════════════════════════════════════════════════════╗
 ║                              END OF DIAGRAM                                ║
 ║                                                                            ║
-║  Database: DeliveryControlDB                                               ║
+║  Database: PPIC_DeliveryControl                                               ║
 ║  Version: 1.0.0                                                            ║
 ║  Status: ✅ PRODUCTION READY                                               ║
 ║  Last Updated: 20 Januari 2026                                             ║

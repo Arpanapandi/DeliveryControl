@@ -247,25 +247,41 @@
         </td>
         <td class="text-center align-middle">
             <div class="d-flex flex-column align-items-center">
-                <div class="fw-bold" style="font-size: 1.1rem; color: @(item.TotalActualQuantity >= item.TotalTargetQuantity ? "#10b981" : "#ffa500")">
-                    @item.TotalActualQuantity.ToString("N0") / @item.TotalTargetQuantity.ToString("N0")
+                <!-- v11.2: Strictly Kanban-only QTY Display -->
+                @{
+                    double totalKanbanTarget = 0;
+                    double totalKanbanActual = 0;
+                    if (item.DeliveryItems != null)
+                    {
+                        foreach(var di in item.DeliveryItems)
+                        {
+                            var qpc = di.Item?.QtyLot ?? 1;
+                            if (qpc > 0)
+                            {
+                                totalKanbanTarget += (double)di.Quantity / qpc;
+                                totalKanbanActual += (double)(di.ActualQuantity ?? 0) / qpc;
+                            }
+                        }
+                    }
+                }
+                <div class="fw-bold" style="font-size: 1.3rem; color: @(item.TotalActualQuantity >= item.TotalTargetQuantity ? "#10b981" : "#ffa500")">
+                    @totalKanbanActual.ToString("N1") / @totalKanbanTarget.ToString("N1")
                 </div>
-                <div class="progress w-100" style="height: 4px; max-width: 60px; background: rgba(255,255,255,0.1);">
+                <div class="text-muted small fw-bold" style="margin-top: -4px; letter-spacing: 1px;">KANBAN</div>
+                
+                <div class="progress w-100 mt-1" style="height: 6px; max-width: 80px; background: rgba(255,255,255,0.1); border-radius: 3px;">
                     @{
                         var pct = item.TotalTargetQuantity > 0 ? (double)item.TotalActualQuantity * 100 / (double)item.TotalTargetQuantity : 0;
                         if (pct > 100) pct = 100;
                     }
                     <div class="progress-bar @(pct >= 100 ? "bg-success" : "bg-warning")" style="width: @pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
                 </div>
+                
                 @if (item.TotalActualQuantity >= item.TotalTargetQuantity && item.TotalTargetQuantity > 0)
                 {
                     <span class="badge bg-success mt-1" style="font-size: 0.65rem; box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);">
                         <i class="bi bi-patch-check-fill"></i> PREPARED
                     </span>
-                }
-                else if (item.PreparationStatus == "In Progress")
-                {
-                    <small class="text-warning" style="font-size: 0.65rem;"><i class="bi bi-hourglass-split"></i> Preparing...</small>
                 }
             </div>
         </td>

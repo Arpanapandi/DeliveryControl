@@ -12,8 +12,8 @@
 Sebelum melakukan migrasi, **WAJIB** backup database terlebih dahulu:
 
 ```sql
-BACKUP DATABASE DeliveryControlDB 
-TO DISK = 'C:\Backup\DeliveryControlDB_BeforeMigration_' + CONVERT(VARCHAR, GETDATE(), 112) + '.bak'
+BACKUP DATABASE PPIC_DeliveryControl 
+TO DISK = 'C:\Backup\PPIC_DeliveryControl_BeforeMigration_' + CONVERT(VARCHAR, GETDATE(), 112) + '.bak'
 WITH FORMAT, COMPRESSION;
 ```
 
@@ -30,28 +30,28 @@ WITH FORMAT, COMPRESSION;
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=NAMA_SERVER;Database=DeliveryControlDB;User Id=USERNAME;Password=PASSWORD;TrustServerCertificate=true;MultipleActiveResultSets=true"
+    "DefaultConnection": "Server=NAMA_SERVER;Database=PPIC_DeliveryControl;User Id=USERNAME;Password=PASSWORD;TrustServerCertificate=true;MultipleActiveResultSets=true"
   }
 }
 ```
 
 **Contoh Connection String:**
-- **Windows Authentication**: `Server=localhost;Database=DeliveryControlDB;Trusted_Connection=true;TrustServerCertificate=true;MultipleActiveResultSets=true`
-- **SQL Authentication**: `Server=localhost;Database=DeliveryControlDB;User Id=sa;Password=YourPassword123;TrustServerCertificate=true;MultipleActiveResultSets=true`
-- **Named Instance**: `Server=localhost\SQLEXPRESS;Database=DeliveryControlDB;Trusted_Connection=true;TrustServerCertificate=true;MultipleActiveResultSets=true`
+- **Windows Authentication**: `Server=localhost;Database=PPIC_DeliveryControl;Trusted_Connection=true;TrustServerCertificate=true;MultipleActiveResultSets=true`
+- **SQL Authentication**: `Server=localhost;Database=PPIC_DeliveryControl;User Id=sa;Password=YourPassword123;TrustServerCertificate=true;MultipleActiveResultSets=true`
+- **Named Instance**: `Server=localhost\SQLEXPRESS;Database=PPIC_DeliveryControl;Trusted_Connection=true;TrustServerCertificate=true;MultipleActiveResultSets=true`
 
 #### Langkah 2: Buat Database (Jika Belum Ada)
 Jalankan perintah berikut di SQL Server Management Studio:
 
 ```sql
 -- Buat database jika belum ada
-IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'DeliveryControlDB')
+IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'PPIC_DeliveryControl')
 BEGIN
-    CREATE DATABASE DeliveryControlDB;
+    CREATE DATABASE PPIC_DeliveryControl;
 END
 GO
 
-USE DeliveryControlDB;
+USE PPIC_DeliveryControl;
 GO
 ```
 
@@ -60,19 +60,19 @@ GO
 2. Buka SQL Server Management Studio
 3. Connect ke SQL Server production
 4. Buka file `Production_Migration.sql` di SSMS
-5. Pastikan database `DeliveryControlDB` dipilih
+5. Pastikan database `PPIC_DeliveryControl` dipilih
 6. Klik **Execute** atau tekan **F5**
 
 **Atau menggunakan command line:**
 ```powershell
-sqlcmd -S NAMA_SERVER -d DeliveryControlDB -i "Migrations\Production_Migration.sql" -U USERNAME -P PASSWORD
+sqlcmd -S NAMA_SERVER -d PPIC_DeliveryControl -i "Migrations\Production_Migration.sql" -U USERNAME -P PASSWORD
 ```
 
 #### Langkah 4: Verifikasi Migrasi
 Jalankan query berikut untuk memastikan semua migrasi sudah ter-apply:
 
 ```sql
-USE DeliveryControlDB;
+USE PPIC_DeliveryControl;
 SELECT * FROM __EFMigrationsHistory ORDER BY MigrationId;
 ```
 
@@ -105,7 +105,7 @@ dotnet ef database update --context ApplicationDbContext
 Gunakan script `Deploy-ToProduction.ps1` yang sudah disediakan:
 
 ```powershell
-.\Deploy-ToProduction.ps1 -ServerName "NAMA_SERVER" -DatabaseName "DeliveryControlDB" -UseWindowsAuth
+.\Deploy-ToProduction.ps1 -ServerName "NAMA_SERVER" -DatabaseName "PPIC_DeliveryControl" -UseWindowsAuth
 ```
 
 Lihat detail di file `Deploy-ToProduction.ps1` untuk opsi lengkap.
@@ -152,7 +152,7 @@ dotnet publish -c Release -o "C:\Deploy\DeliveryControl"
 Pastikan semua tabel sudah dibuat:
 
 ```sql
-USE DeliveryControlDB;
+USE PPIC_DeliveryControl;
 SELECT TABLE_NAME 
 FROM INFORMATION_SCHEMA.TABLES 
 WHERE TABLE_TYPE = 'BASE TABLE'
@@ -173,7 +173,7 @@ Tabel yang harus ada:
 Pastikan user default sudah terbuat:
 
 ```sql
-USE DeliveryControlDB;
+USE PPIC_DeliveryControl;
 SELECT Username, FullName, Role, IsActive FROM Users;
 ```
 
@@ -227,8 +227,8 @@ Jika terjadi masalah setelah migrasi:
 
 ### 1. Restore Database dari Backup
 ```sql
-RESTORE DATABASE DeliveryControlDB 
-FROM DISK = 'C:\Backup\DeliveryControlDB_BeforeMigration_YYYYMMDD.bak'
+RESTORE DATABASE PPIC_DeliveryControl 
+FROM DISK = 'C:\Backup\PPIC_DeliveryControl_BeforeMigration_YYYYMMDD.bak'
 WITH REPLACE;
 ```
 
@@ -244,7 +244,7 @@ dotnet ef database update NamaMigrationSebelumnya --context ApplicationDbContext
 - [ ] Backup database (jika database sudah ada)
 - [ ] SQL Server sudah running dan accessible
 - [ ] Connection string sudah dikonfigurasi dengan benar
-- [ ] Database `DeliveryControlDB` sudah dibuat
+- [ ] Database `PPIC_DeliveryControl` sudah dibuat
 - [ ] Script migrasi sudah dijalankan
 - [ ] Semua tabel sudah terverifikasi
 - [ ] User default sudah terbuat
@@ -260,7 +260,7 @@ dotnet ef database update NamaMigrationSebelumnya --context ApplicationDbContext
 Setelah deployment pertama, **WAJIB** ganti password user default:
 
 ```sql
-USE DeliveryControlDB;
+USE PPIC_DeliveryControl;
 -- Update password admin (gunakan BCrypt hash)
 UPDATE Users 
 SET Password = '$2a$11$...' -- Generate hash baru dengan BCrypt
@@ -275,7 +275,7 @@ Jangan gunakan `sa` account untuk aplikasi. Buat user khusus:
 CREATE LOGIN DeliveryControlApp WITH PASSWORD = 'StrongPassword123!';
 
 -- Buat user di database
-USE DeliveryControlDB;
+USE PPIC_DeliveryControl;
 CREATE USER DeliveryControlApp FOR LOGIN DeliveryControlApp;
 
 -- Berikan permission

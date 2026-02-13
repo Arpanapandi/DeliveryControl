@@ -11,14 +11,18 @@ namespace DeliveryControl.Models
         [Key]
         public int CustomerId { get; set; }
 
-        [Required(ErrorMessage = "Kode customer wajib diisi")]
-        [StringLength(50)]
-        [Display(Name = "Kode Customer")]
-        public string CustomerCode { get; set; } = string.Empty;
+        [StringLength(20)]
+        [Display(Name = "KODE")]
+        public string? AutoCode { get; set; }
 
         [Required(ErrorMessage = "Nama customer wajib diisi")]
+        [StringLength(50)]
+        [Display(Name = "NAMA CUSTOMER")]
+        public string CustomerCode { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Dock wajib diisi")]
         [StringLength(200)]
-        [Display(Name = "Nama Customer")]
+        [Display(Name = "DOCK")]
         public string CustomerName { get; set; } = string.Empty;
 
         [StringLength(100)]
@@ -43,7 +47,7 @@ namespace DeliveryControl.Models
 
         [StringLength(100)]
         [Display(Name = "Range")]
-        public string? Range { get; private set; }
+        public string? Range { get; set; }
 
         // Method untuk calculate Range otomatis dari ETD - Pickup
         public void CalculateRange()

@@ -40,10 +40,9 @@
                         <span asp-validation-for="CustomerPartNumber" class="text-danger"></span>
                     </div>
 
-                    <div class="mb-2">
-                        <label asp-for="VIN" class="form-label fw-bold text-success">VIN (Internal System Code)</label>
-                        <input asp-for="VIN" class="form-control border-success border-opacity-50" readonly />
-                        <div class="form-text small text-info"><i class="bi bi-info-circle"></i> VIN tidak dapat dirubah dari menu mapping untuk menjaga integritas data.</div>
+                    <div class="mb-3">
+                        <label asp-for="VIN" class="form-label fw-bold">VIN (Internal System Code)</label>
+                        <input asp-for="VIN" class="form-control" />
                         <span asp-validation-for="VIN" class="text-danger"></span>
                     </div>
 

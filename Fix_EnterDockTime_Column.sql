@@ -2,7 +2,7 @@
 -- Script ini aman dijalankan berulang kali (idempotent)
 -- Gunakan script ini jika terjadi error "kolom EnterDockTime tidak ada" saat deployment
 
-USE [DeliveryControlDB];
+USE [PPIC_DeliveryControl];
 GO
 
 -- Cek apakah tabel DeliverySchedules ada

@@ -27,7 +27,16 @@ builder.Services.AddSession(options =>
 
 // Add DbContext
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    if (builder.Environment.IsDevelopment())
+    {
+        options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"));
+    }
+    else
+    {
+        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+    }
+});
 
 // Add HttpContextAccessor (untuk ActivityLogService)
 builder.Services.AddHttpContextAccessor();

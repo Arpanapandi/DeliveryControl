@@ -287,15 +287,15 @@ AND ActualStartTime > DATEADD(MINUTE, 0, CAST(ScheduledDate AS DATETIME) + CAST(
 
 ### Backup
 ```sql
-BACKUP DATABASE DeliveryControlDB 
-TO DISK = 'C:\Backup\DeliveryControlDB.bak'
+BACKUP DATABASE PPIC_DeliveryControl 
+TO DISK = 'C:\Backup\PPIC_DeliveryControl.bak'
 WITH FORMAT, COMPRESSION
 ```
 
 ### Restore
 ```sql
-RESTORE DATABASE DeliveryControlDB 
-FROM DISK = 'C:\Backup\DeliveryControlDB.bak'
+RESTORE DATABASE PPIC_DeliveryControl 
+FROM DISK = 'C:\Backup\PPIC_DeliveryControl.bak'
 WITH REPLACE
 ```
 

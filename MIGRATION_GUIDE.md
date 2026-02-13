@@ -32,7 +32,7 @@ dotnet ef database update
 
 ### 2. Verifikasi Database
 
-Setelah migration berhasil, database `DeliveryControlDB` akan dibuat dengan tables:
+Setelah migration berhasil, database `PPIC_DeliveryControl` akan dibuat dengan tables:
 - Customers
 - Docks
 - Items
@@ -127,7 +127,7 @@ dotnet ef migrations add InitialCreate --context ApplicationDbContext
 1. Pastikan `appsettings.json` memiliki ConnectionStrings
 2. Atau spesifikasi connection string saat runtime:
 ```bash
-dotnet ef database update --connection "Server=(localdb)\\mssqllocaldb;Database=DeliveryControlDB;Trusted_Connection=true"
+dotnet ef database update --connection "Server=(localdb)\\mssqllocaldb;Database=PPIC_DeliveryControl;Trusted_Connection=true"
 ```
 
 ### Error: "Login failed for user"
@@ -238,14 +238,14 @@ Buka dan review file `migration-prod.sql` sebelum execute di production.
 
 ### 3. Backup Database Production
 ```sql
-BACKUP DATABASE DeliveryControlDB 
-TO DISK = 'C:\Backup\DeliveryControlDB_BeforeMigration.bak'
+BACKUP DATABASE PPIC_DeliveryControl 
+TO DISK = 'C:\Backup\PPIC_DeliveryControl_BeforeMigration.bak'
 ```
 
 ### 4. Execute Migration Script
 Jalankan script di SQL Server Management Studio atau sqlcmd:
 ```bash
-sqlcmd -S ServerName -d DeliveryControlDB -i migration-prod.sql
+sqlcmd -S ServerName -d PPIC_DeliveryControl -i migration-prod.sql
 ```
 
 ### 5. Verify Migration

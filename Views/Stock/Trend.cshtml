@@ -176,7 +176,10 @@
     <div class="row mb-4" id="mainChartRow">
         <div class="col-12">
             <div class="cyber-card p-4">
-                <h5 class="mb-4 fw-bold" id="mainChartTitle"><i class="bi bi-activity text-primary me-2"></i> Trend Aktivitas Keseluruhan (Semua Plant)</h5>
+                <h5 class="mb-4 fw-bold" id="mainChartTitle">
+                    <i class="bi @(Model.ViewMode == "Level" ? "bi-bar-chart-steps" : "bi-activity") text-primary me-2"></i> 
+                    @(Model.ViewMode == "Level" ? "Trend Level Stok" : "Trend Aktivitas Keseluruhan") (Semua Plant)
+                </h5>
                 <div style="height: 350px;">
                     <canvas id="overallTrendChart"></canvas>
                 </div>
@@ -459,7 +462,11 @@
 
         function updateMainChart(key, title, element) {
             currentPlantKey = key;
-            document.getElementById('mainChartTitle').innerHTML = `<i class="bi bi-activity text-primary me-2"></i> ${title}`;
+            const icon = viewMode === 'Level' ? 'bi-bar-chart-steps' : 'bi-activity';
+            const baseTitle = viewMode === 'Level' ? 'Trend Level Stok' : 'Trend Aktivitas';
+            const displayTitle = key === 'Overall' ? `${baseTitle} Keseluruhan (Semua Plant)` : `${baseTitle} ${key}`;
+            
+            document.getElementById('mainChartTitle').innerHTML = `<i class="bi ${icon} text-primary me-2"></i> ${displayTitle}`;
             
             if (viewMode === 'Level' && key !== 'Overall') {
                 // For now, Level view is overall only. If plant selected, show no data or alert
@@ -641,20 +648,11 @@
                             document.getElementById('peakActivityVal').innerText = allData[currentPlantKey].peak;
                             document.getElementById('fgStockLabel').innerText = currentPlantKey === 'Overall' ? 'Total FG Stock' : `Stock ${currentPlantKey}`;
                             
-                            // 5. Apply visibility filters (important to keep current filter)
-                            const plantCards = document.querySelectorAll('.plant-card');
-                            const recentCards = document.querySelectorAll('.plant-recent');
-
-                            if (currentPlantKey === 'Overall') {
-                                plantCards.forEach(c => c.style.display = 'block');
-                                recentCards.forEach(c => c.style.display = 'block');
-                            } else {
-                                plantCards.forEach(c => {
-                                    c.style.display = (c.getAttribute('data-plant').toUpperCase() === currentPlantKey.toUpperCase()) ? 'block' : 'none';
-                                });
-                                recentCards.forEach(c => {
-                                    c.style.display = (c.getAttribute('data-plant').toUpperCase() === currentPlantKey.toUpperCase()) ? 'block' : 'none';
-                                });
+                            // 5. Restore current view state (Plant & Title)
+                            const savedPlant = currentPlantKey;
+                            const savedElement = document.querySelector(`.dropdown-item[onclick*="'${savedPlant}'"]`) || document.querySelector('.dropdown-item.active');
+                            if (savedPlant && savedElement) {
+                                updateMainChart(savedPlant, savedPlant === 'Overall' ? 'Semua Plant' : `Trend ${savedPlant}`, savedElement);
                             }
                         } catch (e) { console.error("Error parsing new allData", e); }
                     }
