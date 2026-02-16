@@ -33,6 +33,8 @@ public class HomeController : Controller
         // Karena ada schedule yang dibuat kemarin (EnterDock H-1) tapi Pickup-nya hari ini
         var allSchedulesRaw = await _context.DeliverySchedules
             .Include(d => d.Customer)
+            .Include(d => d.DeliveryItems)
+                .ThenInclude(di => di.Item)
             .Where(s => s.ScheduledDate.Date == yesterday || 
                        s.ScheduledDate.Date == today || 
                        s.ScheduledDate.Date == tomorrow)
@@ -339,6 +341,8 @@ public class HomeController : Controller
         var allSchedulesRaw = await _context.DeliverySchedules
             .AsNoTracking()
             .Include(d => d.Customer)
+            .Include(d => d.DeliveryItems)
+                .ThenInclude(di => di.Item)
             .Where(s => s.ScheduledDate.Date == yesterday || 
                        s.ScheduledDate.Date == today || 
                        s.ScheduledDate.Date == tomorrow)

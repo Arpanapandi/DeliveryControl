@@ -1,4 +1,4 @@
-@model DeliveryControl.Models.Item
+@model DeliveryControl.Models.ItemMapping
 
 @{
     ViewData["Title"] = "Hapus Mapping";
@@ -39,7 +39,7 @@
                 </dl>
 
                 <form asp-action="Delete" method="post" class="mt-4">
-                    <input type="hidden" asp-for="ItemId" />
+                    <input type="hidden" asp-for="MappingId" />
                     <div class="d-flex gap-2 justify-content-end">
                         <a asp-action="Index" class="btn btn-secondary px-4 rounded-pill">Batal</a>
                         <button type="submit" class="btn btn-danger px-4 rounded-pill">Ya, Hapus Mapping</button>

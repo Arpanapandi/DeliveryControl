@@ -70,9 +70,8 @@
         <td class="text-center align-middle">
             <small><strong>@item.ScheduleNumber</strong></small>
         </td>
-        <td class="align-middle">
-            <div><strong>@item.Customer.CustomerCode</strong></div>
-            <small class="text-muted">@item.Customer.CustomerName</small>
+        <td class="text-center align-middle">
+            <div class="fw-bold">@item.Customer.CustomerCode</div>
         </td>
         <td class="text-center align-middle">
             <small>@(item.Route ?? "-")</small>
@@ -91,14 +90,14 @@
                         var qpc = di.Item?.QtyLot ?? 1;
                         if (qpc > 0)
                         {
-                            kbnTarget += (double)di.Quantity / qpc;
+                            kbnTarget += Math.Ceiling((double)di.Quantity / qpc);
                             kbnActual += (double)(di.ActualQuantity ?? 0) / qpc;
                         }
                     }
                 }
             }
             <div class="@(item.TotalActualQuantity >= item.TotalTargetQuantity && item.TotalTargetQuantity > 0 ? "text-success" : (item.TotalActualQuantity > 0 ? "text-warning" : "")) fw-bold">
-                @kbnActual.ToString("N1")/@kbnTarget.ToString("N1")
+                @kbnActual.ToString("0.##")/@kbnTarget.ToString("0.##")
             </div>
         </td>
         <td class="text-center align-middle">

@@ -84,32 +84,32 @@
     <div class="card-body p-0">
         @if (Model.Any())
         {
-            <div style="max-height: 600px; overflow-y: auto; overflow-x: hidden;">
-                <table class="table table-hover table-bordered mb-0 table-sm" style="table-layout: fixed; width: 100%;">
+            <div style="max-height: 600px; overflow-y: auto; overflow-x: auto;">
+                <table class="table table-hover table-bordered mb-0 table-sm" style="table-layout: fixed; width: 1200px;">
                     <thead class="table-dark" style="position: sticky; top: 0; z-index: 100; background-color: #212529;">
                         <tr style="font-size: 0.85rem;">
                             @if (Context.Session.GetString("Role") == "Admin")
                             {
-                                <th class="text-center align-middle" style="width: 3%; background-color: #212529;">
+                            <th class="text-center align-middle" style="width: 40px; background-color: #212529;">
                                     <input type="checkbox" id="selectAll" class="form-check-input" title="Pilih Semua">
                                 </th>
                             }
-                            <th class="text-center align-middle" style="width: 10%; background-color: #212529;">No Schedule</th>
-                            <th class="text-center align-middle" style="width: 12%; background-color: #212529;">CUST</th>
-                            <th class="text-center align-middle" style="width: 6%; background-color: #212529;">ROUTE</th>
-                            <th class="text-center align-middle" style="width: 5%; background-color: #212529;">CYCLE</th>
-                            <th class="text-center align-middle" style="width: 7%; background-color: #212529;">QTY KBN</th>
-                            <th class="text-center align-middle" style="width: 6%; background-color: #212529;">ENTER DOCK</th>
-                            <th class="text-center align-middle" style="width: 8%; background-color: #212529;">EST SELESAI</th>
-                            <th class="text-center align-middle" style="width: 9%; background-color: #212529;">ACT ENTER DOCK</th>
-                            <th class="text-center align-middle" style="width: 8%; background-color: #212529;">EST ACT SELESAI</th>
-                            <th class="text-center align-middle" style="width: 6%; background-color: #212529;">PICKUP</th>
-                            <th class="text-center align-middle" style="width: 11%; background-color: #212529;">ACT PICKUP</th>
-                            <th class="text-center align-middle" style="width: 6%; background-color: #212529;">ETD</th>
-                            <th class="text-center align-middle" style="width: 11%; background-color: #212529;">ACT DELIVERY</th>
-                            <th class="text-center align-middle" style="width: 5%; background-color: #212529;">RANGE</th>
-                            <th class="text-center align-middle" style="width: 7%; background-color: #212529;">ACT RANGE</th>
-                            <th class="text-center align-middle" style="width: 8%; background-color: #212529;">ACTION</th>
+                            <th class="text-center align-middle" style="width: 185px; background-color: #212529;">No Schedule</th>
+                            <th class="text-center align-middle" style="width: 85px; background-color: #212529;">CUST</th>
+                            <th class="text-center align-middle" style="width: 80px; background-color: #212529;">ROUTE</th>
+                            <th class="text-center align-middle" style="width: 60px; background-color: #212529;">CYCLE</th>
+                            <th class="text-center align-middle" style="width: 80px; background-color: #212529;">QTY KBN</th>
+                            <th class="text-center align-middle" style="width: 80px; background-color: #212529;">ENTER DOCK</th>
+                            <th class="text-center align-middle" style="width: 90px; background-color: #212529;">EST SELESAI</th>
+                            <th class="text-center align-middle" style="width: 90px; background-color: #212529;">ACT ENTER DOCK</th>
+                            <th class="text-center align-middle" style="width: 90px; background-color: #212529;">EST ACT SELESAI</th>
+                            <th class="text-center align-middle" style="width: 80px; background-color: #212529;">PICKUP</th>
+                            <th class="text-center align-middle" style="width: 100px; background-color: #212529;">ACT PICKUP</th>
+                            <th class="text-center align-middle" style="width: 60px; background-color: #212529;">ETD</th>
+                            <th class="text-center align-middle" style="width: 100px; background-color: #212529;">ACT DELIVERY</th>
+                            <th class="text-center align-middle" style="width: 70px; background-color: #212529;">RANGE</th>
+                            <th class="text-center align-middle" style="width: 70px; background-color: #212529;">ACT RANGE</th>
+                            <th class="text-center align-middle" style="width: 80px; background-color: #212529;">ACTION</th>
                         </tr>
                     </thead>
                     <tbody id="historyTableBody" style="font-size: 0.85rem;">
@@ -195,6 +195,11 @@
 
             connection.on("Connected", function(id) {
                 console.log("✅ SignalR Connected for History!");
+            });
+
+            connection.on("UpdateStock", function() {
+                console.log("📦 Stock update received on History page! Refreshing...");
+                updateTableData();
             });
 
             connection.on("DeliveryUpdated", function(data) {

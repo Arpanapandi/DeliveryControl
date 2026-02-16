@@ -13,11 +13,11 @@ namespace DeliveryControl.Data
         {
         }
 
-        // DbSets untuk semua entities
+        public DbSet<Item> Items { get; set; }
         public DbSet<Customer> Customers { get; set; }
         public DbSet<DeliverySchedule> DeliverySchedules { get; set; }
-        public DbSet<Item> Items { get; set; }
         public DbSet<DeliveryItem> DeliveryItems { get; set; }
+        public DbSet<ItemMapping> ItemMappings { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<SystemSetting> SystemSettings { get; set; }
         public DbSet<ActivityLog> ActivityLogs { get; set; }

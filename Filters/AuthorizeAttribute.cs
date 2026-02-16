@@ -14,6 +14,15 @@ namespace DeliveryControl.Filters
                 return;
             }
 
+            // Check for AllowAnonymous attribute
+            var hasAllowAnonymous = context.ActionDescriptor.EndpointMetadata
+                .Any(em => em.GetType().Name == "AllowAnonymousAttribute");
+
+            if (hasAllowAnonymous)
+            {
+                return;
+            }
+
             var session = context.HttpContext.Session;
             if (session == null) 
             {

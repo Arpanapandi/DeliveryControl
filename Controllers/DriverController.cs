@@ -120,49 +120,63 @@ namespace DeliveryControl.Controllers
             ViewBag.Routes = availableRoutes;
             ViewBag.Cycles = availableCycles;
 
-            // Sorting utama (tetap satu list lengkap untuk kebutuhan lain)
-            var schedules = schedulesForSelectedDate
-                .OrderBy(s =>
-                    s.PickupTime
-                    ?? s.EnterDockTime
-                    ?? s.ETD
-                    ?? s.ScheduledDate)
-                .ToList();
+            // Grouping Logic: Schedule Date + Route + Cycle + Area + PickupTime (IGNORE CustomerId)
+            var groupedSchedules = schedulesForSelectedDate
+                .GroupBy(s => new {
+                    Date = s.PickupTime?.Date ?? s.ScheduledDate.Date,
+                    Cycle = (s.Cycle ?? "").Trim().ToUpper(),
+                    Route = (s.Route ?? "").Trim().ToUpper(),
+                    Area = (s.Area ?? "").Trim().ToUpper()
+                })
+                .Select(g => {
+                    var first = g.First();
+                    var sortedGroup = g.OrderBy(x => x.ScheduleNumber).ToList();
+                    
+                    // Combine Customer Names
+                    var uniqueCustomers = g.Select(x => x.Customer?.CustomerName ?? "-").Distinct().ToList();
+                    var customerDisplay = uniqueCustomers.Count > 1 
+                        ? string.Join(", ", uniqueCustomers) 
+                        : (uniqueCustomers.FirstOrDefault() ?? "-");
 
-            // Bagi menjadi dua kelompok untuk kebutuhan UI:
-            // 1. BUTUH AKSI DRIVER (belum arrival atau belum departure)
-            // 2. SUDAH SELESAI / TIDAK PERLU AKSI (sudah memiliki ActualEndTime)
-            var needAction = schedules
-                .Where(s => !s.ActualEndTime.HasValue) // belum selesai
-                // Urutkan berdasarkan status display: Scheduled dulu, lalu In Progress, lalu status lain
-                .OrderBy(s =>
-                {
-                    var displayStatus = s.DriverStatus ?? s.Status;
-                    return displayStatus switch
+                    return new DeliveryControl.Models.ViewModels.DriverTripViewModel
                     {
-                        "Scheduled" => 0,
-                        "In Progress" => 1,
-                        _ => 2
+                        RepresentativeScheduleId = first.ScheduleId,
+                        CustomerName = customerDisplay,
+                        Cycle = first.Cycle,
+                        Route = first.Route,
+                        Area = first.Area,
+                        PickupTime = first.PickupTime,
+                        ETD = first.ETD,
+                        ActualStartTime = first.ActualStartTime, // Assumes synchronized updates
+                        ActualEndTime = first.ActualEndTime,     // Assumes synchronized updates
+                        DriverStatus = first.DriverStatus ?? first.Status,
+                        OverallStatus = first.Status,
+                        Schedules = sortedGroup
                     };
                 })
-                // Di dalam masing-masing grup status, urutkan berdasarkan waktu
-                .ThenBy(s =>
-                    s.PickupTime
-                    ?? s.EnterDockTime
-                    ?? s.ETD
-                    ?? s.ScheduledDate)
+                .OrderBy(vm => vm.PickupTime ?? vm.ETD ?? DateTime.MaxValue)
                 .ToList();
 
-            var completed = schedules
-                .Where(s => s.ActualEndTime.HasValue)
-                .OrderBy(s => s.ActualEndTime)
+            // Split into "Need Action" and "Completed"
+            var needAction = groupedSchedules
+                .Where(vm => !vm.HasDeparted)
+                .OrderBy(vm => {
+                    if (!vm.HasArrived) return 0; // Scheduled
+                    return 1; // In Progress (Arrived but not Departed)
+                })
+                .ThenBy(vm => vm.PickupTime ?? DateTime.MaxValue)
+                .ToList();
+
+            var completed = groupedSchedules
+                .Where(vm => vm.HasDeparted)
+                .OrderByDescending(vm => vm.ActualEndTime)
                 .ToList();
 
             ViewBag.NeedActionSchedules = needAction;
             ViewBag.CompletedSchedules = completed;
 
-            // Model utama tetap dikirim sebagai list lengkap (jika suatu saat dibutuhkan)
-            return View(schedules);
+            // Return the View with the ViewModel list (Grouped) instead of raw schedules
+            return View(groupedSchedules);
         }
 
         // GET: Driver/Arrival/5 - Halaman konfirmasi kedatangan
@@ -191,96 +205,96 @@ namespace DeliveryControl.Controllers
             return View(schedule);
         }
 
+        // Helper to find group
+        private async Task<List<DeliverySchedule>> GetSchedulesInGroup(DeliverySchedule baseSchedule)
+        {
+            var date = baseSchedule.PickupTime?.Date ?? baseSchedule.ScheduledDate.Date;
+            
+            // Normalize for comparison
+            string route = (baseSchedule.Route ?? "").Trim().ToUpper();
+            string cycle = (baseSchedule.Cycle ?? "").Trim().ToUpper();
+            string area = (baseSchedule.Area ?? "").Trim().ToUpper();
+            
+            // Note: EF Core translation for case-insensitive/trim might differ. 
+            // Since we are using SQLite/SQLServer, usually case-insensitive by default or simple comparison.
+            // But to be safe and match the GroupBy logic in Index:
+            
+            // Taking all schedules for the same date (removed CustomerId filter)
+            var candidates = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .Where(s => (s.PickupTime != null ? s.PickupTime.Value.Date : s.ScheduledDate.Date) == date)
+                .ToListAsync(); // Client-side evaluation for safely matching string properties
+                
+            return candidates
+                .Where(s => 
+                    (s.Route ?? "").Trim().ToUpper() == route &&
+                    (s.Cycle ?? "").Trim().ToUpper() == cycle &&
+                    (s.Area ?? "").Trim().ToUpper() == area
+                )
+                .ToList();
+        }
+
         // POST: Driver/Arrival/5 - Konfirmasi kedatangan
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Arrival(int id, DateTime arrivalTime, string? notes)
         {
-            var schedule = await _context.DeliverySchedules.FindAsync(id);
-
-            if (schedule == null)
-            {
-                return NotFound();
-            }
+            var baseSchedule = await _context.DeliverySchedules.Include(s => s.Customer).FirstOrDefaultAsync(s => s.ScheduleId == id);
+            if (baseSchedule == null) return NotFound();
 
             try
             {
-                schedule.ActualStartTime = arrivalTime;
-                schedule.DriverStatus = "In Progress";
-                schedule.UpdatedDate = DateTime.Now;
-                schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
+                var groupSchedules = await GetSchedulesInGroup(baseSchedule);
                 
-                // Tambahkan notes jika ada
-                if (!string.IsNullOrWhiteSpace(notes))
+                foreach (var schedule in groupSchedules)
                 {
-                    schedule.Notes = string.IsNullOrWhiteSpace(schedule.Notes) 
-                        ? $"[Arrival] {notes}" 
-                        : schedule.Notes + $"\n[Arrival] {notes}";
+                    schedule.ActualStartTime = arrivalTime;
+                    schedule.DriverStatus = "In Progress";
+                    schedule.UpdatedDate = DateTime.Now;
+                    schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
+                    
+                    // Tambahkan notes jika ada
+                    if (!string.IsNullOrWhiteSpace(notes))
+                    {
+                        schedule.Notes = string.IsNullOrWhiteSpace(schedule.Notes) 
+                            ? $"[Arrival] {notes}" 
+                            : schedule.Notes + $"\n[Arrival] {notes}";
+                    }
                 }
 
                 await _context.SaveChangesAsync();
 
-                // Log activity
+                // Log activity (Group log?)
                 await _logService.LogConfirm(
                     "Driver",
-                    schedule.ScheduleNumber ?? "UNKNOWN",
-                    schedule.ScheduleId,
-                    $"Konfirmasi kedatangan untuk {schedule.Customer?.CustomerName} pada {arrivalTime:HH:mm}",
+                    $"Group-{baseSchedule.Cycle}", // Log Cycle/Group ID?
+                    baseSchedule.ScheduleId,
+                    $"Konfirmasi kedatangan GROUP ({groupSchedules.Count} Manifest) untuk {baseSchedule.Customer?.CustomerName} pada {arrivalTime:HH:mm}",
                     User.Identity?.Name ?? "Driver"
                 );
 
-                // Broadcast update via SignalR
-                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
-                {
-                    ScheduleNumber = schedule.ScheduleNumber,
-                    Action = "arrival",
-                    Message = $"Driver telah tiba di {schedule.Customer?.CustomerName} pada {arrivalTime:HH:mm}",
-                    Timestamp = DateTime.Now
-                });
+                // Broadcast update via SignalR (Send for one, or all? Front-end expects one update usually)
+                // Sending for representative is enough if FE reloads, but for real-time card update we might need more.
+                // However, Index reloads every 60s or on action. RedirectToAction Index will reload page.
+                // Realtime update on Dashboard needs to know all changed.
+                foreach(var s in groupSchedules) {
+                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    {
+                        ScheduleNumber = s.ScheduleNumber,
+                        Action = "arrival",
+                        Message = $"Driver tiba di {s.Customer?.CustomerName}",
+                        Timestamp = DateTime.Now
+                    });
+                }
 
-                TempData["SuccessMessage"] = $"✅ Kedatangan berhasil dikonfirmasi pada {arrivalTime:HH:mm}!";
-                return RedirectToAction(nameof(Index), new { selectedDate = schedule.ScheduledDate });
+                TempData["SuccessMessage"] = $"✅ Kedatangan berhasil dikonfirmasi untuk {groupSchedules.Count} Manifest pada {arrivalTime:HH:mm}!";
+                return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
             }
             catch (Exception ex)
             {
                 TempData["ErrorMessage"] = $"❌ Error: {ex.Message}";
                 return RedirectToAction(nameof(Arrival), new { id });
             }
-        }
-
-        // GET: Driver/Departure/5 - Halaman konfirmasi keberangkatan
-        public async Task<IActionResult> Departure(int? id)
-        {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var schedule = await _context.DeliverySchedules
-                .Include(s => s.Customer)
-                .Include(s => s.DeliveryItems)
-                    .ThenInclude(di => di.Item)
-                .FirstOrDefaultAsync(s => s.ScheduleId == id);
-
-            if (schedule == null)
-            {
-                return NotFound();
-            }
-
-            // Validasi: Harus sudah ada arrival time
-            if (!schedule.ActualStartTime.HasValue)
-            {
-                TempData["ErrorMessage"] = "⚠️ Konfirmasi kedatangan terlebih dahulu sebelum konfirmasi keberangkatan!";
-                return RedirectToAction(nameof(Arrival), new { id });
-            }
-
-            // Cek apakah sudah ada departure time
-            if (schedule.ActualEndTime.HasValue)
-            {
-                TempData["WarningMessage"] = $"Schedule ini sudah dikonfirmasi keberangkatan pada {schedule.ActualEndTime.Value:dd/MM/yyyy HH:mm}";
-            }
-
-            return View(schedule);
         }
 
         // POST: Driver/Departure/5 - Konfirmasi keberangkatan
@@ -288,22 +302,17 @@ namespace DeliveryControl.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Departure(int id, DateTime departureTime, string? notes)
         {
-            var schedule = await _context.DeliverySchedules.FindAsync(id);
+            var baseSchedule = await _context.DeliverySchedules.Include(s => s.Customer).FirstOrDefaultAsync(s => s.ScheduleId == id);
+            if (baseSchedule == null) return NotFound();
 
-            if (schedule == null)
-            {
-                return NotFound();
-            }
-
-            // Validasi: Harus sudah ada arrival time
-            if (!schedule.ActualStartTime.HasValue)
+            // Validasi: Harus sudah ada arrival time (Cek baseSchedule saja cukup karena harusnya sinkron)
+            if (!baseSchedule.ActualStartTime.HasValue)
             {
                 TempData["ErrorMessage"] = "⚠️ Konfirmasi kedatangan terlebih dahulu!";
                 return RedirectToAction(nameof(Arrival), new { id });
             }
 
-            // Validasi: Departure time harus lebih besar dari arrival time
-            if (departureTime < schedule.ActualStartTime.Value)
+            if (departureTime < baseSchedule.ActualStartTime.Value)
             {
                 TempData["ErrorMessage"] = "⚠️ Waktu keberangkatan tidak boleh lebih awal dari waktu kedatangan!";
                 return RedirectToAction(nameof(Departure), new { id });
@@ -311,47 +320,50 @@ namespace DeliveryControl.Controllers
 
             try
             {
-                schedule.ActualEndTime = departureTime;
-                schedule.DriverStatus = "Completed";
-                schedule.UpdatedDate = DateTime.Now;
-                schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
-                
-                // Tambahkan notes jika ada
-                if (!string.IsNullOrWhiteSpace(notes))
+                var groupSchedules = await GetSchedulesInGroup(baseSchedule);
+
+                foreach (var schedule in groupSchedules)
                 {
-                    schedule.Notes = string.IsNullOrWhiteSpace(schedule.Notes) 
-                        ? $"[Departure] {notes}" 
-                        : schedule.Notes + $"\n[Departure] {notes}";
+                    schedule.ActualEndTime = departureTime;
+                    schedule.DriverStatus = "Completed";
+                    schedule.UpdatedDate = DateTime.Now;
+                    schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
+                    
+                    if (!string.IsNullOrWhiteSpace(notes))
+                    {
+                        schedule.Notes = string.IsNullOrWhiteSpace(schedule.Notes) 
+                            ? $"[Departure] {notes}" 
+                            : schedule.Notes + $"\n[Departure] {notes}";
+                    }
                 }
 
                 await _context.SaveChangesAsync();
 
-                // Hitung durasi
-                var duration = departureTime - schedule.ActualStartTime.Value;
+                var duration = departureTime - baseSchedule.ActualStartTime.Value;
                 var durationText = duration.TotalHours >= 1 
                     ? $"{(int)duration.TotalHours} jam {duration.Minutes} menit"
                     : $"{(int)duration.TotalMinutes} menit";
 
-                // Log activity
                 await _logService.LogConfirm(
                     "Driver",
-                    schedule.ScheduleNumber ?? "UNKNOWN",
-                    schedule.ScheduleId,
-                    $"Konfirmasi keberangkatan dari {schedule.Customer?.CustomerName} pada {departureTime:HH:mm}. Durasi: {durationText}",
+                    $"Group-{baseSchedule.Cycle}",
+                    baseSchedule.ScheduleId,
+                    $"Konfirmasi keberangkatan GROUP ({groupSchedules.Count} Manifest) dari {baseSchedule.Customer?.CustomerName}. Durasi: {durationText}",
                     User.Identity?.Name ?? "Driver"
                 );
 
-                // Broadcast update via SignalR
-                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
-                {
-                    ScheduleNumber = schedule.ScheduleNumber,
-                    Action = "departure",
-                    Message = $"Delivery ke {schedule.Customer?.CustomerName} selesai pada {departureTime:HH:mm}. Durasi: {durationText}",
-                    Timestamp = DateTime.Now
-                });
+                foreach(var s in groupSchedules) {
+                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    {
+                        ScheduleNumber = s.ScheduleNumber,
+                        Action = "departure",
+                        Message = $"Delivery ke {s.Customer?.CustomerName} selesai.",
+                        Timestamp = DateTime.Now
+                    });
+                }
 
-                TempData["SuccessMessage"] = $"✅ Keberangkatan berhasil dikonfirmasi pada {departureTime:HH:mm}! Durasi: {durationText}";
-                return RedirectToAction(nameof(Index), new { selectedDate = schedule.ScheduledDate });
+                TempData["SuccessMessage"] = $"✅ Keberangkatan berhasil dikonfirmasi untuk {groupSchedules.Count} Manifest! Durasi: {durationText}";
+                return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
             }
             catch (Exception ex)
             {
@@ -360,156 +372,99 @@ namespace DeliveryControl.Controllers
             }
         }
 
-        // GET: Driver/Details/5 - Detail schedule untuk driver
-        public async Task<IActionResult> Details(int? id)
-        {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var schedule = await _context.DeliverySchedules
-                .Include(s => s.Customer)
-                .Include(s => s.DeliveryItems)
-                    .ThenInclude(di => di.Item)
-                .FirstOrDefaultAsync(s => s.ScheduleId == id);
-
-            if (schedule == null)
-            {
-                return NotFound();
-            }
-
-            return View(schedule);
-        }
-
-        // POST: Driver/QuickArrival/5 - Quick action untuk konfirmasi kedatangan (now)
+        // Quick Actions also need to be updated
+        
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> QuickArrival(int id)
         {
-            var schedule = await _context.DeliverySchedules.FindAsync(id);
+            var baseSchedule = await _context.DeliverySchedules.Include(s => s.Customer).FirstOrDefaultAsync(s => s.ScheduleId == id);
+            if (baseSchedule == null) return NotFound();
 
-            if (schedule == null)
-            {
-                return NotFound();
-            }
-
-            if (schedule.ActualStartTime.HasValue)
+            if (baseSchedule.ActualStartTime.HasValue)
             {
                 TempData["ErrorMessage"] = "Schedule ini sudah dikonfirmasi kedatangan!";
-                return RedirectToAction(nameof(Index), new { selectedDate = schedule.ScheduledDate });
+                return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
             }
 
             try 
             {
                 var arrivalTime = DateTime.Now;
-                schedule.ActualStartTime = arrivalTime;
-                schedule.DriverStatus = "In Progress";
-                schedule.UpdatedDate = arrivalTime;
-                schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
+                var groupSchedules = await GetSchedulesInGroup(baseSchedule);
+
+                foreach (var schedule in groupSchedules)
+                {
+                    schedule.ActualStartTime = arrivalTime;
+                    schedule.DriverStatus = "In Progress";
+                    schedule.UpdatedDate = arrivalTime;
+                    schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
+                }
 
                 await _context.SaveChangesAsync();
+                
+                // SignalR & Log (Simplified for brevity, same logic as above)
+                await _logService.LogConfirm("Driver", $"Group-{baseSchedule.Cycle}", baseSchedule.ScheduleId, $"Quick Arrival Group ({groupSchedules.Count})", User.Identity?.Name ?? "Driver");
+                
+                foreach(var s in groupSchedules) {
+                     await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new { ScheduleNumber = s.ScheduleNumber, Action = "arrival", Message = "Driver Tiba", Timestamp = arrivalTime });
+                }
 
-                // Load customer data untuk SignalR message
-                await _context.Entry(schedule).Reference(s => s.Customer).LoadAsync();
-
-                // Log activity
-                await _logService.LogConfirm(
-                    "Driver",
-                    schedule.ScheduleNumber ?? "UNKNOWN",
-                    schedule.ScheduleId,
-                    $"Quick konfirmasi kedatangan untuk {schedule.Customer?.CustomerName} pada {arrivalTime:HH:mm}",
-                    User.Identity?.Name ?? "Driver"
-                );
-
-                // Broadcast update via SignalR
-                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
-                {
-                    ScheduleNumber = schedule.ScheduleNumber,
-                    Action = "arrival",
-                    Message = $"Driver telah tiba di {schedule.Customer?.CustomerName} pada {arrivalTime:HH:mm}",
-                    Timestamp = arrivalTime
-                });
-
-                TempData["SuccessMessage"] = $"✅ Kedatangan dikonfirmasi pada {arrivalTime:HH:mm}!";
+                TempData["SuccessMessage"] = $"✅ Kedatangan dikonfirmasi untuk {groupSchedules.Count} Manifest!";
             }
             catch (Exception ex)
             {
                 TempData["ErrorMessage"] = "Gagal memproses quick arrival: " + ex.Message;
             }
-            return RedirectToAction(nameof(Index), new { selectedDate = schedule.ScheduledDate });
+            return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
         }
 
-        // POST: Driver/QuickDeparture/5 - Quick action untuk konfirmasi keberangkatan (now)
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> QuickDeparture(int id)
         {
-            var schedule = await _context.DeliverySchedules.FindAsync(id);
+            var baseSchedule = await _context.DeliverySchedules.Include(s => s.Customer).FirstOrDefaultAsync(s => s.ScheduleId == id);
+            if (baseSchedule == null) return NotFound();
 
-            if (schedule == null)
-            {
-                return NotFound();
-            }
-
-            if (!schedule.ActualStartTime.HasValue)
+            if (!baseSchedule.ActualStartTime.HasValue)
             {
                 TempData["ErrorMessage"] = "Konfirmasi kedatangan terlebih dahulu!";
-                return RedirectToAction(nameof(Index), new { selectedDate = schedule.ScheduledDate });
+                return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
             }
 
-            if (schedule.ActualEndTime.HasValue)
+            if (baseSchedule.ActualEndTime.HasValue)
             {
                 TempData["ErrorMessage"] = "Schedule ini sudah dikonfirmasi keberangkatan!";
-                return RedirectToAction(nameof(Index), new { selectedDate = schedule.ScheduledDate });
+                return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
             }
 
             try 
             {
                 var departureTime = DateTime.Now;
-                schedule.ActualEndTime = departureTime;
-                schedule.DriverStatus = "Completed";
-                schedule.UpdatedDate = departureTime;
-                schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
+                var groupSchedules = await GetSchedulesInGroup(baseSchedule);
+
+                foreach (var schedule in groupSchedules)
+                {
+                    schedule.ActualEndTime = departureTime;
+                    schedule.DriverStatus = "Completed";
+                    schedule.UpdatedDate = departureTime;
+                    schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
+                }
 
                 await _context.SaveChangesAsync();
 
-                // Load customer data untuk SignalR message
-                await _context.Entry(schedule).Reference(s => s.Customer).LoadAsync();
+                 await _logService.LogConfirm("Driver", $"Group-{baseSchedule.Cycle}", baseSchedule.ScheduleId, $"Quick Departure Group ({groupSchedules.Count})", User.Identity?.Name ?? "Driver");
+                 foreach(var s in groupSchedules) {
+                     await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new { ScheduleNumber = s.ScheduleNumber, Action = "departure", Message = "Driver Berangkat", Timestamp = departureTime });
+                }
 
-                // Hitung durasi
-                var duration = departureTime - schedule.ActualStartTime!.Value;
-                var durationText = duration.TotalHours >= 1 
-                    ? $"{(int)duration.TotalHours} jam {duration.Minutes} menit"
-                    : $"{(int)duration.TotalMinutes} menit";
-
-                // Log activity
-                await _logService.LogConfirm(
-                    "Driver",
-                    schedule.ScheduleNumber,
-                    schedule.ScheduleId,
-                    $"Quick konfirmasi keberangkatan dari {schedule.Customer?.CustomerName} pada {departureTime:HH:mm}. Durasi: {durationText}",
-                    User.Identity?.Name ?? "Driver"
-                );
-
-                // Broadcast update via SignalR
-                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
-                {
-                    ScheduleNumber = schedule.ScheduleNumber,
-                    Action = "departure",
-                    Message = $"Delivery ke {schedule.Customer?.CustomerName} selesai pada {departureTime:HH:mm}. Durasi: {durationText}",
-                    Timestamp = departureTime
-                });
-
-                TempData["SuccessMessage"] = $"✅ Keberangkatan dikonfirmasi pada {departureTime:HH:mm}!";
+                TempData["SuccessMessage"] = $"✅ Keberangkatan dikonfirmasi untuk {groupSchedules.Count} Manifest!";
             }
             catch (Exception ex)
             {
                 TempData["ErrorMessage"] = "Gagal memproses quick departure: " + ex.Message;
             }
-            return RedirectToAction(nameof(Index), new { selectedDate = schedule.ScheduledDate });
+            return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
         }
-
     }
 }
 

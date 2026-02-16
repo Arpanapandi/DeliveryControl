@@ -34,7 +34,7 @@ namespace DeliveryControl.Controllers
                 .Include(s => s.Customer)
                 .Include(s => s.DeliveryItems)
                     .ThenInclude(di => di.Item)
-                .Where(s => s.Status != "Cancelled" && s.Status != "Completed");
+                .Where(s => s.Status != "Cancelled");
 
             if (filterDate.HasValue)
             {
@@ -130,7 +130,7 @@ namespace DeliveryControl.Controllers
                 .Include(s => s.Customer)
                 .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
                 .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
-                             (s.ScheduleNumber ?? "").ToUpper() == kanbanUpper &&
+                             ((s.ScheduleNumber ?? "").ToUpper() == kanbanUpper || (s.ScheduleNumber ?? "").ToUpper().StartsWith(kanbanUpper + "/")) &&
                              s.DeliveryItems.Any(di => di.ItemId == targetItem.ItemId))
                 .FirstOrDefaultAsync();
 
@@ -293,7 +293,7 @@ namespace DeliveryControl.Controllers
             .Include(s => s.Customer)
             .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
             .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
-                         (s.ScheduleNumber ?? "").ToUpper() == kanbanSaveUpper &&
+                         ((s.ScheduleNumber ?? "").ToUpper() == kanbanSaveUpper || (s.ScheduleNumber ?? "").ToUpper().StartsWith(kanbanSaveUpper + "/")) &&
                          s.DeliveryItems.Any(di => di.ItemId == item.ItemId))
             .OrderBy(s => s.ScheduledDate)
             .ThenBy(s => s.ScheduleNumber)

@@ -590,6 +590,8 @@ namespace DeliveryControl.Controllers
             public Dictionary<string, CategoryStats> PlantStats { get; set; } = new();
             public CategoryStats TotalStats { get; set; } = new();
         }
+
+        // [ResetStockData removed for safety]
     }
 
     public static class DictExtensions {

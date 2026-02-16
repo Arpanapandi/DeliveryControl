@@ -9,6 +9,9 @@
         <div class="col-12 col-xl-4">
              <h4 class="mb-1 text-white fw-bold d-flex align-items-center"><i class="bi bi-calendar-check me-2"></i> Jadwal
                 <span class="d-xl-none ms-2 badge bg-primary">Mobile View</span>
+                <span id="connectionStatus" class="badge bg-secondary ms-2" style="font-size: 0.6rem; vertical-align: middle;" title="Koneksi Realtime">
+                   <i class="bi bi-broadcast"></i> Connecting...
+                </span>
              </h4>
         </div>
         <div class="col-12 col-xl-8">
@@ -63,88 +66,108 @@
                 <tbody>
                     @foreach (var schedule in Model)
                     {
-                        foreach (var item in schedule.DeliveryItems)
+                        var items = schedule.DeliveryItems != null && schedule.DeliveryItems.Any() 
+                            ? schedule.DeliveryItems.Cast<DeliveryControl.Models.DeliveryItem?>().ToList() 
+                            : new List<DeliveryControl.Models.DeliveryItem?> { null };
+
+                        foreach (var item in items)
                         {
                             <tr>
-                                <td class="fw-bold text-info">@schedule.ScheduleNumber</td>
+                                <td class="fw-bold text-info">
+                                    <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">MANIFEST</div>
+                                    @schedule.ScheduleNumber
+                                </td>
                                 <td>
+                                    <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">DOCK</div>
                                     <span class="badge bg-secondary">
                                         @(string.IsNullOrEmpty(schedule.Area) ? (schedule.Customer?.Docking ?? "-") : schedule.Area)
                                     </span>
                                 </td>
-                                <td>@(schedule.Customer?.CustomerName ?? "-")</td>
-                                <td>@(schedule.Route ?? "-")</td>
-                                <td>@(schedule.Cycle ?? "-")</td>
                                 <td>
-                                    <div class="d-flex flex-column">
-                                        @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber) && !string.IsNullOrEmpty(item.Item?.VIN))
-                                        {
-                                            <span class="text-info fw-bold fs-6">@item.Item.CustomerPartNumber/@item.Item.VIN</span>
-                                        }
-                                        else if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
-                                        {
-                                            <span class="text-info fw-bold">@item.Item.CustomerPartNumber</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-info fw-bold">@(item.Item?.VIN ?? "-")</span>
-                                        }
-                                    </div>
+                                    <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">CUSTOMER</div>
+                                    <span class="fw-bold">@(schedule.Customer?.CustomerName ?? "-")</span>
                                 </td>
-                                <td class="text-center"><span class="badge bg-dark border">@item.Item?.QtyLot</span></td>
-                                <td class="text-center">
-                                    <span class="badge bg-secondary">
-                                        @((item.ActualQuantity ?? 0).ToString("N0")) / @item.Quantity.ToString("N0")
-                                    </span>
+                                <td>
+                                    <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">ROUTE</div>
+                                    @(schedule.Route ?? "-")
                                 </td>
-                                <td class="text-center fw-bold">
-                                    <span class="badge bg-info text-dark" style="font-size: 1.1rem; padding: 0.5rem 0.8rem;">
-                                        @{
-                                            var qpc = item.Item?.QtyLot ?? 1;
-                                            var kanbanTarget = Math.Ceiling((double)item.Quantity / (qpc > 0 ? qpc : 1));
-                                            var kanbanActual = (double)(item.ActualQuantity ?? 0) / (qpc > 0 ? qpc : 1);
-                                            
-                                            // Calculate schedule-wide total kanban if this is the first item
-                                            double totalManifestKanban = 0;
-                                            foreach(var di in schedule.DeliveryItems)
+                                <td>
+                                    <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">CYCLE</div>
+                                    @(schedule.Cycle ?? "-")
+                                </td>
+                                
+                                @if (item != null)
+                                {
+                                    <td style="background: rgba(13, 110, 253, 0.05); border-left: 2px solid #0d6efd;">
+                                        <div class="d-flex flex-column">
+                                            @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber) && !string.IsNullOrEmpty(item.Item?.VIN))
                                             {
-                                                var diQpc = di.Item?.QtyLot ?? 1;
-                                                totalManifestKanban += (double)di.Quantity / (diQpc > 0 ? diQpc : 1);
+                                                <span class="text-white fw-bold fs-6">@item.Item.CustomerPartNumber</span>
+                                                <span class="text-info small">@item.Item.VIN</span>
+                                            }
+                                            else if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
+                                            {
+                                                <span class="text-white fw-bold">@item.Item.CustomerPartNumber</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-white fw-bold">@(item.Item?.VIN ?? "-")</span>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="small text-muted mb-1" style="font-size: 0.65rem;">QPC</div>
+                                        <span class="badge bg-dark border">@item.Item?.QtyLot</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary">
+                                            @item.Quantity.ToString("N0") Pcs
+                                        </span>
+                                    </td>
+                                    <td class="text-center fw-bold">
+                                        <span class="badge bg-info text-dark" style="font-size: 1.1rem; padding: 0.5rem 0.8rem;">
+                                            @{
+                                                var qpc = item.Item?.QtyLot ?? 1;
+                                                var kanbanTarget = Math.Ceiling((double)item.Quantity / (qpc > 0 ? qpc : 1));
+                                                var kanbanActual = (double)(item.ActualQuantity ?? 0) / (qpc > 0 ? qpc : 1);
+                                            }
+                                            <div class="fw-bold">@kanbanActual.ToString("0.##") / @kanbanTarget</div>
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        @{
+                                            string statusBadgeClass = "bg-secondary";
+                                            string statusText = "Waiting";
+
+                                            if (item.ActualQuantity >= item.Quantity)
+                                            {
+                                                statusBadgeClass = "bg-success";
+                                                statusText = "Completed";
+                                            }
+                                            else if (item.ActualQuantity > 0)
+                                            {
+                                                statusBadgeClass = "bg-warning text-dark";
+                                                statusText = "Preparing";
                                             }
                                         }
-                                        <div class="fw-bold">@kanbanActual.ToString("0.##") / @kanbanTarget</div>
-                                        @if (schedule.DeliveryItems.First() == item && schedule.DeliveryItems.Count > 1)
-                                        {
-                                            <div class="text-info" style="font-size: 0.75rem; border-top: 1px solid #444; margin-top: 2px; padding-top: 2px;">
-                                                <i class="bi bi-layers-half"></i> Total Manifest: <strong>@totalManifestKanban.ToString("N1")</strong>
-                                            </div>
-                                        }
-                                    </span>
-                                </td>
-                                <td class="text-center">
-                                    @{
-                                        var pct = (item.Quantity > 0) ? ((double)(item.ActualQuantity ?? 0) / (double)item.Quantity * 100) : 0;
-                                        string statusBadgeClass = "bg-secondary";
-                                        string statusText = "Waiting";
+                                        <span class="badge @statusBadgeClass">@statusText</span>
+                                    </td>
+                                }
+                                else 
+                                {
+                                    <td colspan="5" class="text-center text-muted fst-italic py-3">
+                                        <i class="bi bi-exclamation-circle me-1"></i> No Items found (Ghost Schedule)
+                                    </td>
+                                }
 
-                                        if (item.ActualQuantity >= item.Quantity)
-                                        {
-                                            statusBadgeClass = "bg-success";
-                                            statusText = "Completed";
-                                        }
-                                        else if (item.ActualQuantity > 0)
-                                        {
-                                            statusBadgeClass = "bg-warning text-dark";
-                                            statusText = "In Progress";
-                                        }
-                                    }
-                                    <span class="badge @statusBadgeClass">@statusText</span>
-                                </td>
                                 <td class="text-center">
                                     <div class="d-flex justify-content-center gap-1">
-                                        <a asp-controller="PreparationWorkflow" asp-action="Index" class="btn btn-sm btn-primary" title="Process Scan">
-                                            <i class="bi bi-box-seam"></i> 
-                                        </a>
+                                        @if (item != null)
+                                        {
+                                            <a asp-controller="PreparationWorkflow" asp-action="Index" class="btn btn-sm btn-primary" title="Process Scan">
+                                                <i class="bi bi-box-seam"></i> 
+                                            </a>
+                                        }
                                         <form asp-action="Delete" asp-route-id="@schedule.ScheduleId" method="post" onsubmit="return confirm('Yakin ingin menghapus schedule ini?');" style="display:inline;">
                                             <button type="submit" class="btn btn-sm btn-danger" title="Delete">
                                                 <i class="bi bi-trash"></i>
@@ -212,20 +235,20 @@
                             </div>
                         </div>
                         
-                        <div class="mb-3">
-                            <small class="text-secondary d-block">Item / Part No</small>
+                     <div class="mb-3 p-2 bg-primary bg-opacity-10 rounded border-start border-primary border-4">
+                            <small class="text-primary fw-bold d-block mb-1" style="letter-spacing: 1px;">DATA ITEM / PESANAN</small>
                             @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber) && !string.IsNullOrEmpty(item.Item?.VIN))
                             {
-                                <span class="text-info fw-bold d-block">@item.Item.CustomerPartNumber</span>
-                                <small class="text-muted">@item.Item.VIN</small>
+                                <span class="text-white fw-bold d-block fs-5">@item.Item.CustomerPartNumber</span>
+                                <span class="text-info small">@item.Item.VIN</span>
                             }
                             else if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
                             {
-                                <span class="text-info fw-bold">@item.Item.CustomerPartNumber</span>
+                                <span class="text-white fw-bold d-block fs-5">@item.Item.CustomerPartNumber</span>
                             }
                             else
                             {
-                                <span class="text-info fw-bold">@(item.Item?.VIN ?? "-")</span>
+                                <span class="text-white fw-bold d-block fs-5">@(item.Item?.VIN ?? "-")</span>
                             }
                         </div>
 
@@ -239,7 +262,7 @@
                                 }
                                 <span class="badge bg-info text-dark" style="font-size: 1.3rem;">@kanbanActualMobile.ToString("0.##") / @kanbanTargetMobile <small>KBN</small></span>
                                 <div class="mt-1">
-                                    <span class="badge bg-secondary">@((item.ActualQuantity ?? 0).ToString("N0")) / @item.Quantity.ToString("N0") <small>Pcs</small></span>
+                                    <span class="badge bg-secondary">@item.Quantity.ToString("N0") <small>Pcs</small></span>
                                 </div>
                             </div>
                              <div class="text-center">
@@ -300,22 +323,71 @@
 
     <script>
         $(document).ready(function () {
+            // Status Indicator Element
+            const statusBadge = $('#connectionStatus');
+            
+            function updateStatus(status, color, icon) {
+                if(statusBadge.length) {
+                    statusBadge.removeClass('bg-secondary bg-success bg-danger bg-warning text-dark')
+                              .addClass(color)
+                              .html(`<i class="bi ${icon} me-1"></i> ${status}`);
+                }
+            }
+
             const connection = new signalR.HubConnectionBuilder()
                 .withUrl("/deliveryHub")
+                .withAutomaticReconnect([0, 2000, 10000, 30000]) // Retry delays: 0s, 2s, 10s, 30s
+                .configureLogging(signalR.LogLevel.Information)
                 .build();
 
+            // 1. Event Handler: Receive Update
             connection.on("DeliveryUpdated", function (data) {
                 console.log("Prep update received", data);
-                // Simple reload for now to ensure all totals are correct
-                setTimeout(() => location.reload(), 1000);
+                
+                // Visual Notification
+                const toastHtml = `
+                    <div class="position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 9999">
+                        <div class="toast show align-items-center text-white bg-success border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
+                            <div class="d-flex">
+                                <div class="toast-body fs-6">
+                                    <i class="bi bi-cloud-download-fill me-2"></i> Data Updated! Reloading...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                $('body').append(toastHtml);
+
+                // Reload after short delay to allow user to see the message
+                setTimeout(() => window.location.reload(), 1500);
+            });
+
+            // 2. Connection Lifecycle Handling
+            connection.onreconnecting(error => {
+                console.warn("SignalR Reconnecting...", error);
+                updateStatus("Reconnecting...", "bg-warning text-dark", "bi-wifi-off");
+            });
+
+            connection.onreconnected(connectionId => {
+                console.log("SignalR Reconnected");
+                updateStatus("Live", "bg-success", "bi-wifi");
+            });
+
+            connection.onclose(error => {
+                console.error("SignalR Disconnected", error);
+                updateStatus("Offline", "bg-danger", "bi-slash-circle");
+                // Try to restart manually after delay if auto-reconnect fails
+                setTimeout(start, 5000);
             });
 
             async function start() {
                 try {
                     await connection.start();
                     console.log("Prep SignalR Connected");
+                    updateStatus("Live", "bg-success", "bi-wifi");
                 } catch (err) {
-                    console.log(err);
+                    console.error("SignalR Connection Error: ", err);
+                    updateStatus("Error", "bg-danger", "bi-exclamation-triangle");
                     setTimeout(start, 5000);
                 }
             };

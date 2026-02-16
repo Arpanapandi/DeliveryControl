@@ -35,7 +35,12 @@ namespace DeliveryControl.Controllers
             if (!String.IsNullOrEmpty(searchString))
             {
                 items = items.Where(i => i.ItemCode.Contains(searchString)
-                                   || i.ItemName.Contains(searchString));
+                                   || i.ItemName.Contains(searchString)
+                                   || (i.VIN ?? "").Contains(searchString)
+                                   || (i.CustomerPartNumber ?? "").Contains(searchString)
+                                   || (i.Customer ?? "").Contains(searchString)
+                                   || (i.Plant ?? "").Contains(searchString)
+                                   || (i.Rack ?? "").Contains(searchString));
             }
 
             if (!String.IsNullOrEmpty(category))
@@ -434,25 +439,27 @@ namespace DeliveryControl.Controllers
                         // Get Column Letter for Auditor Report
                         string GetColLetter(int colIndex) => colIndex != -1 ? worksheet.Column(colIndex).ColumnLetter() : "?";
 
-                        var colMap = new {
-                            Lokasi   = FindCol("LOKASI RACK", "LOKASI"),
-                            Plant    = FindCol("PROD PLANT", "PLANT"),
-                            Rak      = FindCol("RAK"),
-                            NoRak    = FindCol("NO RAK", "NORAK"),
-                            Cust     = FindCol("CUST"),
-                            Status   = FindCol("STATUS"),
-                            Prod     = FindCol("PROD", "KATEGORI"), // Focus on PROD (Exact match will prioritize it over PROD PLANT)
-                            Vin      = FindCol("VIN"),
-                            Qpc      = FindCol("QPC"),
-                            Min      = FindCol("MIN 1D", "MIN1D", "MIN"),
-                            Rop      = FindCol("ROP 2D", "ROP2D", "ROP"),
-                            Max      = FindCol("MAX 3D", "MAX3D", "MAX")
-                        };
+                 // Column Mapping
+                var colMap = new
+                {
+                    Vin = FindCol("VIN INTERNAL", "VIN", "INTERNAL"),
+                    ItemName = FindCol("LOKASI RACK", "NAMA ITEM", "NAMA BARANG", "ITEM NAME", "PART NAME"),
+                    Plant = FindCol("PLANT", "PABRIK"),
+                    Rack = FindCol("RAK", "RACK", "LOKASI"),
+                    NoRack = FindCol("NO RAK", "NO RACK", "NOMOR RAK"),
+                    Qpc = FindCol("QPC", "QTY PER CARTON", "QTY LOT", "LOT"),
+                    MinStock = FindCol("MIN 1D", "MIN STOCK", "MIN", "MINIMUM"),
+                    MaxStock = FindCol("MAX 3D", "MAX STOCK", "MAX", "MAXIMUM"),
+                    Customer = FindCol("CUST", "CUSTOMER", "NAMA CUSTOMER")
+                    // Customer & Part No removed from Master Item Import (moved to ItemMapping)
+                };
 
-                        if (colMap.Vin == -1) {
-                            TempData["ErrorMessage"] = "Header 'VIN' tidak ditemukan. Pastikan file Excel sesuai template.";
-                            return RedirectToAction(nameof(Index));
-                        }
+                // Validasi Kolom Wajib (Hanya VIN yang wajib untuk Master Item)
+                if (colMap.Vin == -1)
+                {
+                     TempData["ErrorMessage"] = "Kolom Wajib tidak ditemukan: VIN (INTERNAL). Pastikan format baru sesuai template";
+                     return RedirectToAction(nameof(Index));
+                }
 
                         // --- SHERLOCK MODE (v7.0): Deep Diagnostics ---
                         var excelVins = new HashSet<string>();
@@ -472,27 +479,25 @@ namespace DeliveryControl.Controllers
                             try
                             {
                                 string vin  = GetSafeString(row, colMap.Vin);
-                                string lok  = GetSafeString(row, colMap.Lokasi);
+                                string rak  = GetSafeString(row, colMap.Rack);
                                 string plt  = GetSafeString(row, colMap.Plant);
-                                string rak  = GetSafeString(row, colMap.Rak);
-                                string nrk  = GetSafeString(row, colMap.NoRak);
-                                string cst  = GetSafeString(row, colMap.Cust);
+                                string nrk  = GetSafeString(row, colMap.NoRack);
+                                string cust = GetSafeString(row, colMap.Customer);
 
-                                // Filter out invalid rows (Excel Errors or Empty Keys)
+                                // Filter out invalid rows
                                 if (string.IsNullOrEmpty(vin) || 
-                                    vin.Contains("#N/A") || vin.Contains("#REF!") || vin.Contains("#VALUE!") ||
-                                    lok.Contains("#N/A") || cst.Contains("#N/A"))
+                                    vin.Contains("#N/A") || vin.Contains("#REF!") || vin.Contains("#VALUE!"))
                                 {
                                     continue;
                                 }
 
-                                // v9.0 Composite Key Construction
-                                string compositeKey = $"{NormalizeKey(vin)}|{NormalizeKey(lok)}|{NormalizeKey(plt)}|{NormalizeKey(rak)}|{NormalizeKey(nrk)}|{NormalizeKey(cst)}";
+                                // v9.0 Composite Key Construction (Simplified)
+                                string compositeKey = $"{NormalizeKey(vin)}|{NormalizeKey(plt)}|{NormalizeKey(rak)}|{NormalizeKey(nrk)}";
                                 
                                 // Capture Samples (First 3 rows)
                                 if (sampleVins.Count < 3) {
                                     sampleVins.Add(vin);
-                                    sampleMins.Add(GetSafeString(row, colMap.Min)); 
+                                    sampleMins.Add(GetSafeNumberString(row, colMap.MinStock)); 
                                 }
 
                                 // --- v7.0 DUPLICATE STRATEGY: KEEP FIRST ---
@@ -504,18 +509,18 @@ namespace DeliveryControl.Controllers
                                 excelVins.Add(compositeKey);
 
                                 var dto = new ItemDto {
-                                    ItemCode  = lok, // LOKASI RACK maps to ItemName
+                                    ItemCode  = GetSafeString(row, colMap.ItemName), // LOKASI RACK maps to ItemName
                                     Plant     = plt,
                                     Rack      = rak,
                                     NoRackStr = nrk,
-                                    Customer  = cst, // RE-ENABLED: User wants this populated
-                                    StatusStr = GetSafeString(row, colMap.Status),
-                                    Category  = GetSafeString(row, colMap.Prod),
+                                    Customer  = cust,
+                                    StatusStr = GetSafeString(row, FindCol("STATUS")), // Assuming STATUS is still needed
+                                    Category  = GetSafeString(row, FindCol("PROD")), // Assuming PROD is still needed
                                     VIN       = vin,
                                     QpcStr    = GetSafeNumberString(row, colMap.Qpc),
-                                    MinStr    = GetSafeNumberString(row, colMap.Min),
-                                    RopStr    = GetSafeNumberString(row, colMap.Rop),
-                                    MaxStr    = GetSafeNumberString(row, colMap.Max)
+                                    MinStr    = GetSafeNumberString(row, colMap.MinStock), // Fixed: Now getting mapped
+                                    RopStr    = "0", // ROP removed from Import
+                                    MaxStr    = GetSafeNumberString(row, colMap.MaxStock)
                                 };
 
                                 if (itemDict.TryGetValue(compositeKey, out var existingItem))
@@ -542,7 +547,7 @@ namespace DeliveryControl.Controllers
                         
                         if (successCount > 0) 
                         {
-                            string colAudit = $"[KOLOM -> VIN:{GetColLetter(colMap.Vin)}, MIN:{GetColLetter(colMap.Min)}, ROP:{GetColLetter(colMap.Rop)}, MAX:{GetColLetter(colMap.Max)}]";
+                            string colAudit = $"[KOLOM -> VIN:{GetColLetter(colMap.Vin)}, PLANT:{GetColLetter(colMap.Plant)}, RACK:{GetColLetter(colMap.Rack)}]";
                             string dupAudit = duplicateInExcelCount > 0 ? $" | ⚠️ Di-Skip {duplicateInExcelCount} Duplikat (Cth: {string.Join(",", duplicateSamples)})" : "";
                             string sampleAudit = $" | Sample Data: VIN={string.Join(",", sampleVins)}, MIN={string.Join(",", sampleMins)}";
                             

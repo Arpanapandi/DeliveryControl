@@ -494,6 +494,8 @@ namespace DeliveryControl.Controllers
             var schedules = _context.DeliverySchedules
                 .AsNoTracking()
                 .Include(d => d.Customer)
+                .Include(d => d.DeliveryItems)
+                    .ThenInclude(di => di.Item)
                 .AsQueryable();
 
             // Default filter - tampilkan schedule hari ini jika tidak ada filter
@@ -1674,6 +1676,8 @@ namespace DeliveryControl.Controllers
             var query = _context.DeliverySchedules
                 .AsNoTracking()
                 .Include(d => d.Customer)
+                .Include(d => d.DeliveryItems)
+                    .ThenInclude(di => di.Item)
                 .AsQueryable();
 
             if (startDate.HasValue)

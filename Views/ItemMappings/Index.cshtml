@@ -1,4 +1,4 @@
-@model IEnumerable<DeliveryControl.Models.Item>
+@model IEnumerable<DeliveryControl.Models.ItemMapping>
 
 @{
     ViewData["Title"] = "Master Item Customer (Mapping)";
@@ -94,7 +94,7 @@
                 <thead>
                     <tr>
                         <th class="bg-dark-blue text-white text-center" style="width: 50px;">NO</th>
-                        <th class="bg-dark-blue text-white">KODE CUSTOMER</th>
+                        <th class="bg-dark-blue text-white">NAMA CUSTOMER</th>
                         <th class="bg-dark-blue text-white">PART NO (EKSTERNAL)</th>
                         <th class="bg-dark-blue text-white">VIN (INTERNAL)</th>
                         <th class="bg-dark-blue text-white text-center" style="width: 150px;">ACTIONS</th>
@@ -111,10 +111,10 @@
                             <td class="fw-bold text-success">@(item.VIN ?? "-")</td>
                             <td class="text-center">
                                 <div class="btn-group" role="group">
-                                    <a asp-action="Edit" asp-route-id="@item.ItemId" class="btn btn-sm btn-warning text-white" title="Edit">
+                                    <a asp-action="Edit" asp-route-id="@item.MappingId" class="btn btn-sm btn-warning text-white" title="Edit">
                                         <i class="bi bi-pencil"></i>
                                     </a>
-                                    <a asp-action="Delete" asp-route-id="@item.ItemId" class="btn btn-sm btn-danger" title="Hapus">
+                                    <a asp-action="Delete" asp-route-id="@item.MappingId" class="btn btn-sm btn-danger" title="Hapus">
                                         <i class="bi bi-trash"></i>
                                     </a>
                                 </div>

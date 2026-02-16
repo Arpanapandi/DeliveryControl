@@ -29,13 +29,13 @@ namespace DeliveryControl.Controllers
                 .Include(s => s.Customer)
                 .Include(s => s.DeliveryItems)
                     .ThenInclude(di => di.Item)
-                .Where(s => s.DeliveryItems.Any()); // Hide Ghost Data
+                .AsQueryable();
 
             // Default (Today): Hide Completed/Cancelled to keep To-Do list clean
             // Historical/Specific Date: Show everything
             if (!filterDate.HasValue || filterDate.Value == DateTime.Today)
             {
-                query = query.Where(s => s.Status != "Cancelled" && s.Status != "Completed");
+                query = query.Where(s => s.Status != "Cancelled");
             }
 
             var schedules = await query
@@ -397,18 +397,22 @@ namespace DeliveryControl.Controllers
                 var allCustomers = await _context.Customers.AsNoTracking().ToListAsync();
                 
                 // Index customers by unique combination: Dock + Route + Cycle
+                // v11.1: Fix property mapping (CustomerName is labeled DOCK in model)
                 var customersByContext = allCustomers
-                    .GroupBy(c => $"{NormalizeHeader(c.Docking)}|{NormalizeHeader(c.Route)}|{NormalizeHeader(c.Cycle)}")
+                    .GroupBy(c => $"{NormalizeHeader(c.CustomerName)}|{NormalizeHeader(c.Route)}|{NormalizeHeader(c.Cycle)}")
                     .ToDictionary(g => g.Key, g => g.First());
 
                 var customersByName = allCustomers
-                    .Where(c => !string.IsNullOrWhiteSpace(c.CustomerName))
-                    .GroupBy(c => NormalizeHeader(c.CustomerName))
+                    .Where(c => !string.IsNullOrWhiteSpace(c.CustomerCode))
+                    .GroupBy(c => NormalizeHeader(c.CustomerCode))
                     .ToDictionary(g => g.Key, g => g.First());
 
-                // 2. Load Items for "Translation" (Manifest -> VIN)
-                // v10.0: Load ALL items (tracked for update) to consolidate QPC data
+                                // 2. Load Items & Mappings for "Translation" 
+                // v12.0: SEPARATION OF CONCERNS
+                // - Mappings: Part No -> VIN
+                // - Items: VIN -> Stock/Loc/QPC
                 var allItems = await _context.Items.Where(i => i.IsActive).ToListAsync();
+                var allMappings = await _context.ItemMappings.AsNoTracking().ToListAsync();
 
                 using (var stream = new MemoryStream())
                 {
@@ -434,12 +438,7 @@ namespace DeliveryControl.Controllers
                                 if (val.Contains("MANIFESTING") || val.Contains("DOCK") || val.Contains("CUSTOMER") || val.Contains("PART")) 
                                     currentScore++;
                             }
-                        
-                            if (currentScore >= 3)
-                            {
-                                headerRow = testRow;
-                                break;
-                            }
+                            if (currentScore >= 3) { headerRow = testRow; break; }
                         }
 
                         // Map Headers accurately
@@ -452,8 +451,7 @@ namespace DeliveryControl.Controllers
 
                         int FindCol(params string[] keywords)
                         {
-                            foreach (var kw in keywords)
-                            {
+                            foreach (var kw in keywords) {
                                 var cleanKw = NormalizeHeader(kw);
                                 if (cleanedHeaders.ContainsKey(cleanKw)) return cleanedHeaders[cleanKw];
                                 var match = cleanedHeaders.Keys.FirstOrDefault(k => k.Contains(cleanKw));
@@ -462,12 +460,9 @@ namespace DeliveryControl.Controllers
                             return -1;
                         }
 
-                        // Local helper for normalization in matching
                         string SafeNormalize(string? input) => NormalizeHeader(input ?? "");
 
-                        // Column Mapping (Updated to match Image: 8 Col)
-                        var colMap = new
-                        {
+                        var colMap = new {
                             Manifesting = FindCol("MANIFESTING", "MANIFEST"),
                             Dock = FindCol("DOCK"),
                             CustName = FindCol("NAMA CUSTOMER", "NAMA", "CUSTOMER"),
@@ -479,8 +474,7 @@ namespace DeliveryControl.Controllers
                             Etd = FindCol("ETD")
                         };
 
-                        if (colMap.CustName == -1)
-                        {
+                        if (colMap.CustName == -1) {
                             TempData["ErrorMessage"] = "Header 'NAMA CUSTOMER' tidak ditemukan. Pastikan file Excel sesuai template.";
                             return RedirectToAction(nameof(Index));
                         }
@@ -489,7 +483,6 @@ namespace DeliveryControl.Controllers
                         var validRowsData = new List<ExcelRowData>();
                         var rows = worksheet.RowsUsed().Where(r => r.RowNumber() > headerRow.RowNumber());
                         
-                        // Fill-down states
                         string lastCustName = "";
                         string lastManifest = "";
                         string lastDock = "";
@@ -516,76 +509,94 @@ namespace DeliveryControl.Controllers
                                 if (string.IsNullOrEmpty(route)) route = lastRoute; else lastRoute = route;
                                 if (string.IsNullOrEmpty(cycle)) cycle = lastCycle; else lastCycle = cycle;
 
-                                if (string.IsNullOrEmpty(custNameCell)) continue; 
-                                if (string.IsNullOrEmpty(itemCode)) continue; 
+                                if (string.IsNullOrEmpty(custNameCell) || string.IsNullOrEmpty(itemCode)) continue; 
                                 
                                 // --- MASTER CUSTOMER LOOKUP (Dock, Route, Cycle) ---
                                 Customer? customer = null;
                                 string contextKey = $"{NormalizeHeader(dockLocation)}|{NormalizeHeader(route)}|{NormalizeHeader(cycle)}";
                                 
-                                if (customersByContext.TryGetValue(contextKey, out var cByContext))
-                                {
+                                if (customersByContext.TryGetValue(contextKey, out var cByContext)) {
                                     customer = cByContext;
-                                }
-                                else if (!string.IsNullOrEmpty(custNameCell) && customersByName.TryGetValue(NormalizeHeader(custNameCell), out var cByName)) 
-                                {
+                                } else if (!string.IsNullOrEmpty(custNameCell) && customersByName.TryGetValue(NormalizeHeader(custNameCell), out var cByName)) {
                                     customer = cByName;
                                 }
 
-                                if (customer == null)
-                                {
+                                if (customer == null) {
                                     errorCount++;
                                     if (errorSamples.Count < 5) errorSamples.Add($"Baris {row.RowNumber()}: Customer dengan context Dock: {dockLocation}, Route: {route}, Cycle: {cycle} tidak ditemukan di Master.");
                                     continue;
                                 }
 
-                                // --- ROBUST ITEM MATCHING & AUTO-CREATION (Master Sync) ---
-                                string normalizedItemCode = SafeNormalize(itemCode);
-                                string normalizedCustContext = SafeNormalize(custNameCell);
+                            // --- ROBUST ITEM MATCHING (2-STEP LOOKUP) ---
+                            string normalizedItemCode = SafeNormalize(itemCode);
+                            string normalizedCustContext = SafeNormalize(custNameCell);
+                            
+                            string targetVin = normalizedItemCode; // Default: Assume it's a VIN
 
-                                var matchedItem = allItems.FirstOrDefault(i => 
-                                    (SafeNormalize(i.CustomerPartNumber) == normalizedItemCode || SafeNormalize(i.VIN) == normalizedItemCode) &&
-                                    (SafeNormalize(i.Customer) == normalizedCustContext || 
-                                     SafeNormalize(i.Customer).Contains(normalizedCustContext) || 
-                                     normalizedCustContext.Contains(SafeNormalize(i.Customer)))
-                                );
+                            // STEP 1: TRANSLATION (Part No -> VIN)
+                            // Find mapping that matches Customer & Part No
+                            var mapping = allMappings.FirstOrDefault(m => 
+                                SafeNormalize(m.CustomerPartNumber) == normalizedItemCode &&
+                                (SafeNormalize(m.Customer) == normalizedCustContext || 
+                                 SafeNormalize(m.Customer).Contains(normalizedCustContext) || 
+                                 normalizedCustContext.Contains(SafeNormalize(m.Customer))));
 
-                                if (matchedItem == null)
+                            if (mapping != null)
+                            {
+                                targetVin = mapping.VIN; // Found translation!
+                            }
+
+                            // STEP 2: MASTER ITEM LOOKUP (By VIN)
+                            var matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == SafeNormalize(targetVin));
+
+                            // FALLBACK: If not found by VIN, try match by PartNo directly in ItemMappings (Global Search)
+                            if (matchedItem == null && mapping == null)
+                            {
+                                var potentialMap = allMappings.FirstOrDefault(m => SafeNormalize(m.CustomerPartNumber) == normalizedItemCode);
+                                if (potentialMap != null)
                                 {
-                                    var potentialMatches = allItems.Where(i => 
-                                        SafeNormalize(i.CustomerPartNumber) == normalizedItemCode || SafeNormalize(i.VIN) == normalizedItemCode).ToList();
-                                    
-                                    if (potentialMatches.Any())
+                                    targetVin = potentialMap.VIN;
+                                    matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == SafeNormalize(targetVin));
+                                }
+                            }
+
+                            if (matchedItem == null)
+                            {
+                                // v11.0: AUTO-CREATE Master Item to ensure sync (Draft Mode)
+                                matchedItem = new Item
+                                {
+                                    ItemCode = targetVin, // Use VIN as Code
+                                    VIN = targetVin,
+                                    CustomerPartNumber = (mapping != null) ? mapping.CustomerPartNumber : (targetVin != itemCode ? itemCode : null),
+                                    Customer = customer.CustomerName,
+                                    ItemName = "Imported (" + itemCode + ")",
+                                    Description = "Auto-created from Schedule Import",
+                                    IsActive = true,
+                                    CreatedDate = DateTime.Now,
+                                    QtyLot = 1 // Default QPC
+                                };
+                                _context.Items.Add(matchedItem);
+                                allItems.Add(matchedItem); 
+                            }
+                            else 
+                            {
+                                // v12.1: Enrichment - If Master Item has missing PartNo, fill it from Mapping/Excel
+                                if (string.IsNullOrEmpty(matchedItem.CustomerPartNumber))
+                                {
+                                    if (mapping != null) 
                                     {
-                                        matchedItem = potentialMatches.FirstOrDefault(i => 
-                                            !string.IsNullOrEmpty(i.Customer) && 
-                                            (SafeNormalize(customer.CustomerName).Contains(SafeNormalize(i.Customer)) || 
-                                             SafeNormalize(customer.CustomerCode).Contains(SafeNormalize(i.Customer))));
-                                        
-                                        if (matchedItem == null) matchedItem = potentialMatches.First();
+                                        matchedItem.CustomerPartNumber = mapping.CustomerPartNumber;
+                                        _context.Update(matchedItem);
+                                    }
+                                    else if (targetVin != itemCode) // itemCode is likely PartNo
+                                    {
+                                        matchedItem.CustomerPartNumber = itemCode;
+                                        _context.Update(matchedItem);
                                     }
                                 }
+                            }
 
-                                if (matchedItem == null)
-                                {
-                                    // v11.0: AUTO-CREATE Master Item to ensure sync
-                                    matchedItem = new Item
-                                    {
-                                        ItemCode = itemCode,
-                                        VIN = itemCode, // Use code as fallback VIN
-                                        CustomerPartNumber = itemCode,
-                                        ItemName = "Imported Part (" + itemCode + ")",
-                                        Description = "Auto-created during Preparation Import",
-                                        Customer = customer.CustomerName,
-                                        IsActive = true,
-                                        CreatedDate = DateTime.Now,
-                                        QtyLot = 1 // Default QPC
-                                    };
-                                    _context.Items.Add(matchedItem);
-                                    allItems.Add(matchedItem); // Add to local list for subsequent matches
-                                }
-
-                                // --- v10.0: QTY/LOT (QPC) CONSOLIDATION ---
+                                // v10.0: QTY/LOT (QPC) CONSOLIDATION
                                 if (matchedItem.ItemId > 0 && (matchedItem.QtyLot == null || matchedItem.QtyLot == 0) && !string.IsNullOrEmpty(matchedItem.VIN))
                                 {
                                     var referenceItem = allItems.FirstOrDefault(i => 
@@ -601,6 +612,7 @@ namespace DeliveryControl.Controllers
                                         _context.Update(matchedItem);
                                     }
                                 }
+
 
                                 validRowsData.Add(new ExcelRowData {
                                     RowNumber = row.RowNumber(),
@@ -620,104 +632,55 @@ namespace DeliveryControl.Controllers
                             }
                         }
 
-                        // --- PHASE 2: Grouping & Upsert Logic (The "Bulletproof" Part) ---
+                        // --- PHASE 2: Individual Row Processing (No Grouping) ---
                         var scheduledDate = DateTime.Today;
-                        
-                        // Load existing schedules for this date to support Upsert
-                        var existingSchedules = await _context.DeliverySchedules
-                            .Include(s => s.DeliveryItems)
-                            .Where(s => s.ScheduledDate.Date == scheduledDate.Date)
-                            .ToListAsync();
+                        var importSession = DateTime.Now.ToString("HHmm"); // Tambahan suffix waktu agar tidak bentrok saat re-import
 
-                        // Group by Manifest & Customer (Primary Grouping)
-                        var manifestGroups = validRowsData.GroupBy(r => new { r.ManifestNum, r.Customer.CustomerId });
-
-                        foreach (var group in manifestGroups)
+                        int sequentialCounter = 1;
+                        foreach (var rowData in validRowsData)
                         {
-                            var first = group.First();
-                            string manifestCode = group.Key.ManifestNum;
-                            
-                            // 1. Find or Create Schedule
-                            var schedule = existingSchedules.FirstOrDefault(s => 
-                                s.ScheduleNumber == manifestCode && 
-                                s.CustomerId == group.Key.CustomerId);
-
-                            bool isNewSchedule = false;
-                            if (schedule == null)
+                            // Create a separate schedule for EACH row (Portal Preparation requirement)
+                            var schedule = new DeliverySchedule
                             {
-                                isNewSchedule = true;
-                                schedule = new DeliverySchedule
-                                {
-                                    ScheduleNumber = manifestCode,
-                                    CustomerId = group.Key.CustomerId,
-                                    ScheduledDate = scheduledDate,
-                                    Status = "Scheduled",
-                                    CreatedDate = DateTime.Now,
-                                    CreatedBy = User.Identity?.Name ?? "ImportExcel"
-                                };
-                            }
-
-                            // Update Header Info (Route, Cycle, Dock time from Excel)
-                            schedule.Route = colMap.Route != -1 ? GetSafeString(first.Row.Cell(colMap.Route)) : first.Customer.Route;
-                            schedule.Cycle = colMap.Cycle != -1 ? GetSafeString(first.Row.Cell(colMap.Cycle)) : first.Customer.Cycle;
-                            schedule.Area = first.DockLocation; 
-                            schedule.EnterDockTime = ParseTimeToDateTime(first.Customer.Docking, scheduledDate);
-                            schedule.PickupTime = (colMap.Pickup != -1 ? GetSafeTime(first.Row.Cell(colMap.Pickup), scheduledDate) : null) ?? ParseTimeToDateTime(first.Customer.Pickup, scheduledDate);
-                            schedule.ETD = (colMap.Etd != -1 ? GetSafeTime(first.Row.Cell(colMap.Etd), scheduledDate) : null) ?? ParseTimeToDateTime(first.Customer.ETD, scheduledDate);
-
-                            // 2. Handle Items (Overwrite logic for Sync)
-                            var itemGroups = group.Where(g => g.MatchedItem != null)
-                                                 .GroupBy(g => g.MatchedItem!); // Group by the Item object reference
-
-                            // v11.0: For existing schedule, clear existing items that are being re-imported 
-                            // to ensure the Excel data replaces the DB data (Source of Truth)
-                            var incomingItemCodes = itemGroups.Select(ig => ig.Key.ItemCode).ToList();
-                            if (!isNewSchedule)
-                            {
-                                var itemsToRemove = schedule.DeliveryItems.Where(di => incomingItemCodes.Contains(di.Item?.ItemCode ?? "")).ToList();
-                                foreach(var itemToRemove in itemsToRemove) schedule.DeliveryItems.Remove(itemToRemove);
-                            }
-
-                            foreach (var itemGroup in itemGroups)
-                            {
-                                var matchedItem = itemGroup.Key;
-                                int totalQtyFromExcel = itemGroup.Sum(ig => ig.Quantity);
+                                ScheduleNumber = $"{rowData.ManifestNum}/{importSession}-{sequentialCounter++}", // Format: MANIFEST/HHmm-ROW
+                                CustomerId = rowData.Customer.CustomerId,
+                                ScheduledDate = scheduledDate,
+                                Status = "Scheduled",
+                                CreatedDate = DateTime.Now,
+                                CreatedBy = User.Identity?.Name ?? "ImportExcel",
                                 
-                                // Add new item entry (since we cleared or it's new)
-                                var deliveryItem = new DeliveryItem {
-                                    Quantity = totalQtyFromExcel,
-                                    ActualQuantity = 0,
-                                    CreatedDate = DateTime.Now
-                                };
+                                // Mapping info from Excel / Customer Master
+                                Route = !string.IsNullOrEmpty(rowData.Customer.Route) ? rowData.Customer.Route : (colMap.Route != -1 ? GetSafeString(rowData.Row.Cell(colMap.Route)) : ""),
+                                Cycle = !string.IsNullOrEmpty(rowData.Customer.Cycle) ? rowData.Customer.Cycle : (colMap.Cycle != -1 ? GetSafeString(rowData.Row.Cell(colMap.Cycle)) : ""),
+                                Area = !string.IsNullOrEmpty(rowData.Customer.Area) ? rowData.Customer.Area : rowData.DockLocation, 
+                                EnterDockTime = ParseTimeToDateTime(rowData.Customer.Docking, scheduledDate),
+                                PickupTime = (colMap.Pickup != -1 ? GetSafeTime(rowData.Row.Cell(colMap.Pickup), scheduledDate) : null) ?? ParseTimeToDateTime(rowData.Customer.Pickup, scheduledDate),
+                                ETD = (colMap.Etd != -1 ? GetSafeTime(rowData.Row.Cell(colMap.Etd), scheduledDate) : null) ?? ParseTimeToDateTime(rowData.Customer.ETD, scheduledDate),
+                                Range = rowData.Customer.Range,
+                                SKID = rowData.Customer.SKID
+                            };
 
-                                // CRITICAL: If ItemId is 0 (new item), use Navigation Property
-                                // This solves the 'FOREIGN KEY constraint failed' error
-                                if (matchedItem.ItemId == 0)
-                                {
-                                    deliveryItem.Item = matchedItem;
-                                }
-                                else
-                                {
-                                    deliveryItem.ItemId = matchedItem.ItemId;
-                                }
+                            // Add the specific item (matched in Phase 1)
+                            var deliveryItem = new DeliveryItem {
+                                Quantity = rowData.Quantity,
+                                ActualQuantity = 0,
+                                CreatedDate = DateTime.Now
+                            };
 
-                                schedule.DeliveryItems.Add(deliveryItem);
-                            }
-
-                            // Update Total Target
-                            schedule.TotalTargetQuantity = (decimal)schedule.DeliveryItems.Sum(di => di.Quantity);
-
-                            if (isNewSchedule && schedule.DeliveryItems.Any())
+                            if (rowData.MatchedItem.ItemId == 0)
                             {
-                                _context.DeliverySchedules.Add(schedule);
-                                existingSchedules.Add(schedule); // Add to local list to prevent re-creation in same loop
-                                successCount++;
+                                deliveryItem.Item = rowData.MatchedItem;
                             }
-                            else if (!isNewSchedule)
+                            else
                             {
-                                _context.DeliverySchedules.Update(schedule);
-                                successCount++;
+                                deliveryItem.ItemId = rowData.MatchedItem.ItemId;
                             }
+
+                            schedule.DeliveryItems.Add(deliveryItem);
+                            schedule.TotalTargetQuantity = (decimal)rowData.Quantity;
+
+                            _context.DeliverySchedules.Add(schedule);
+                            successCount++;
                         }
 
                         // SAVE EVERYTHING

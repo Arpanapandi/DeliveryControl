@@ -26,15 +26,17 @@ builder.Services.AddSession(options =>
 });
 
 // Add DbContext
+// Add DbContext
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    if (builder.Environment.IsDevelopment())
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (connectionString.Contains("Server=") || connectionString.Contains("Database="))
     {
-        options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"));
+        options.UseSqlServer(connectionString);
     }
     else
     {
-        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+        options.UseSqlite(connectionString);
     }
 });
 

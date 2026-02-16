@@ -126,7 +126,7 @@
                             var qpc = di.Item?.QtyLot ?? 1;
                             if (qpc > 0)
                             {
-                                totalKbnTarget += (double)di.Quantity / qpc;
+                                totalKbnTarget += Math.Ceiling((double)di.Quantity / qpc);
                                 totalKbnActual += (double)(di.ActualQuantity ?? 0) / qpc;
                             }
                         }
@@ -134,13 +134,13 @@
                 }
                 <div class="row mb-2">
                     <div class="col-md-4"><strong>Target Kanban:</strong></div>
-                    <div class="col-md-8">@totalKbnTarget.ToString("N1") KBN</div>
+                    <div class="col-md-8">@totalKbnTarget.ToString("0.##") KBN</div>
                 </div>
                 <div class="row mb-2">
                     <div class="col-md-4"><strong>Actual Kanban:</strong></div>
                     <div class="col-md-8">
                         <span class="@(Model.TotalActualQuantity >= Model.TotalTargetQuantity && Model.TotalTargetQuantity > 0 ? "text-success" : (Model.TotalActualQuantity > 0 ? "text-warning" : "")) fw-bold">
-                            @totalKbnActual.ToString("N1") KBN
+                            @totalKbnActual.ToString("0.##") KBN
                         </span>
                         @if (totalKbnTarget > 0)
                         {
@@ -274,18 +274,18 @@
                                         <td>
                                             @{
                                                 var qpc = item.Item?.QtyLot ?? 1;
-                                                var kbnPlan = (double)item.Quantity / (qpc > 0 ? qpc : 1);
+                                                var kbnPlan = Math.Ceiling((double)item.Quantity / (qpc > 0 ? qpc : 1));
                                                 var kbnActual = (double)(item.ActualQuantity ?? 0) / (qpc > 0 ? qpc : 1);
                                                 var kbnVariance = kbnActual - kbnPlan;
                                             }
-                                            @kbnPlan.ToString("N1")
+                                            @kbnPlan.ToString("0.##")
                                         </td>
-                                        <td>@kbnActual.ToString("N1")</td>
+                                        <td>@kbnActual.ToString("0.##")</td>
                                         <td>
                                             @{
                                                 var varianceClass = kbnVariance >= 0 ? "text-success" : "text-danger";
                                             }
-                                            <span class="@varianceClass">@kbnVariance.ToString("N1")</span>
+                                            <span class="@varianceClass">@kbnVariance.ToString("0.##")</span>
                                         </td>
                                         <td>KBN</td>
                                         <td>

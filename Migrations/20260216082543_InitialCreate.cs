@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
 
-namespace DeliveryControl.Data.Migrations
+namespace DeliveryControl.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -42,6 +42,7 @@ namespace DeliveryControl.Data.Migrations
                 {
                     CustomerId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
+                    AutoCode = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
                     CustomerCode = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     CustomerName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
                     Route = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
@@ -59,6 +60,23 @@ namespace DeliveryControl.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Customers", x => x.CustomerId);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ItemMappings",
+                columns: table => new
+                {
+                    MappingId = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    VIN = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    Customer = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    CustomerPartNumber = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    CreatedDate = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    UpdatedDate = table.Column<DateTime>(type: "datetime2", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ItemMappings", x => x.MappingId);
                 });
 
             migrationBuilder.CreateTable(
@@ -266,11 +284,11 @@ namespace DeliveryControl.Data.Migrations
 
             migrationBuilder.InsertData(
                 table: "Customers",
-                columns: new[] { "CustomerId", "Area", "CreatedDate", "CustomerCode", "CustomerName", "Cycle", "Docking", "ETD", "IsActive", "Pickup", "Range", "Route", "SKID", "UpdatedDate" },
+                columns: new[] { "CustomerId", "Area", "AutoCode", "CreatedDate", "CustomerCode", "CustomerName", "Cycle", "Docking", "ETD", "IsActive", "Pickup", "Range", "Route", "SKID", "UpdatedDate" },
                 values: new object[,]
                 {
-                    { 1, null, new DateTime(2026, 2, 12, 10, 57, 6, 13, DateTimeKind.Local).AddTicks(5015), "CUST001", "PT ABC Manufacturing", null, null, null, true, null, null, "Route A", "10 SKID", null },
-                    { 2, null, new DateTime(2026, 2, 12, 10, 57, 6, 13, DateTimeKind.Local).AddTicks(5018), "CUST002", "PT XYZ Industries", null, null, null, true, null, null, "Route B", "15 SKID", null }
+                    { 1, null, null, new DateTime(2026, 2, 16, 15, 25, 43, 382, DateTimeKind.Local).AddTicks(3474), "CUST001", "PT ABC Manufacturing", null, null, null, true, null, null, "Route A", "10 SKID", null },
+                    { 2, null, null, new DateTime(2026, 2, 16, 15, 25, 43, 382, DateTimeKind.Local).AddTicks(3476), "CUST002", "PT XYZ Industries", null, null, null, true, null, null, "Route B", "15 SKID", null }
                 });
 
             migrationBuilder.InsertData(
@@ -278,9 +296,9 @@ namespace DeliveryControl.Data.Migrations
                 columns: new[] { "ItemId", "Category", "CreatedDate", "Customer", "CustomerPartNumber", "Description", "IsActive", "ItemCode", "ItemName", "KanbanType", "MaxStock", "MinStock", "NoRack", "Plant", "QtyLot", "ROP", "Rack", "RackMax", "RackMin", "Unit", "UpdatedDate", "VIN", "Volume", "Weight" },
                 values: new object[,]
                 {
-                    { 1, "Raw Material", new DateTime(2026, 2, 12, 10, 57, 6, 13, DateTimeKind.Local).AddTicks(5132), null, null, "Raw material untuk produksi", true, "ITM001", "Raw Material A", null, 20, 5, null, null, null, null, null, null, null, "KG", null, null, null, 1.0m },
-                    { 2, "Finished Goods", new DateTime(2026, 2, 12, 10, 57, 6, 13, DateTimeKind.Local).AddTicks(5135), null, null, "Produk jadi siap kirim", true, "ITM002", "Finished Product B", null, 20, 5, null, null, null, null, null, null, null, "PCS", null, null, null, 2.5m },
-                    { 3, "Packaging", new DateTime(2026, 2, 12, 10, 57, 6, 13, DateTimeKind.Local).AddTicks(5137), null, null, "Material packaging", true, "ITM003", "Packaging Material", null, 20, 5, null, null, null, null, null, null, null, "BOX", null, null, null, 0.5m }
+                    { 1, "Raw Material", new DateTime(2026, 2, 16, 15, 25, 43, 382, DateTimeKind.Local).AddTicks(3580), null, null, "Raw material untuk produksi", true, "ITM001", "Raw Material A", null, 20, 5, null, null, null, null, null, null, null, "KG", null, null, null, 1.0m },
+                    { 2, "Finished Goods", new DateTime(2026, 2, 16, 15, 25, 43, 382, DateTimeKind.Local).AddTicks(3583), null, null, "Produk jadi siap kirim", true, "ITM002", "Finished Product B", null, 20, 5, null, null, null, null, null, null, null, "PCS", null, null, null, 2.5m },
+                    { 3, "Packaging", new DateTime(2026, 2, 16, 15, 25, 43, 382, DateTimeKind.Local).AddTicks(3586), null, null, "Material packaging", true, "ITM003", "Packaging Material", null, 20, 5, null, null, null, null, null, null, null, "BOX", null, null, null, 0.5m }
                 });
 
             migrationBuilder.CreateIndex(
@@ -299,10 +317,11 @@ namespace DeliveryControl.Data.Migrations
                 column: "Timestamp");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Customers_CustomerCode",
+                name: "IX_Customers_CustomerCode_CustomerName_Route_Cycle_Docking_Pickup_ETD_Range_SKID_Area",
                 table: "Customers",
-                column: "CustomerCode",
-                unique: true);
+                columns: new[] { "CustomerCode", "CustomerName", "Route", "Cycle", "Docking", "Pickup", "ETD", "Range", "SKID", "Area" },
+                unique: true,
+                filter: "[Route] IS NOT NULL AND [Cycle] IS NOT NULL AND [Docking] IS NOT NULL AND [Pickup] IS NOT NULL AND [ETD] IS NOT NULL AND [Range] IS NOT NULL AND [SKID] IS NOT NULL AND [Area] IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "IX_DeliveryItems_ItemId",
@@ -428,6 +447,9 @@ namespace DeliveryControl.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "DeliveryItems");
+
+            migrationBuilder.DropTable(
+                name: "ItemMappings");
 
             migrationBuilder.DropTable(
                 name: "PreparationRecords");
