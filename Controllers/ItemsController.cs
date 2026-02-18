@@ -15,7 +15,7 @@ namespace DeliveryControl.Controllers
         }
 
         // GET: Items
-        public async Task<IActionResult> Index(string searchString, string category)
+        public async Task<IActionResult> Index(string searchString, string category, int pageNumber = 1)
         {
             var query = _context.Items
                 .AsNoTracking() // Performance for high data
@@ -48,8 +48,25 @@ namespace DeliveryControl.Controllers
                 items = items.Where(i => i.Category == category);
             }
 
-            // v3.8 Fix: Sort by ItemId (natural creation order) to match Excel's original sequence
-            return View(await items.OrderBy(i => i.ItemId).ToListAsync());
+            var totalItems = await items.CountAsync();
+            int pageSize = 20;
+
+            var resultItems = await items
+                .OrderBy(i => i.ItemCode)
+                .ThenBy(i => i.ItemId)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            ViewBag.CurrentPage = pageNumber;
+            ViewBag.TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+            ViewBag.TotalItems = totalItems;
+            ViewBag.RouteData = new Dictionary<string, string> { 
+                { "searchString", searchString },
+                { "category", category }
+            };
+
+            return View(resultItems);
         }
 
         // GET: Items/Details/5

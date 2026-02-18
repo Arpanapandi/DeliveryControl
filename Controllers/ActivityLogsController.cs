@@ -26,7 +26,7 @@ namespace DeliveryControl.Controllers
             string? action,
             string? performedBy,
             int pageNumber = 1,
-            int pageSize = 50)
+            int pageSize = 20)
         {
             // Tanggal hanya untuk tampilan & export (tidak membatasi query utama)
             var start = startDate ?? DateTime.Today;
@@ -72,14 +72,23 @@ namespace DeliveryControl.Controllers
             // Pagination
             var logs = await query
                 .OrderByDescending(l => l.Timestamp)
+                .ThenByDescending(l => l.LogId)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
 
             // Pagination info
-            ViewBag.PageNumber = pageNumber;
+            ViewBag.CurrentPage = pageNumber;
             ViewBag.PageSize = pageSize;
             ViewBag.TotalPages = (int)Math.Ceiling(totalRecords / (double)pageSize);
+            ViewBag.TotalItems = totalRecords;
+            ViewBag.RouteData = new Dictionary<string, string> { 
+                { "startDate", startDate?.ToString("yyyy-MM-dd") },
+                { "endDate", endDate?.ToString("yyyy-MM-dd") },
+                { "module", module },
+                { "action", action },
+                { "performedBy", performedBy }
+            };
 
             return View(logs);
         }
@@ -186,15 +195,16 @@ namespace DeliveryControl.Controllers
             // Pagination
             var logs = await query
                 .OrderByDescending(l => l.Timestamp)
+                .ThenByDescending(l => l.LogId)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
 
             // Pagination info
-            ViewBag.PageNumber = pageNumber;
+            ViewBag.CurrentPage = pageNumber;
             ViewBag.PageSize = pageSize;
             ViewBag.TotalPages = (int)Math.Ceiling(totalRecords / (double)pageSize);
-            ViewBag.TotalRecords = totalRecords;
+            ViewBag.TotalItems = totalRecords;
 
             return PartialView("_ActivityLogsTablePartial", logs);
         }

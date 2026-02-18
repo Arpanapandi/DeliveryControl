@@ -124,6 +124,10 @@
                 <i class="bi bi-info-circle"></i> Tidak ada data jadwal delivery untuk filter yang dipilih.
             </div>
         }
+
+        <div class="px-3 pb-3">
+            <partial name="_Pager" model='new { CurrentPage = ViewBag.CurrentPage, TotalPages = ViewBag.TotalPages, TotalItems = ViewBag.TotalItems, RouteData = ViewBag.RouteData }' />
+        </div>
     </div>
 </div>
 

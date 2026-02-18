@@ -200,6 +200,13 @@
         </div>
     </div>
 </div>
+
+<!-- Pagination -->
+<div class="row mt-2 mb-4">
+    <div class="col-12 text-center">
+        <partial name="_Pager" model='new { CurrentPage = ViewBag.CurrentPage, TotalPages = ViewBag.TotalPages, TotalItems = ViewBag.TotalItems, RouteData = ViewBag.RouteData }' />
+    </div>
+</div>
 </div>
 
 @section Scripts {

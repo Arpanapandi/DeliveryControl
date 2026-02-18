@@ -227,6 +227,10 @@
                         </tbody>
                     </table>
                 </div>
+
+                <div class="px-3 pb-3">
+                    <partial name="_Pager" model='new { CurrentPage = ViewBag.CurrentPage, TotalPages = ViewBag.TotalPages, TotalItems = ViewBag.TotalItems, RouteData = ViewBag.RouteData }' />
+                </div>
             </div>
         </div>
     </div>
@@ -251,8 +255,11 @@
                 const date = $('#dateFilter').val() || '';
                 const period = $('#periodFilter').val() || 'Day';
                 
+                const urlParams = new URLSearchParams(window.location.search);
+                const pageNumber = urlParams.get('pageNumber') || '1';
+                
                 $.ajax({
-                    url: `/Stock/Index?plant=${plant}&date=${date}&period=${period}`,
+                    url: `/Stock/Index?plant=${plant}&date=${date}&period=${period}&pageNumber=${pageNumber}`,
                     type: 'GET',
                     success: function (html) {
                         const newContent = $(html).find('#dashboardContent').html();

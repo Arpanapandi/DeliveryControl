@@ -388,7 +388,7 @@
                     try {
                          if (html5QrCode) await html5QrCode.start({ facingMode: "user" }, { fps: 20, qrbox: { width: 250, height: 250 } }, onDetected);
                     } catch (e2) {
-                         alert("Tidak dapat mengakses kamera: " + e2);
+                         showScannerToast("Tidak dapat mengakses kamera: " + e2, "danger");
                     }
                 }
             }
@@ -468,7 +468,7 @@
                             if (res.found) {
                                 currentScheduleId = res.schedule.scheduleId;
                                 $('#idStatusSection').slideDown();
-                                $('#idStatusText').html(`Ditemukan: ${res.schedule.customerName} <br><small class='text-warning fw-bold'>QPC: ${res.item.qtyLot || 0}</small>`);
+                                $('#idStatusText').html(`Ditemukan: ${res.schedule.customerName} <br><small class='text-warning fw-bold'>STOCK: ${res.item.currentStock || 0} BOX</small>`);
                                 $('#idTargetInfo').text(res.schedule.scheduleNumber);
                                 
                                 // Enable All
@@ -488,7 +488,7 @@
                                 
                                 // Handle Specific Validation Failures (Label/Kanban mismatch)
                                 if (res.message && (res.message.includes("tidak sesuai") || res.message.includes("tidak cocok") || res.message.includes("Label tidak sesuai"))) {
-                                    alert(res.message);
+                                    showScannerToast(res.message, "danger");
                                     if (res.step === 'label') {
                                         $('#labelInput').val('').focus();
                                     } else if (res.step === 'kanban') {
@@ -499,7 +499,7 @@
                                 }
 
                                 $('#idStatusSection').slideDown();
-                                $('#idStatusText').html(`Item: ${res.item.itemName} <br><small class='text-warning fw-bold'>QPC: ${res.item.qtyLot || 0}</small>`);
+                                $('#idStatusText').html(`Item: ${res.item.itemName} <br><small class='text-warning fw-bold'>STOCK: ${res.item.currentStock || 0} BOX</small>`);
                                 $('#idTargetInfo').text(res.item.vin);
                                 
                                 // Always enable Label if Tag is valid
@@ -520,7 +520,7 @@
                         }
                     },
                     error: function() {
-                         alert("Gagal menghubungi server.");
+                         showScannerToast("Gagal menghubungi server.", "danger");
                     }
                 });
             }

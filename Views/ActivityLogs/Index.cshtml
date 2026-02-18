@@ -138,7 +138,7 @@
 @section Scripts {
 
     <script>
-        let currentPage = @(ViewBag.PageNumber ?? 1);
+        let currentPage = @(ViewBag.CurrentPage ?? 1);
         let pollingInterval = null;
         let usePollingFallback = false;
         let isConnected = false;
@@ -161,7 +161,7 @@
                 cache: false,
                 data: { 
                     pageNumber: currentPage,
-                    pageSize: 50,
+                    pageSize: 20,
                     _: timestamp 
                 },
                 success: function(html) {

@@ -112,32 +112,79 @@ namespace DeliveryControl.Controllers
 
             ViewBag.Cycles = availableCycles;
 
+            // Grouping Logic: Schedule Date + Cycle + Route + Area (Dock)
+            // Group multiple manifests (schedules) into one trip card based on shared attributes
+            var groupedSchedules = schedulesForToday
+                .GroupBy(s => new {
+                    Date = s.PickupTime?.Date ?? s.ScheduledDate.Date,
+                    // Manifest = (s.ScheduleNumber ?? "").Trim().ToUpper(), // REMOVED to allow grouping by Dock+Cycle+Route
+                    Cycle = (s.Cycle ?? "").Trim().ToUpper(),
+                    Route = (s.Route ?? "").Trim().ToUpper(), 
+                    Area = (s.Area ?? "").Trim().ToUpper()
+                })
+                .Select(g => {
+                    var first = g.First();
+                    var sortedGroup = g.OrderBy(x => x.ScheduleNumber).ToList();
+
+                    // Combine Customer Names
+                    var uniqueCustomers = g.Select(x => x.Customer?.CustomerName ?? "-").Distinct().ToList();
+                    var customerDisplay = uniqueCustomers.Count > 1
+                        ? string.Join(", ", uniqueCustomers)
+                        : (uniqueCustomers.FirstOrDefault() ?? "-");
+
+                    // Status Logic for the Group
+                    // For Preparation: Group is "Completed" (Prepared) only if ALL items in ALL schedules are done, 
+                    // OR simple check: all schedules have ActualEnterDockTime (based on current logic separation)
+                    
+                    var isGroupCompleted = g.All(x => x.ActualEnterDockTime.HasValue);
+                    var groupStatus = isGroupCompleted ? "Completed" : (g.Any(x => x.ActualEnterDockTime.HasValue) ? "In Progress" : "Scheduled");
+
+                    return new DeliveryControl.Models.ViewModels.DriverTripViewModel
+                    {
+                        RepresentativeScheduleId = first.ScheduleId,
+                        CustomerName = customerDisplay,
+                        Cycle = first.Cycle ?? "",
+                        Route = first.Route ?? "",
+                        Area = first.Area ?? "",
+                        PickupTime = first.PickupTime,
+                        ETD = first.ETD,
+                        ActualStartTime = first.ActualStartTime,
+                        ActualEndTime = first.ActualEndTime,
+                        DriverStatus = first.DriverStatus ?? "Scheduled",
+                        OverallStatus = groupStatus, // Custom status for the group card
+                        Schedules = sortedGroup
+                    };
+                })
+                .OrderBy(vm => vm.OverallStatus == "Completed" ? 2 : (vm.OverallStatus == "In Progress" ? 0 : 1)) // Priority: In Progress -> Scheduled -> Completed
+                .ThenBy(vm => vm.PickupTime ?? vm.ETD ?? DateTime.MaxValue)
+                .ToList();
+
             // Kelompokkan menjadi:
-            // 1. BUTUH AKSI PREPARATION (BELUM MASUK DOCK)
-            // 2. SUDAH MASUK DOCK / TIDAK PERLU AKSI
-            var needAction = schedulesForToday
-                .Where(s => !s.ActualEnterDockTime.HasValue)
-                .OrderBy(s => s.EnterDockTime ?? DateTime.MaxValue)
-                .ToList();
-
-            var completed = schedulesForToday
-                .Where(s => s.ActualEnterDockTime.HasValue)
-                .OrderBy(s => s.ActualEnterDockTime)
-                .ToList();
-
-            var schedules = needAction
-                .Concat(completed)
-                .ToList();
+            // 1. BUTUH AKSI PREPARATION (BELUM MASUK DOCK/PREPARED)
+            // 2. SUDAH MASUK DOCK / PREPARED
             
-            // Statistics untuk tampilan
-            ViewBag.TotalSchedules = schedules.Count;
+            // Using logic from previous code: needAction are those NOT completed (not all entered dock)
+            // But wait, the previous logic was: !s.ActualEnterDockTime.HasValue
+            
+            var needAction = groupedSchedules
+                .Where(vm => !vm.Schedules.All(s => s.ActualEnterDockTime.HasValue))
+                .ToList();
+
+            var completed = groupedSchedules
+                .Where(vm => vm.Schedules.All(s => s.ActualEnterDockTime.HasValue))
+                .ToList();
+
+            var finalModel = needAction.Concat(completed).ToList();
+
+            // Statistics untuk tampilan (Count of Groups)
+            ViewBag.TotalSchedules = finalModel.Count;
             ViewBag.NotEnteredYet = needAction.Count;
             ViewBag.AlreadyEntered = completed.Count;
 
             ViewBag.NeedActionSchedules = needAction;
             ViewBag.CompletedSchedules = completed;
             
-            return View(schedules);
+            return View(finalModel);
         }
 
         // GET: Preparation/EnterDock/5 - Halaman konfirmasi masuk dock

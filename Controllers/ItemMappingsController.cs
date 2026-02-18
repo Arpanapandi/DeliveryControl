@@ -18,7 +18,7 @@ namespace DeliveryControl.Controllers
 
         // GET: ItemMappings
         // GET: ItemMappings
-        public async Task<IActionResult> Index(string searchString)
+        public async Task<IActionResult> Index(string searchString, int pageNumber = 1)
         {
             var query = _context.ItemMappings.AsNoTracking().AsQueryable();
 
@@ -30,13 +30,24 @@ namespace DeliveryControl.Controllers
                     (i.VIN ?? "").Contains(searchString));
             }
 
-            var mappings = await query
+            var totalItems = await query.CountAsync();
+            int pageSize = 20;
+
+            var items = await query
                 .OrderBy(i => i.Customer)
                 .ThenBy(i => i.CustomerPartNumber)
+                .ThenBy(i => i.MappingId)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
 
+            ViewBag.CurrentPage = pageNumber;
+            ViewBag.TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+            ViewBag.TotalItems = totalItems;
+            ViewBag.RouteData = new Dictionary<string, string> { { "searchString", searchString } };
+
             ViewData["CurrentFilter"] = searchString;
-            return View(mappings);
+            return View(items);
         }        
 
         // GET: ItemMappings/Create
@@ -200,8 +211,7 @@ namespace DeliveryControl.Controllers
 
             int createdCount = 0;
             int updatedCount = 0;
-            int errorCount = 0;
-            List<string> errorSamples = new List<string>();
+
 
             try
             {

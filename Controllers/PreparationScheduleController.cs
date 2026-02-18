@@ -21,7 +21,7 @@ namespace DeliveryControl.Controllers
             _hubContext = hubContext;
         }
 
-        public async Task<IActionResult> Index(DateTime? filterDate)
+        public async Task<IActionResult> Index(DateTime? filterDate, int pageNumber = 1)
         {
             var dateToFilter = filterDate ?? DateTime.Today;
             var query = _context.DeliverySchedules
@@ -38,13 +38,25 @@ namespace DeliveryControl.Controllers
                 query = query.Where(s => s.Status != "Cancelled");
             }
 
-            var schedules = await query
-                .Where(s => s.ScheduledDate == dateToFilter)
+            var filteredQuery = query.Where(s => s.ScheduledDate == dateToFilter);
+            
+            var totalItems = await filteredQuery.CountAsync();
+            int pageSize = 20;
+
+            var schedules = await filteredQuery
                 .OrderBy(s => s.ScheduledDate)
                 .ThenBy(s => s.ScheduleNumber)
+                .ThenBy(s => s.ScheduleId)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
 
             ViewBag.FilterDate = dateToFilter.ToString("yyyy-MM-dd");
+            ViewBag.CurrentPage = pageNumber;
+            ViewBag.TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+            ViewBag.TotalItems = totalItems;
+            ViewBag.RouteData = new Dictionary<string, string> { { "filterDate", dateToFilter.ToString("yyyy-MM-dd") } };
+
             return View(schedules);
         }
 
@@ -557,33 +569,43 @@ namespace DeliveryControl.Controllers
                             string normalizedInput = SafeNormalize(itemCode);
                             Item? matchedItem = null;
                             string? finalVin = null;
+                            ItemMapping? itemMap = null;
 
-                            // 1. TRY MAPPING (Part No -> VIN)
-                            var itemMap = allMappings.FirstOrDefault(m => 
-                                SafeNormalize(m.CustomerPartNumber) == normalizedInput || 
-                                SafeNormalize(m.VIN) == normalizedInput);
-                            
-                            if (itemMap != null)
+                            // PRIORITAS 1: Cari di Master Items berdasarkan CustomerPartNumber (Direct Match)
+                            matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.CustomerPartNumber) == normalizedInput);
+                            if (matchedItem != null) finalVin = matchedItem.VIN;
+
+                            // PRIORITAS 2: Cari di ItemMappings berdasarkan CustomerPartNumber
+                            if (matchedItem == null)
                             {
-                                finalVin = itemMap.VIN;
-                                matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == SafeNormalize(finalVin));
+                                itemMap = allMappings.FirstOrDefault(m => SafeNormalize(m.CustomerPartNumber) == normalizedInput);
+                                if (itemMap != null)
+                                {
+                                    finalVin = itemMap.VIN;
+                                    matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == SafeNormalize(finalVin));
+                                }
                             }
 
-                            // 2. TRY MASTER ITEMS BY VIN (Direct Match)
+                            // PRIORITAS 3: Cari di Master Items berdasarkan VIN (Direct Match)
                             if (matchedItem == null)
                             {
                                 matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == normalizedInput);
                                 if (matchedItem != null) finalVin = matchedItem.VIN;
                             }
 
-                            // 3. TRY MASTER ITEMS BY PART NUMBER
+                            // PRIORITAS 4: Cari di ItemMappings berdasarkan VIN
                             if (matchedItem == null)
                             {
-                                matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.CustomerPartNumber) == normalizedInput);
-                                if (matchedItem != null) finalVin = matchedItem.VIN;
+                                var itemMapByVin = allMappings.FirstOrDefault(m => SafeNormalize(m.VIN) == normalizedInput);
+                                if (itemMapByVin != null)
+                                {
+                                    finalVin = itemMapByVin.VIN;
+                                    matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == SafeNormalize(finalVin));
+                                    itemMap = itemMapByVin;
+                                }
                             }
 
-                            // 4. TRY MASTER ITEMS BY ITEM CODE (UUID or specific code)
+                            // PRIORITAS 5: Legacy/ItemCode Match
                             if (matchedItem == null)
                             {
                                 matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.ItemCode) == normalizedInput);
@@ -613,17 +635,17 @@ namespace DeliveryControl.Controllers
                             }
                             else 
                             {
-                                // v12.1: Enrichment - If Master Item has missing PartNo, fill it from Mapping/Excel
-                                if (string.IsNullOrEmpty(matchedItem.CustomerPartNumber))
+                                // v14.0: Aggressive Enrichment - Use the most complete Part Number available
+                                string? suggestedPartNo = (itemMap != null) ? itemMap.CustomerPartNumber : 
+                                                         (targetVin != itemCode && !string.IsNullOrEmpty(itemCode) ? itemCode : null);
+
+                                if (!string.IsNullOrEmpty(suggestedPartNo))
                                 {
-                                    if (itemMap != null) 
+                                    // Update jika kosong ATAU jika Part No baru lebih panjang (lebih lengkap)
+                                    if (string.IsNullOrEmpty(matchedItem.CustomerPartNumber) || 
+                                        suggestedPartNo.Length > matchedItem.CustomerPartNumber.Length)
                                     {
-                                        matchedItem.CustomerPartNumber = itemMap.CustomerPartNumber;
-                                        _context.Update(matchedItem);
-                                    }
-                                    else if (targetVin != itemCode) // itemCode is likely PartNo
-                                    {
-                                        matchedItem.CustomerPartNumber = itemCode;
+                                        matchedItem.CustomerPartNumber = suggestedPartNo;
                                         _context.Update(matchedItem);
                                     }
                                 }

@@ -31,6 +31,7 @@
                         </div>
                     </div>
 
+                    @* 
                     <!-- Part Detail Card (Hidden by default) -->
                     <div id="partDetailContainer" style="display: none;" class="mb-4">
                         <div class="card bg-dark bg-opacity-50 border-primary border-opacity-25 rounded-3">
@@ -80,6 +81,7 @@
                             </div>
                         </div>
                     </div>
+                    *@
 
                     <!-- Label Input Group -->
                     <div class="mb-4">
@@ -287,7 +289,7 @@
                     success: function(response) {
                         if (response.success) {
                             isItemValid = true;
-                            showPartDetails(response);
+                            // showPartDetails(response); // Disabled as requested
                             enableLabelInput();
                             
                             // Workflow: Automatically focus Label for External Scanner

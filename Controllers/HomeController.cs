@@ -66,7 +66,7 @@ public class HomeController : Controller
         
         // HITUNG STATISTIK BERDASARKAN GRUP (MANIFEST)
         var groupedSchedules = activeSchedules
-            .GroupBy(s => new { s.CustomerId, s.Area, Date = s.ScheduledDate.Date })
+            .GroupBy(s => new { s.CustomerId, s.Area, s.Cycle, Date = s.ScheduledDate.Date })
             .Select(g => new { 
                 Schedules = g.ToList(),
                 First = g.First(),
@@ -84,7 +84,7 @@ public class HomeController : Controller
         // Jumlah order yang seharusnya sudah delivered berdasarkan ETD sampai jam sekarang
         // Menggunakan grouping dari all today pickup schedules
         var shouldBeDeliveredCount = todayPickupSchedules
-            .GroupBy(s => new { s.CustomerId, s.Area, Date = s.ScheduledDate.Date })
+            .GroupBy(s => new { s.CustomerId, s.Area, s.Cycle, Date = s.ScheduledDate.Date })
             .Count(g => (g.First().ETD <= now) == true);
         
         // Count Delay Pickup - Berdasarkan jadwal perwakilan grup
@@ -252,7 +252,7 @@ public class HomeController : Controller
         
         // HITUNG STATISTIK BERDASARKAN GRUP (MANIFEST)
         var groupedSchedules = activeSchedules
-            .GroupBy(s => new { s.CustomerId, s.Area, Date = s.ScheduledDate.Date })
+            .GroupBy(s => new { s.CustomerId, s.Area, s.Cycle, Date = s.ScheduledDate.Date })
             .Select(g => new { 
                 Schedules = g.ToList(),
                 First = g.First(),
@@ -269,7 +269,7 @@ public class HomeController : Controller
         
         // Jumlah order yang seharusnya sudah delivered berdasarkan ETD sampai jam sekarang
         var shouldBeDeliveredCount = todayPickupSchedules
-            .GroupBy(s => new { s.CustomerId, s.Area, Date = s.ScheduledDate.Date })
+            .GroupBy(s => new { s.CustomerId, s.Area, s.Cycle, Date = s.ScheduledDate.Date })
             .Count(g => (g.First().ETD <= now) == true);
         
         var delayPickupCount = groupedSchedules.Count(g => 

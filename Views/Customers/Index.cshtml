@@ -59,6 +59,7 @@
                             <th style="width: 40px;">
                                 <input type="checkbox" id="selectAll" class="form-check-input" title="Pilih Semua">
                             </th>
+                            <th class="text-center" style="width: 50px;">NO</th>
                             <th>KODE</th>
                             <th>@Html.DisplayNameFor(model => model.CustomerCode)</th>
                             <th>@Html.DisplayNameFor(model => model.CustomerName)</th>
@@ -75,13 +76,19 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var item in Model)
-                        {
-                            <tr>
-                                <td>
-                                    <input type="checkbox" class="form-check-input row-checkbox" value="@item.CustomerId">
-                                </td>
-                                <td class="fw-bold text-warning">@(item.AutoCode ?? "-")</td>
+                    @{
+                        int pageSize = 20;
+                        int currentPage = ViewBag.CurrentPage as int? ?? 1;
+                        int loopIndex = 0;
+                    }
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td>
+                                <input type="checkbox" class="form-check-input row-checkbox" value="@item.CustomerId">
+                            </td>
+                            <td class="text-center small text-muted">@((currentPage - 1) * pageSize + (++loopIndex))</td>
+                            <td class="fw-bold text-warning">@(item.AutoCode ?? "-")</td>
                                 <td class="fw-bold" style="color: var(--primary-blue);">@item.CustomerCode</td>
                                 <td>@item.CustomerName</td>
                                 <td>@(item.Route ?? "-")</td>
@@ -147,6 +154,13 @@
                     <i class="bi bi-info-circle"></i> Tidak ada data customer yang ditemukan.
                 </div>
             }
+    </div>
+
+    <!-- Pagination -->
+    <div class="row mt-2 mb-4">
+        <div class="col-12">
+            <partial name="_Pager" model='new { CurrentPage = ViewBag.CurrentPage, TotalPages = ViewBag.TotalPages, TotalItems = ViewBag.TotalItems, RouteData = ViewBag.RouteData }' />
+        </div>
     </div>
 </div>
 

@@ -105,7 +105,7 @@ namespace DeliveryControl.Controllers
                     }
                 }
 
-                if (!items.Any()) return Json(new { success = false, message = "Tag internal tidak dikenali." });
+                if (!items.Any()) return Json(new { success = false, message = "TAG / VIN tidak terdaftar (Master)" });
 
                 // 2. Filter Items by active Schedules
                 var activeScheduleItemIds = await _context.DeliverySchedules
@@ -119,6 +119,11 @@ namespace DeliveryControl.Controllers
                 
                 // If NO items in schedule, pick the first one just to show info/metadata
                 var targetItem = itemsInSchedule.FirstOrDefault() ?? items.First();
+
+                // Calculate current stock to show to user
+                var currentStock = await _context.PullingRecords
+                    .CountAsync(r => r.ItemId == targetItem.ItemId && 
+                                    !_context.PreparationRecords.Any(p => p.Tag == r.Tag && p.Label == r.Label));
 
         DeliverySchedule? schedule = null;
 
@@ -155,9 +160,10 @@ namespace DeliveryControl.Controllers
                         itemName = targetItem.ItemName, 
                         vin = targetItem.VIN, 
                         customerPartNumber = targetItem.CustomerPartNumber,
-                        qtyLot = targetItem.QtyLot ?? 0
+                        qtyLot = targetItem.QtyLot ?? 0,
+                        currentStock = currentStock
                     },
-                    message = $"Kanban '{kanban}' tidak cocok dengan Part No atau VIN item ini!" 
+                    message = $"KANBAN tidak sesuai dengan produk!" 
                 });
             }
         }
@@ -184,9 +190,10 @@ namespace DeliveryControl.Controllers
                             itemName = targetItem.ItemName, 
                             vin = targetItem.VIN, 
                             customerPartNumber = targetItem.CustomerPartNumber,
-                            qtyLot = targetItem.QtyLot ?? 0
+                            qtyLot = targetItem.QtyLot ?? 0,
+                            currentStock = currentStock
                         },
-                        message = "Label tidak sesuai dengan Tag produk dan tidak ditemukan di stok!" 
+                        message = "LABEL tidak sesuai dengan produk!" 
                     });
                 }
             }
@@ -202,7 +209,8 @@ namespace DeliveryControl.Controllers
                 item = new { 
                     itemName = targetItem.ItemName, 
                     vin = targetItem.VIN, 
-                    customerPartNumber = targetItem.CustomerPartNumber 
+                    customerPartNumber = targetItem.CustomerPartNumber,
+                    currentStock = currentStock
                 },
                 message = "Dilanjutkan ke scan berikutnya..." 
             });
@@ -230,9 +238,10 @@ namespace DeliveryControl.Controllers
                 item = new { 
                     itemName = targetItem.ItemName, 
                     vin = targetItem.VIN, 
-                    customerPartNumber = targetItem.CustomerPartNumber 
+                    customerPartNumber = targetItem.CustomerPartNumber,
+                    currentStock = currentStock
                 },
-                message = $"Item valid untuk {targetItem.Customer}, tapi tidak ada jadwal aktif saat ini." 
+                message = "Produk OK, tapi JADWAL tidak ditemukan" 
             });
         }
 
@@ -242,7 +251,7 @@ namespace DeliveryControl.Controllers
                     success = true, 
                     found = true,
                     step = "complete",
-                    item = new { targetItem.ItemName, targetItem.VIN, targetItem.CustomerPartNumber, targetItem.QtyLot, TargetPartNo = !string.IsNullOrEmpty(targetItem.CustomerPartNumber) ? targetItem.CustomerPartNumber : targetItem.VIN },
+                    item = new { targetItem.ItemName, targetItem.VIN, targetItem.CustomerPartNumber, targetItem.QtyLot, currentStock, TargetPartNo = !string.IsNullOrEmpty(targetItem.CustomerPartNumber) ? targetItem.CustomerPartNumber : targetItem.VIN },
                     schedule = new { 
                         schedule.ScheduleId, 
                         schedule.ScheduleNumber, 
@@ -293,7 +302,7 @@ namespace DeliveryControl.Controllers
                     }
                 }
 
-        if (!items.Any()) return Json(new { success = false, message = "Tag tidak dikenali." });
+        if (!items.Any()) return Json(new { success = false, message = "TAG / VIN tidak terdaftar (Master)" });
 
         // For now, assume the first item match is the target (usually VIN is unique)
         var item = items.First();
@@ -323,19 +332,19 @@ namespace DeliveryControl.Controllers
         }
         else
         {
-            return Json(new { success = false, message = $"Validasi Gagal! Kanban '{record.Kanban}' tidak cocok dengan Part No atau VIN item ini." });
+            return Json(new { success = false, message = $"KANBAN tidak sesuai dengan produk!" });
         }
 
         if (schedule == null) 
         {
-            return Json(new { success = false, message = $"Tidak ada jadwal aktif (FIFO) untuk item '{item.VIN}' / '{item.CustomerPartNumber}'." });
+            return Json(new { success = false, message = "Produk OK, tapi JADWAL tidak ditemukan" });
         }
 
         // --- VALIDASI 1: Cek apakah kebutuhan QTY sudah terpenuhi ---
         var dItem = schedule.DeliveryItems.FirstOrDefault(di => di.ItemId == item.ItemId);
         if (dItem != null && (dItem.ActualQuantity ?? 0) >= dItem.Quantity)
         {
-            return Json(new { success = false, message = $"Kebutuhan item '{item.ItemName}' ({dItem.Quantity} pcs) sudah terpenuhi untuk jadwal ini!" });
+            return Json(new { success = false, message = $"QTY sudah CUKUP untuk jadwal ini" });
         }
 
         // --- VALIDASI 2: Cek Saldo Stok Riil (Per Label & FIFO) ---
@@ -389,7 +398,7 @@ namespace DeliveryControl.Controllers
             else
             {
                 // CASE C: Benar-benar habis
-                return Json(new { success = false, message = $"STOK HABIS! Tidak ada stok tersedia untuk Tag '{record.Tag}' di sistem." });
+                return Json(new { success = false, message = "STOCK tidak tersedia di Rak" });
             }
         }
 

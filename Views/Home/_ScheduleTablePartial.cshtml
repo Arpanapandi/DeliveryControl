@@ -48,7 +48,7 @@
     var tomorrow = today.AddDays(1);
 }
 
-@foreach (var group in Model.GroupBy(s => new { s.CustomerId, s.Area, Date = s.ScheduledDate.Date }))
+@foreach (var group in Model.GroupBy(s => new { s.CustomerId, s.Area, s.Cycle, Date = s.ScheduledDate.Date }))
 {
     var schedules = group.ToList();
     var item = schedules.First();

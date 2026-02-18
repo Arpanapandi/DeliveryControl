@@ -200,6 +200,13 @@
         </div>
     </div>
 </div>
+
+<!-- Pagination -->
+<div class="row mt-2 mb-4">
+    <div class="col-12 text-center">
+        <partial name="_Pager" model='new { CurrentPage = ViewBag.CurrentPage, TotalPages = ViewBag.TotalPages, TotalItems = ViewBag.TotalItems, RouteData = ViewBag.RouteData }' />
+    </div>
+</div>
 </div>
 
 @section Scripts {
@@ -220,9 +227,11 @@
                 const date = $('input[name="date"]').val() || '';
                 const period = $('select[name="period"]').val() || 'Day';
                 const plant = "@Model.PlantName";
+                const urlParams = new URLSearchParams(window.location.search);
+                const pageNumber = urlParams.get('pageNumber') || '1';
                 
                 $.ajax({
-                    url: `/Stock/${plant}?date=${date}&period=${period}`,
+                    url: `/Stock/${plant}?date=${date}&period=${period}&pageNumber=${pageNumber}`,
                     type: 'GET',
                     success: function (html) {
                         const newContent = $(html).find('#transactionLogsContent').html();

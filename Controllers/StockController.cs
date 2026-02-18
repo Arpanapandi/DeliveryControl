@@ -14,30 +14,30 @@ namespace DeliveryControl.Controllers
             _context = context;
         }
 
-        public async Task<IActionResult> Index(string plant = "Overall", DateTime? date = null, string period = "Day")
+        public async Task<IActionResult> Index(string plant = "Overall", DateTime? date = null, string period = "Day", int pageNumber = 1)
         {
-            return View(await GetStockViewModel(plant, date, period));
+            return View(await GetStockViewModel(plant, date, period, pageNumber));
         }
 
-        public async Task<IActionResult> Molded(DateTime? date, string period = "Day")
+        public async Task<IActionResult> Molded(DateTime? date, string period = "Day", int pageNumber = 1)
         {
             ViewBag.SelectedDate = date?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
             ViewBag.SelectedPeriod = period;
-            return View(await GetStockViewModel("Molded", date, period));
+            return View(await GetStockViewModel("Molded", date, period, pageNumber));
         }
 
-        public async Task<IActionResult> Hose(DateTime? date, string period = "Day")
+        public async Task<IActionResult> Hose(DateTime? date, string period = "Day", int pageNumber = 1)
         {
             ViewBag.SelectedDate = date?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
             ViewBag.SelectedPeriod = period;
-            return View(await GetStockViewModel("Hose", date, period));
+            return View(await GetStockViewModel("Hose", date, period, pageNumber));
         }
 
-        public async Task<IActionResult> RVI(DateTime? date, string period = "Day")
+        public async Task<IActionResult> RVI(DateTime? date, string period = "Day", int pageNumber = 1)
         {
             ViewBag.SelectedDate = date?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
             ViewBag.SelectedPeriod = period;
-            return View(await GetStockViewModel("RVI", date, period));
+            return View(await GetStockViewModel("RVI", date, period, pageNumber));
         }
 
         public async Task<IActionResult> ExportToExcel(string plant = "Overall", DateTime? date = null, string period = "Day")
@@ -274,7 +274,7 @@ namespace DeliveryControl.Controllers
             public int? RackMax { get; set; }
         }
 
-        private async Task<StockDashboardViewModel> GetStockViewModel(string plant, DateTime? searchDate = null, string period = "Day")
+        private async Task<StockDashboardViewModel> GetStockViewModel(string plant, DateTime? searchDate = null, string period = "Day", int pageNumber = 1)
         {
             var today = DateTime.Today;
             var isFilteredByDate = searchDate.HasValue;
@@ -317,11 +317,11 @@ namespace DeliveryControl.Controllers
             var preparationQueryFiltered = preparationQueryAll.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
 
             // Execute queries
-            var allPullingPotential = await pullingQueryAll.OrderBy(r => r.CreatedDate).ToListAsync();
+            var allPullingPotential = await pullingQueryAll.OrderBy(r => r.CreatedDate).ThenBy(r => r.PullingId).ToListAsync();
             // Critical Change: Fetch ALL preparations for calculation
-            var allPreparationAllTime = await preparationQueryAll.OrderBy(r => r.CreatedDate).ToListAsync(); 
+            var allPreparationAllTime = await preparationQueryAll.OrderBy(r => r.CreatedDate).ThenBy(r => r.PreparationId).ToListAsync(); 
             // Fetch filtered for display
-            var allPreparationInRange = await preparationQueryFiltered.OrderBy(r => r.CreatedDate).ToListAsync();
+            var allPreparationInRange = await preparationQueryFiltered.OrderBy(r => r.CreatedDate).ThenBy(r => r.PreparationId).ToListAsync();
 
             var consumedPullingIds = new HashSet<int>();
 
@@ -367,7 +367,7 @@ namespace DeliveryControl.Controllers
             // GROUP BY LABEL: Agar tampilan di dashboard digabung per Label
             var groupedByLabel = inStockPieces.GroupBy(p => new { p.ItemId, Label = (p.Label ?? "").Trim().ToUpper() });
 
-            foreach (var group in groupedByLabel.OrderByDescending(g => g.Max(p => p.CreatedDate)))
+            foreach (var group in groupedByLabel)
             {
                 var latestPiece = group.OrderByDescending(p => p.CreatedDate).First();
                 var status = latestPiece.ItemId.HasValue ? itemStatuses.GetValueOrDefault(latestPiece.ItemId.Value, "None") : "None";
@@ -403,14 +403,43 @@ namespace DeliveryControl.Controllers
                     Status = status
                 });
             }
+            
+            // Sort by Plant -> Location -> Label for a stable dashboard view
+            stockDetails = stockDetails
+                .OrderBy(s => s.Plant)
+                .ThenBy(s => s.Location)
+                .ThenBy(s => s.ItemName)
+                .ThenBy(s => s.Label)
+                .ToList();
 
-            for (int i = 0; i < stockDetails.Count; i++) stockDetails[i].No = i + 1;
+            var totalItems = stockDetails.Count;
+            int pageSize = 20;
+
+            var pagedStockDetails = stockDetails
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            for (int i = 0; i < pagedStockDetails.Count; i++) pagedStockDetails[i].No = ((pageNumber - 1) * pageSize) + i + 1;
+
+            ViewBag.CurrentPage = pageNumber;
+            ViewBag.TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+            ViewBag.TotalItems = totalItems;
+            ViewBag.RouteData = new Dictionary<string, string> { 
+                { "plant", plant },
+                { "date", searchDate?.ToString("yyyy-MM-dd") },
+                { "period", period }
+            };
 
             return new StockDashboardViewModel
             {
-                PlantName = plant, StockDetails = stockDetails, ShortageCount = shortageCount, NormalCount = normalCount, OverCount = overCount, SearchDate = searchDate,
-                RecentPulling = isFilteredByDate ? inStockPieces.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ToList() : inStockPieces.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
-                RecentPreparation = isFilteredByDate ? allPreparationInRange.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ToList() : allPreparationInRange.OrderByDescending(r => r.CreatedDate).Take(10).ToList(),
+                PlantName = plant, StockDetails = pagedStockDetails, ShortageCount = shortageCount, NormalCount = normalCount, OverCount = overCount, SearchDate = searchDate,
+                RecentPulling = isFilteredByDate 
+                    ? inStockPieces.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PullingId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList() 
+                    : inStockPieces.OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PullingId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList(),
+                RecentPreparation = isFilteredByDate 
+                    ? allPreparationInRange.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PreparationId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList() 
+                    : allPreparationInRange.OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PreparationId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList(),
                 TotalPullingToday = await _context.PullingRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= startDate && r.CreatedDate <= endDate),
                 TotalPreparationToday = await _context.PreparationRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= startDate && r.CreatedDate <= endDate),
                 Period = period

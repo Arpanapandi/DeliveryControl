@@ -473,7 +473,7 @@ namespace DeliveryControl.Controllers
         }
 
         // GET: DeliverySchedules
-        public async Task<IActionResult> Index(DateTime? startDate, DateTime? endDate, int? customerId, string status)
+        public async Task<IActionResult> Index(DateTime? startDate, DateTime? endDate, int? customerId, string status, int pageNumber = 1)
         {
             var customerList = await _context.Customers
                 .Where(c => c.IsActive)
@@ -525,7 +525,28 @@ namespace DeliveryControl.Controllers
                 schedules = schedules.Where(s => s.Status == status);
             }
 
-            return View(await schedules.OrderBy(s => s.ScheduledDate).ThenBy(s => s.ETD).ToListAsync());
+            var totalItems = await schedules.CountAsync();
+            int pageSize = 20;
+
+            var items = await schedules
+                .OrderBy(s => s.ScheduledDate)
+                .ThenBy(s => s.ETD)
+                .ThenBy(s => s.ScheduleId)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            ViewBag.CurrentPage = pageNumber;
+            ViewBag.TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+            ViewBag.TotalItems = totalItems;
+            ViewBag.RouteData = new Dictionary<string, string> { 
+                { "startDate", startDate?.ToString("yyyy-MM-dd") },
+                { "endDate", endDate?.ToString("yyyy-MM-dd") },
+                { "customerId", customerId?.ToString() },
+                { "status", status }
+            };
+
+            return View(items);
         }
 
         // GET: DeliverySchedules/Dashboard

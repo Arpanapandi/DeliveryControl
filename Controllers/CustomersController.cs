@@ -15,7 +15,7 @@ namespace DeliveryControl.Controllers
         }
 
         // GET: Customers
-        public async Task<IActionResult> Index(string searchString)
+        public async Task<IActionResult> Index(string searchString, int pageNumber = 1)
         {
             ViewData["CurrentFilter"] = searchString;
 
@@ -29,7 +29,22 @@ namespace DeliveryControl.Controllers
                                        || c.CustomerName.Contains(searchString));
             }
 
-            return View(await customers.OrderBy(c => c.CustomerCode).ToListAsync());
+            var totalItems = await customers.CountAsync();
+            int pageSize = 20;
+
+            var items = await customers
+                .OrderBy(c => c.CustomerCode)
+                .ThenBy(c => c.CustomerId)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            ViewBag.CurrentPage = pageNumber;
+            ViewBag.TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+            ViewBag.TotalItems = totalItems;
+            ViewBag.RouteData = new Dictionary<string, string> { { "searchString", searchString } };
+
+            return View(items);
         }
 
         // GET: Customers/Details/5

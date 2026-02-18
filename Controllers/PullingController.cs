@@ -40,7 +40,7 @@ namespace DeliveryControl.Controllers
 
             if (item == null)
             {
-                return Json(new { success = false, message = $"Item dengan VIN '{tag}' tidak ditemukan." });
+                return Json(new { success = false, message = "VIN tidak ditemukan di Master Data" });
             }
 
             // Calculate current stock for status
@@ -91,7 +91,7 @@ namespace DeliveryControl.Controllers
 
                 if (string.IsNullOrEmpty(record.Tag))
                 {
-                    return Json(new { success = false, message = "Input Tag/VIN tidak boleh kosong." });
+                    return Json(new { success = false, message = "Input TAG / VIN kosong!" });
                 }
 
                 // 1. Identification & Item Lookup
@@ -113,7 +113,7 @@ namespace DeliveryControl.Controllers
                 else
                 {
                     // Item not found in master
-                    return Json(new { success = false, message = $"VIN '{record.Tag}' tidak ditemukan di Master Data." });
+                    return Json(new { success = false, message = "VIN tidak ditemukan di Master Data" });
                 }
 
                 record.CreatedDate = DateTime.Now;

@@ -1,4 +1,4 @@
-@model IEnumerable<DeliveryControl.Models.DeliverySchedule>
+@model IEnumerable<DeliveryControl.Models.ViewModels.DriverTripViewModel>
 
 @{
     ViewData["Title"] = "Portal Preparation - Overview Detail";
@@ -261,33 +261,52 @@
     else
     {
         <div class="gallery-grid">
-            @foreach (var schedule in Model.OrderBy(s => ((s.Status == "Preparing" || s.Status == "In Progress" || s.PreparationStatus == "Preparing" || s.PreparationStatus == "In Progress") && s.PreparationStatus != "Prepared" && s.Status != "Completed") ? 0 : 
-                                                         (s.Status == "Completed" || s.PreparationStatus == "Prepared") ? 2 : 1)
-                                            .ThenBy(s => s.ScheduledDate).ThenBy(s => s.ScheduleNumber))
+            @foreach (var trip in Model)
             {
-                var hasEnteredDock = schedule.ActualEnterDockTime.HasValue;
-                
-                var headerClass = "header-scheduled";
-                if (schedule.PreparationStatus == "Preparing" || schedule.PreparationStatus == "In Progress" || schedule.Status == "Preparing" || schedule.Status == "In Progress") { headerClass = "header-preparing"; }
-                if (schedule.PreparationStatus == "Prepared" || schedule.Status == "Completed") { headerClass = "header-prepared"; }
+                var firstSch = trip.Schedules.FirstOrDefault();
+                if (firstSch == null) continue;
 
-                <div class="prep-card @(schedule.Status == "Preparing" || schedule.Status == "In Progress" ? "highlight-card border-info" : (schedule.PreparationStatus == "Prepared" || schedule.Status == "Completed" ? "border-success" : "border-warning"))" 
-                     id="card-@schedule.ScheduleId" 
-                     data-schedule-number="@schedule.ScheduleNumber">
+                var isCompleted = trip.OverallStatus == "Completed";
+                var isInProgress = trip.OverallStatus == "In Progress";
+                var isScheduled = trip.OverallStatus == "Scheduled";
+                
+                // Determine CSS classes based on Group Status
+                var headerClass = "header-scheduled";
+                var borderClass = "border-warning";
+
+                if (isInProgress) 
+                { 
+                    headerClass = "header-preparing"; 
+                    borderClass = "border-info";
+                }
+                else if (isCompleted) 
+                { 
+                    headerClass = "header-prepared"; 
+                    borderClass = "border-success";
+                }
+
+                <div class="prep-card @borderClass" 
+                     id="card-@trip.RepresentativeScheduleId" 
+                     data-schedule-number="@firstSch.ScheduleNumber">
+                    
                     <div class="prep-card-header @headerClass">
-                        <span>@schedule.ScheduleNumber</span>
-                        <span class="badge-status">@((schedule.Status == "In Progress" || schedule.Status == "Preparing" || schedule.PreparationStatus == "In Progress" || schedule.PreparationStatus == "Preparing") ? "PREPARING" : schedule.Status?.ToUpper())</span>
+                        <div class="d-flex flex-wrap gap-1 align-items-center">
+                            @foreach(var m in trip.Schedules) {
+                                <span class="badge bg-light text-dark opacity-75" style="font-size: 0.8rem; border: 1px solid rgba(0,0,0,0.1);">@m.ScheduleNumber</span>
+                            }
+                        </div>
+                        <span class="badge-status ms-2">@trip.OverallStatus.ToUpper()</span>
                     </div>
                     
                     <div class="prep-card-body">
                         <div class="customer-name mb-1">
-                            <i class="bi bi-building"></i> @(schedule.Customer?.CustomerName ?? "Unknown")
+                            <i class="bi bi-building"></i> @trip.CustomerName
                         </div>
 
                         <!-- DELIVERY BANNER -->
-                        @if (schedule.PickupTime.HasValue)
+                        @if (trip.PickupTime.HasValue)
                         {
-                            var pickupDate = schedule.PickupTime.Value.Date;
+                            var pickupDate = trip.PickupTime.Value.Date;
                             var isToday = pickupDate == DateTime.Today;
                             var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
                             var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
@@ -299,7 +318,7 @@
                                         <i class="bi bi-calendar-check me-1"></i> <strong>Tanggal Delivery:</strong>
                                     </small>
                                     <span class="badge @badgeColor">
-                                        @dateLabel - @schedule.PickupTime.Value.ToString("HH:mm")
+                                        @dateLabel - @trip.PickupTime.Value.ToString("HH:mm")
                                     </span>
                                 </div>
                             </div>
@@ -307,17 +326,17 @@
 
                         <div class="mb-3">
                             <div class="cycle-label">Cycle:</div>
-                            <div class="cycle-value">@schedule.Cycle</div>
+                            <div class="cycle-value">@trip.Cycle</div>
                         </div>
 
                         <div class="detail-row">
                             <div class="detail-label">Route:</div>
-                            <div class="detail-value text-info fw-bold">@schedule.Route</div>
+                            <div class="detail-value text-info fw-bold">@trip.Route</div>
                         </div>
 
                         <div class="detail-row">
                             <div class="detail-label">Area:</div>
-                            <div class="detail-value"><i class="bi bi-geo-alt-fill icon-spacing"></i>@schedule.Area</div>
+                            <div class="detail-value"><i class="bi bi-geo-alt-fill icon-spacing"></i>@trip.Area</div>
                         </div>
                         
                         <hr class="border-secondary opacity-25">
@@ -326,20 +345,20 @@
                             <div class="col-6">
                                 <div class="detail-row mb-0">
                                     <div class="detail-label"><i class="bi bi-box-arrow-in-right icon-spacing"></i>Enter Dock:</div>
-                                    <div class="detail-value">@(schedule.EnterDockTime?.ToString("HH:mm") ?? "-")</div>
+                                    <div class="detail-value">@(trip.Schedules.Any(s => s.ActualEnterDockTime.HasValue) ? trip.Schedules.First(s => s.ActualEnterDockTime.HasValue).ActualEnterDockTime?.ToString("HH:mm") : (trip.Schedules.FirstOrDefault()?.EnterDockTime?.ToString("HH:mm") ?? "-"))</div>
                                 </div>
                             </div>
                             <div class="col-6">
                                 <div class="detail-row mb-0">
                                     <div class="detail-label"><i class="bi bi-truck icon-spacing"></i>Pickup Time:</div>
-                                    <div class="detail-value">@(schedule.PickupTime?.ToString("HH:mm") ?? "-")</div>
+                                    <div class="detail-value">@(trip.PickupTime?.ToString("HH:mm") ?? "-")</div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- ITEMS & PROGRESS SECTION -->
+                        <!-- ITEMS & PROGRESS SECTION (Aggregate from ALL schedules in group) -->
                         <div class="card-items-list">
-                            @foreach (var item in schedule.DeliveryItems)
+                            @foreach (var item in trip.Schedules.SelectMany(s => s.DeliveryItems))
                             {
                                 var percent = (item.Quantity > 0) ? ((double)(item.ActualQuantity ?? 0) / (double)item.Quantity * 100) : 0;
                                 <div class="card-item-progress" data-vin="@(item.Item?.VIN ?? "")">
@@ -372,7 +391,7 @@
                     </div>
 
                     <div class="prep-card-footer">
-                        @if (!hasEnteredDock)
+                        @if (!trip.Schedules.All(s => s.ActualEnterDockTime.HasValue))
                         {
                             <div class="text-center text-white-50">
                                 <small><i class="bi bi-upc-scan me-1"></i> SCAN SEMUA ITEM UNTUK SELESAI</small>
@@ -382,7 +401,7 @@
                         {
                             <div class="text-center">
                                 <span class="badge bg-success w-100 py-3" style="font-size: 0.9rem; border-radius: 8px;">
-                                    <i class="bi bi-check-circle-fill me-2"></i> MASUK DOCK: @(schedule.ActualEnterDockTime?.ToString("HH:mm") ?? "-")
+                                    <i class="bi bi-check-circle-fill me-2"></i> MASUK DOCK: @(trip.Schedules.First(s => s.ActualEnterDockTime.HasValue).ActualEnterDockTime?.ToString("HH:mm") ?? "-")
                                 </span>
                             </div>
                         }
