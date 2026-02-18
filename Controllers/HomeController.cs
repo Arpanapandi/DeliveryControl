@@ -64,87 +64,54 @@ public class HomeController : Controller
             .Where(s => s.Status != "Cancelled")
             .ToList();
         
-        // Count Completed - berdasarkan actual times (prioritas lebih tinggi dari database status)
-        var completedCount = activeSchedules.Count(s => GetDisplayStatus(s) == "Completed");
+        // HITUNG STATISTIK BERDASARKAN GRUP (MANIFEST)
+        var groupedSchedules = activeSchedules
+            .GroupBy(s => new { s.CustomerId, s.Area, Date = s.ScheduledDate.Date })
+            .Select(g => new { 
+                Schedules = g.ToList(),
+                First = g.First(),
+                DisplayStatus = g.All(s => GetDisplayStatus(s) == "Completed") ? "Completed" : 
+                               (g.Any(s => GetDisplayStatus(s) == "In Progress") ? "In Progress" : "Scheduled")
+            })
+            .ToList();
+
+        // Count Completed - Satu grup dianggap Completed jika SEMUA schedule di dalamnya selesai
+        var completedCount = groupedSchedules.Count(g => g.DisplayStatus == "Completed");
         
-        // Count In Progress - berdasarkan actual times (prioritas lebih tinggi dari database status)
-        var inProgressCount = activeSchedules.Count(s => GetDisplayStatus(s) == "In Progress");
+        // Count In Progress - Satu grup dianggap In Progress jika ada yang mulai tapi belum semua selesai
+        var inProgressCount = groupedSchedules.Count(g => g.DisplayStatus == "In Progress");
         
         // Jumlah order yang seharusnya sudah delivered berdasarkan ETD sampai jam sekarang
-        // Menggunakan semua schedule pickup hari ini (termasuk yang Cancelled) agar sesuai total per jam
-        var shouldBeDeliveredCount = todayPickupSchedules.Count(s => s.ETD.HasValue && s.ETD.Value <= now);
+        // Menggunakan grouping dari all today pickup schedules
+        var shouldBeDeliveredCount = todayPickupSchedules
+            .GroupBy(s => new { s.CustomerId, s.Area, Date = s.ScheduledDate.Date })
+            .Count(g => (g.First().ETD <= now) == true);
         
-        // Count Delay Pickup - KRITERIA BARU:
-        // 1. Belum ada ActualStartTime (belum tiba)
-        // 2. Ada PickupTime
-        // 3. Waktu sekarang sudah lewat dari PickupTime
-        var delayPickupSchedules = activeSchedules
-            .Where(s => s.ActualStartTime == null && 
-                       s.PickupTime != null && 
-                       now > s.PickupTime.Value)
-            .ToList();
+        // Count Delay Pickup - Berdasarkan jadwal perwakilan grup
+        var delayPickupCount = groupedSchedules.Count(g => 
+            g.First.ActualStartTime == null && 
+            g.First.PickupTime != null && 
+            now > g.First.PickupTime.Value &&
+            g.DisplayStatus != "Completed");
         
-        var delayPickupCount = delayPickupSchedules.Count;
+        // Count Delay Prepare (Not Arrived) - Berdasarkan jadwal perwakilan grup
+        var delayPrepareCount = groupedSchedules.Count(g => 
+            g.First.ActualEnterDockTime == null && 
+            g.First.EnterDockTime != null && 
+            now > g.First.EnterDockTime.Value &&
+            g.DisplayStatus != "Completed");
         
-        // Count Delay Prepare (belum masuk dock sampai lewat dari jadwal Enter Dock)
-        // KRITERIA:
-        // 1. Belum ada ActualEnterDockTime (belum masuk dock)
-        // 2. Ada EnterDockTime (ada jadwal masuk dock)
-        // 3. Waktu sekarang sudah lewat dari EnterDockTime
-        // 4. Belum completed (masih aktif) - gunakan GetDisplayStatus untuk konsistensi
-        var delayPrepareSchedules = activeSchedules
-            .Where(s => s.ActualEnterDockTime == null && 
-                       s.EnterDockTime != null && 
-                       now > s.EnterDockTime.Value &&
-                       GetDisplayStatus(s) != "Completed")
-            .ToList();
-        
-        var delayPrepareCount = delayPrepareSchedules.Count;
-        
-        // Count Prepared (Siap Kirim) - ALL ITEMS SCANNED
-        var preparedCount = activeSchedules.Count(s => s.PreparationStatus == "Prepared" && GetDisplayStatus(s) != "Completed");
-        
-        // Log untuk debugging
-        _logger.LogWarning("=== DASHBOARD STATISTICS ===");
-        _logger.LogWarning($"Current Time: {now:yyyy-MM-dd HH:mm:ss}");
-        _logger.LogWarning($"Total Active Schedules: {activeSchedules.Count}");
-        _logger.LogWarning($"Completed: {completedCount}");
-        _logger.LogWarning($"In Progress: {inProgressCount}");
-        _logger.LogWarning($"DELAY PICKUP: {delayPickupCount}");
-        _logger.LogWarning($"DELAY PREPARE: {delayPrepareCount}");
-        
-        // Log detail delay prepare schedules
-        if (delayPrepareSchedules.Any())
-        {
-            _logger.LogWarning("=== DELAY PREPARE DETAILS ===");
-            foreach (var s in delayPrepareSchedules)
-            {
-                if (s.EnterDockTime.HasValue)
-                {
-                    _logger.LogWarning($"  - {s.ScheduleNumber}: EnterDock={s.EnterDockTime.Value:HH:mm}, Delay={(now - s.EnterDockTime.Value).TotalMinutes:F0} minutes, Status={s.DriverStatus ?? s.Status}");
-                }
-            }
-        }
-        
-        // Log detail delay pickup schedules
-        if (delayPickupSchedules.Any())
-        {
-            _logger.LogWarning("=== DELAY PICKUP DETAILS ===");
-            foreach (var s in delayPickupSchedules)
-            {
-                if (s.PickupTime.HasValue)
-                {
-                    _logger.LogWarning($"  - {s.ScheduleNumber}: Pickup={s.PickupTime.Value:HH:mm}, Delay={(now - s.PickupTime.Value).TotalMinutes:F0} minutes");
-                }
-            }
-        }
+        // Count Prepared (Siap Kirim) - Satu grup dianggap Prepared jika SEMUA schedule di dalamnya "Prepared"
+        var preparedCount = groupedSchedules.Count(g => 
+            g.Schedules.All(s => s.PreparationStatus == "Prepared") && 
+            g.DisplayStatus != "Completed");
         
         // Set ViewBag
-        ViewBag.TodaySchedules = activeSchedules.Count;
+        ViewBag.TodaySchedules = groupedSchedules.Count;
         ViewBag.CompletedCount = completedCount;
         ViewBag.InProgressCount = inProgressCount;
         ViewBag.DelayPickupCount = delayPickupCount;
-        ViewBag.NotArrivedCount = delayPrepareCount; // Delay Prepare count
+        ViewBag.NotArrivedCount = delayPrepareCount;
         ViewBag.PreparedCount = preparedCount;
         ViewBag.ShouldBeDeliveredCount = shouldBeDeliveredCount;
         
@@ -283,43 +250,52 @@ public class HomeController : Controller
             .Where(s => s.Status != "Cancelled")
             .ToList();
         
-        // Count Completed - berdasarkan actual times (prioritas lebih tinggi dari database status)
-        var completedCount = activeSchedules.Count(s => GetDisplayStatus(s) == "Completed");
+        // HITUNG STATISTIK BERDASARKAN GRUP (MANIFEST)
+        var groupedSchedules = activeSchedules
+            .GroupBy(s => new { s.CustomerId, s.Area, Date = s.ScheduledDate.Date })
+            .Select(g => new { 
+                Schedules = g.ToList(),
+                First = g.First(),
+                DisplayStatus = g.All(s => GetDisplayStatus(s) == "Completed") ? "Completed" : 
+                               (g.Any(s => GetDisplayStatus(s) == "In Progress") ? "In Progress" : "Scheduled")
+            })
+            .ToList();
+
+        // Count Completed - Satu grup dianggap Completed jika SEMUA schedule di dalamnya selesai
+        var completedCount = groupedSchedules.Count(g => g.DisplayStatus == "Completed");
         
-        // Count In Progress - berdasarkan actual times (prioritas lebih tinggi dari database status)
-        var inProgressCount = activeSchedules.Count(s => GetDisplayStatus(s) == "In Progress");
+        // Count In Progress - Satu grup dianggap In Progress jika ada yang mulai tapi belum semua selesai
+        var inProgressCount = groupedSchedules.Count(g => g.DisplayStatus == "In Progress");
         
         // Jumlah order yang seharusnya sudah delivered berdasarkan ETD sampai jam sekarang
-        // Menggunakan semua schedule pickup hari ini (termasuk yang Cancelled) agar konsisten dengan tampilan total per jam
-        var shouldBeDeliveredCount = todayPickupSchedules.Count(s => s.ETD.HasValue && s.ETD.Value <= now);
+        var shouldBeDeliveredCount = todayPickupSchedules
+            .GroupBy(s => new { s.CustomerId, s.Area, Date = s.ScheduledDate.Date })
+            .Count(g => (g.First().ETD <= now) == true);
         
-        var delayPickupCount = activeSchedules
-            .Count(s => s.ActualStartTime == null && 
-                       s.PickupTime != null && 
-                       now > s.PickupTime.Value);
+        var delayPickupCount = groupedSchedules.Count(g => 
+            g.First.ActualStartTime == null && 
+            g.First.PickupTime != null && 
+            now > g.First.PickupTime.Value &&
+            g.DisplayStatus != "Completed");
         
-        // Count Delay Prepare (belum masuk dock sampai lewat dari jadwal Enter Dock)
-        // KRITERIA:
-        // 1. Belum ada ActualEnterDockTime (belum masuk dock)
-        // 2. Ada EnterDockTime (ada jadwal masuk dock)
-        // 3. Waktu sekarang sudah lewat dari EnterDockTime
-        // 4. Belum completed (masih aktif) - gunakan GetDisplayStatus untuk konsistensi
-        var delayPrepareCount = activeSchedules
-            .Count(s => s.ActualEnterDockTime == null && 
-                       s.EnterDockTime != null && 
-                       now > s.EnterDockTime.Value &&
-                       GetDisplayStatus(s) != "Completed");
+        var delayPrepareCount = groupedSchedules.Count(g => 
+            g.First.ActualEnterDockTime == null && 
+            g.First.EnterDockTime != null && 
+            now > g.First.EnterDockTime.Value &&
+            g.DisplayStatus != "Completed");
 
-        var preparedCount = activeSchedules.Count(s => s.PreparationStatus == "Prepared" && GetDisplayStatus(s) != "Completed");
+        var preparedCount = groupedSchedules.Count(g => 
+            g.Schedules.All(s => s.PreparationStatus == "Prepared") && 
+            g.DisplayStatus != "Completed");
         
         return Json(new
         {
-            todaySchedules = activeSchedules.Count,
+            todaySchedules = groupedSchedules.Count,
             completedCount,
             shouldBeDeliveredCount,
             inProgressCount,
             delayPickupCount,
-            notArrivedCount = delayPrepareCount, // Delay Prepare count
+            notArrivedCount = delayPrepareCount,
             preparedCount
         });
     }

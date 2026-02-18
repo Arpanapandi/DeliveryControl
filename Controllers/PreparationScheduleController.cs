@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using DeliveryControl.Data;
 using DeliveryControl.Models;
@@ -136,6 +136,15 @@ namespace DeliveryControl.Controllers
                     deliverySchedule.TotalTargetQuantity = (int)deliverySchedule.DeliveryItems.Sum(di => di.Quantity);
 
                     await _context.SaveChangesAsync();
+
+                    // Notify Dashboard via SignalR
+                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    {
+                        Action = "create",
+                        Message = $"New schedule {deliverySchedule.ScheduleNumber} created manually.",
+                        Timestamp = DateTime.Now
+                    });
+
                     return RedirectToAction(nameof(Index));
                 }
             }
@@ -162,6 +171,14 @@ namespace DeliveryControl.Controllers
             {
                 _context.DeliverySchedules.Remove(deliverySchedule);
                 await _context.SaveChangesAsync();
+
+                // Notify Dashboard via SignalR
+                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                {
+                    Action = "delete",
+                    Message = $"Preparation schedule {deliverySchedule.ScheduleNumber} deleted.",
+                    Timestamp = DateTime.Now
+                });
             }
             return RedirectToAction(nameof(Index));
         }
@@ -214,7 +231,7 @@ namespace DeliveryControl.Controllers
                 {
                     if (model.ScheduledDate.DayOfWeek == DayOfWeek.Saturday || model.ScheduledDate.DayOfWeek == DayOfWeek.Sunday)
                     {
-                        TempData["ErrorMessage"] = "Mode otomatis hanya berlaku untuk hari Senin–Jumat.";
+                        TempData["ErrorMessage"] = "Mode otomatis hanya berlaku untuk hari Seninâ€“Jumat.";
                         return RedirectToAction(nameof(BulkCreate), new { selectedDate = model.ScheduledDate });
                     }
 
@@ -351,9 +368,9 @@ namespace DeliveryControl.Controllers
 
                 // Instructions
                 worksheet.Cell(4, 2).Value = "CATATAN PENGISIAN:";
-                worksheet.Cell(5, 2).Value = "• Kolom DOCK berisi Kode Lokasi Dock.";
-                worksheet.Cell(6, 2).Value = "• Kolom NAMA CUSTOMER dan PART NO / VIN Wajib diisi.";
-                worksheet.Cell(7, 2).Value = "• Qty/Lot dan Kanban otomatis terisi dari Master Item.";
+                worksheet.Cell(5, 2).Value = "â€¢ Kolom DOCK berisi Kode Lokasi Dock.";
+                worksheet.Cell(6, 2).Value = "â€¢ Kolom NAMA CUSTOMER dan PART NO / VIN Wajib diisi.";
+                worksheet.Cell(7, 2).Value = "â€¢ Qty/Lot dan Kanban otomatis terisi dari Master Item.";
 
                 using (var stream = new MemoryStream())
                 {
@@ -468,7 +485,9 @@ namespace DeliveryControl.Controllers
                             CustName = FindCol("NAMA CUSTOMER", "NAMA", "CUSTOMER"),
                             Route = FindCol("ROUTE", "RUTE"),
                             Cycle = FindCol("CYCLE", "SIKLUS"),
-                            ItemPartNo = FindCol("PART NO / VIN", "PART NO", "ITEM", "PART", "VIN"),
+                            PartNo = FindCol("PART NO", "CUSTOMER PART", "PART"),
+                            Vin = FindCol("VIN", "INTERNAL CODE", "INTERNAL"),
+                            ItemPartNo = FindCol("PART NO / VIN", "PART NO", "ITEM", "PART", "VIN"), // Legacy/Combined
                             QtyPcs = FindCol("QTY (PCS)", "QTY PCS", "QTY"),
                             Pickup = FindCol("PICKUP", "PENJEMPUTAN"),
                             Etd = FindCol("ETD")
@@ -496,7 +515,14 @@ namespace DeliveryControl.Controllers
                             {
                                 string custNameCell = GetSafeString(row.Cell(colMap.CustName)).Trim();
                                 string manifest = colMap.Manifesting != -1 ? GetSafeString(row.Cell(colMap.Manifesting)).Trim().ToUpper() : "";
-                                string itemCode = colMap.ItemPartNo != -1 ? GetSafeString(row.Cell(colMap.ItemPartNo)).Trim().ToUpper() : "";
+                                
+                                // v13.0: Separate Part No and VIN Support
+                                string excelPartNo = colMap.PartNo != -1 ? GetSafeString(row.Cell(colMap.PartNo)).Trim().ToUpper() : "";
+                                string excelVin = colMap.Vin != -1 ? GetSafeString(row.Cell(colMap.Vin)).Trim().ToUpper() : "";
+                                string legacyItemCode = colMap.ItemPartNo != -1 ? GetSafeString(row.Cell(colMap.ItemPartNo)).Trim().ToUpper() : "";
+
+                                string itemCode = !string.IsNullOrEmpty(excelPartNo) ? excelPartNo : (!string.IsNullOrEmpty(excelVin) ? excelVin : legacyItemCode);
+                                
                                 string dockLocation = colMap.Dock != -1 ? GetSafeString(row.Cell(colMap.Dock)).Trim() : "";
                                 string route = colMap.Route != -1 ? GetSafeString(row.Cell(colMap.Route)).Trim() : "";
                                 string cycle = colMap.Cycle != -1 ? GetSafeString(row.Cell(colMap.Cycle)).Trim() : "";
@@ -527,38 +553,45 @@ namespace DeliveryControl.Controllers
                                     continue;
                                 }
 
-                            // --- ROBUST ITEM MATCHING (2-STEP LOOKUP) ---
-                            string normalizedItemCode = SafeNormalize(itemCode);
-                            string normalizedCustContext = SafeNormalize(custNameCell);
+                            // --- EXHAUSTIVE ITEM MATCHING ---
+                            string normalizedInput = SafeNormalize(itemCode);
+                            Item? matchedItem = null;
+                            string? finalVin = null;
+
+                            // 1. TRY MAPPING (Part No -> VIN)
+                            var itemMap = allMappings.FirstOrDefault(m => 
+                                SafeNormalize(m.CustomerPartNumber) == normalizedInput || 
+                                SafeNormalize(m.VIN) == normalizedInput);
                             
-                            string targetVin = normalizedItemCode; // Default: Assume it's a VIN
-
-                            // STEP 1: TRANSLATION (Part No -> VIN)
-                            // Find mapping that matches Customer & Part No
-                            var mapping = allMappings.FirstOrDefault(m => 
-                                SafeNormalize(m.CustomerPartNumber) == normalizedItemCode &&
-                                (SafeNormalize(m.Customer) == normalizedCustContext || 
-                                 SafeNormalize(m.Customer).Contains(normalizedCustContext) || 
-                                 normalizedCustContext.Contains(SafeNormalize(m.Customer))));
-
-                            if (mapping != null)
+                            if (itemMap != null)
                             {
-                                targetVin = mapping.VIN; // Found translation!
+                                finalVin = itemMap.VIN;
+                                matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == SafeNormalize(finalVin));
                             }
 
-                            // STEP 2: MASTER ITEM LOOKUP (By VIN)
-                            var matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == SafeNormalize(targetVin));
-
-                            // FALLBACK: If not found by VIN, try match by PartNo directly in ItemMappings (Global Search)
-                            if (matchedItem == null && mapping == null)
+                            // 2. TRY MASTER ITEMS BY VIN (Direct Match)
+                            if (matchedItem == null)
                             {
-                                var potentialMap = allMappings.FirstOrDefault(m => SafeNormalize(m.CustomerPartNumber) == normalizedItemCode);
-                                if (potentialMap != null)
-                                {
-                                    targetVin = potentialMap.VIN;
-                                    matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == SafeNormalize(targetVin));
-                                }
+                                matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == normalizedInput);
+                                if (matchedItem != null) finalVin = matchedItem.VIN;
                             }
+
+                            // 3. TRY MASTER ITEMS BY PART NUMBER
+                            if (matchedItem == null)
+                            {
+                                matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.CustomerPartNumber) == normalizedInput);
+                                if (matchedItem != null) finalVin = matchedItem.VIN;
+                            }
+
+                            // 4. TRY MASTER ITEMS BY ITEM CODE (UUID or specific code)
+                            if (matchedItem == null)
+                            {
+                                matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.ItemCode) == normalizedInput);
+                                if (matchedItem != null) finalVin = matchedItem.VIN;
+                            }
+
+                            // Set targetVin for Phase 2
+                            string targetVin = finalVin ?? normalizedInput;
 
                             if (matchedItem == null)
                             {
@@ -567,7 +600,7 @@ namespace DeliveryControl.Controllers
                                 {
                                     ItemCode = targetVin, // Use VIN as Code
                                     VIN = targetVin,
-                                    CustomerPartNumber = (mapping != null) ? mapping.CustomerPartNumber : (targetVin != itemCode ? itemCode : null),
+                                    CustomerPartNumber = !string.IsNullOrEmpty(excelPartNo) ? excelPartNo : ((itemMap != null) ? itemMap.CustomerPartNumber : (targetVin != itemCode ? itemCode : null)),
                                     Customer = customer.CustomerName,
                                     ItemName = "Imported (" + itemCode + ")",
                                     Description = "Auto-created from Schedule Import",
@@ -583,9 +616,9 @@ namespace DeliveryControl.Controllers
                                 // v12.1: Enrichment - If Master Item has missing PartNo, fill it from Mapping/Excel
                                 if (string.IsNullOrEmpty(matchedItem.CustomerPartNumber))
                                 {
-                                    if (mapping != null) 
+                                    if (itemMap != null) 
                                     {
-                                        matchedItem.CustomerPartNumber = mapping.CustomerPartNumber;
+                                        matchedItem.CustomerPartNumber = itemMap.CustomerPartNumber;
                                         _context.Update(matchedItem);
                                     }
                                     else if (targetVin != itemCode) // itemCode is likely PartNo
@@ -685,17 +718,25 @@ namespace DeliveryControl.Controllers
 
                         // SAVE EVERYTHING
                         await _context.SaveChangesAsync();
+
+                        // Notify Dashboard via SignalR
+                        await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                        {
+                            Action = "import",
+                            Message = $"Berhasil import {successCount} schedule preparation dari Excel.",
+                            Timestamp = DateTime.Now
+                        });
                     }
                 }
 
                 if (successCount > 0)
                 {
-                    TempData["SuccessMessage"] = $"✅ Berhasil import {successCount} schedule dengan Items!";
+                    TempData["SuccessMessage"] = $"âœ… Berhasil import {successCount} schedule dengan Items!";
                 }
                 
                 if (errorCount > 0)
                 {
-                     TempData["ErrorMessage"] = $"⚠️ {errorCount} baris gagal. Contoh: {string.Join(", ", errorSamples)}";
+                     TempData["ErrorMessage"] = $"âš ï¸ {errorCount} baris gagal. Contoh: {string.Join(", ", errorSamples)}";
                 }
             }
             catch (Exception ex)

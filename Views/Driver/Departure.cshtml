@@ -3,15 +3,12 @@
 @{
     ViewData["Title"] = "Konfirmasi Keberangkatan";
     var now = DateTime.Now;
-    var duration = now - (Model.ActualStartTime ?? now);
-    var durationText = duration.TotalHours >= 1 
-        ? $"{(int)duration.TotalHours} jam {duration.Minutes} menit"
-        : $"{(int)duration.TotalMinutes} menit";
+    var isAdmin = Context.Session.GetString("Role") == "Admin";
 }
 
 <div class="row mb-4">
     <div class="col-12">
-        <h2><i class="bi bi-arrow-right-circle-fill"></i> Konfirmasi Keberangkatan</h2>
+        <h2><i class="bi bi-arrow-right-circle-fill text-info"></i> Konfirmasi Keberangkatan</h2>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a asp-action="Index">Portal Driver</a></li>
@@ -25,7 +22,7 @@
     <div class="col-md-8">
         <div class="card border-info">
             <div class="card-header bg-info text-white">
-                <h5 class="mb-0"><i class="bi bi-arrow-right-circle-fill"></i> Konfirmasi Waktu Keberangkatan</h5>
+                <h5 class="mb-0"><i class="bi bi-clock-fill"></i> Konfirmasi Waktu Keberangkatan</h5>
             </div>
             <div class="card-body">
                 <form asp-action="Departure" method="post">
@@ -44,126 +41,58 @@
                                 <td><strong>Customer:</strong></td>
                                 <td>@Model.Customer.CustomerCode - @Model.Customer.CustomerName</td>
                             </tr>
-                            @if (!string.IsNullOrWhiteSpace(Model.Area))
+                            <tr>
+                                <td><strong>Waktu Tiba:</strong></td>
+                                <td class="text-primary"><strong>@(Model.ActualStartTime?.ToString("HH:mm") ?? "-")</strong></td>
+                            </tr>
+                            @if (Model.PickupTime.HasValue)
                             {
                                 <tr>
-                                    <td><strong>Area:</strong></td>
-                                    <td><i class="bi bi-geo-alt"></i> @Model.Area</td>
-                                </tr>
-                            }
-                            @if (Model.ETD.HasValue)
-                            {
-                                <tr>
-                                    <td><strong>ETD (Target):</strong></td>
-                                    <td class="text-primary fs-5"><strong>@Model.ETD.Value.ToString("HH:mm")</strong></td>
+                                    <td><strong>Pickup Time (Target):</strong></td>
+                                    <td>@Model.PickupTime.Value.ToString("HH:mm")</td>
                                 </tr>
                             }
                         </table>
                     </div>
 
-                    <!-- Arrival Info -->
-                    @if (Model.ActualStartTime.HasValue)
+                    @if (isAdmin)
                     {
-                        <div class="alert alert-success">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <strong><i class="bi bi-check-circle"></i> Waktu Kedatangan:</strong>
-                                    <div class="fs-4 text-success">@Model.ActualStartTime.Value.ToString("HH:mm")</div>
-                                </div>
-                                <div class="col-md-6">
-                                    <strong><i class="bi bi-hourglass-split"></i> Durasi (Estimasi):</strong>
-                                    <div class="fs-5" id="estimatedDuration">@durationText</div>
-                                </div>
+                        <!-- Actual Departure Time - Hanya untuk Admin -->
+                        <div class="mb-4">
+                            <label for="departureTime" class="form-label">
+                                <i class="bi bi-clock-fill"></i> <strong>Waktu Keberangkatan Aktual</strong>
+                            </label>
+                            <input type="datetime-local" 
+                                   class="form-control form-control-lg" 
+                                   id="departureTime" 
+                                   name="departureTime" 
+                                   value="@now.ToString("yyyy-MM-ddTHH:mm")" 
+                                   required />
+                            <div class="form-text">
+                                <i class="bi bi-info-circle"></i> Sesuaikan dengan waktu keberangkatan Anda yang sebenarnya
+                            </div>
+                        </div>
+
+                        <!-- Quick Time Buttons - Hanya untuk Admin -->
+                        <div class="mb-4">
+                            <label class="form-label"><strong>Quick Select:</strong></label>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="setTimeNow()">
+                                    <i class="bi bi-clock"></i> Sekarang
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="adjustTime(-5)">
+                                    <i class="bi bi-dash-circle"></i> -5 menit
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="adjustTime(-10)">
+                                    <i class="bi bi-dash-circle"></i> -10 menit
+                                </button>
                             </div>
                         </div>
                     }
-
-                    <!-- Actual Departure Time -->
-                    <div class="mb-4">
-                        <label for="departureTime" class="form-label">
-                            <i class="bi bi-clock-fill"></i> <strong>Waktu Keberangkatan Aktual</strong>
-                        </label>
-                        <input type="datetime-local" 
-                               class="form-control form-control-lg" 
-                               id="departureTime" 
-                               name="departureTime" 
-                               value="@now.ToString("yyyy-MM-ddTHH:mm")" 
-                               min="@Model.ActualStartTime?.ToString("yyyy-MM-ddTHH:mm")"
-                               required />
-                        <div class="form-text">
-                            <i class="bi bi-info-circle"></i> Sesuaikan dengan waktu keberangkatan Anda yang sebenarnya
-                        </div>
-                    </div>
-
-                    <!-- Duration Display -->
-                    <div class="mb-4">
-                        <div class="alert alert-primary" id="durationDisplay">
-                            <strong><i class="bi bi-stopwatch"></i> Durasi di Lokasi:</strong>
-                            <span class="fs-4" id="calculatedDuration">--</span>
-                        </div>
-                    </div>
-
-                    <!-- Quick Time Buttons -->
-                    <div class="mb-4">
-                        <label class="form-label"><strong>Quick Select:</strong></label>
-                        <div class="d-flex gap-2 flex-wrap">
-                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="setTimeNow()">
-                                <i class="bi bi-clock"></i> Sekarang
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="adjustTime(-5)">
-                                <i class="bi bi-dash-circle"></i> -5 menit
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="adjustTime(-10)">
-                                <i class="bi bi-dash-circle"></i> -10 menit
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="adjustTime(-15)">
-                                <i class="bi bi-dash-circle"></i> -15 menit
-                            </button>
-                            @if (Model.ETD.HasValue)
-                            {
-                                <button type="button" class="btn btn-outline-info btn-sm" onclick="setTimeTarget()">
-                                    <i class="bi bi-bullseye"></i> Sesuai ETD (@Model.ETD.Value.ToString("HH:mm"))
-                                </button>
-                            }
-                        </div>
-                    </div>
-
-                    <!-- Delivery Items Summary -->
-                    @if (Model.DeliveryItems.Any())
+                    else
                     {
-                        <div class="mb-4">
-                            <label class="form-label"><strong><i class="bi bi-box-seam"></i> Item yang Dikirim:</strong></label>
-                            <div class="table-responsive">
-                                <table class="table table-sm table-bordered">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Item</th>
-                                            <th class="text-center">Qty</th>
-                                            <th>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var item in Model.DeliveryItems)
-                                        {
-                                            <tr>
-                                                <td>@item.Item.ItemName</td>
-                                                <td class="text-center"><strong>@item.Quantity</strong></td>
-                                                <td>
-                                                    @if (item.ActualQuantity.HasValue)
-                                                    {
-                                                        <span class="badge bg-success">@item.ActualQuantity Actual</span>
-                                                    }
-                                                    else
-                                                    {
-                                                        <span class="badge bg-secondary">-</span>
-                                                    }
-                                                </td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
+                        <!-- Hidden field untuk waktu keberangkatan (akan di-set saat submit untuk User) -->
+                        <input type="hidden" id="departureTime" name="departureTime" />
                     }
 
                     <!-- Notes -->
@@ -175,7 +104,7 @@
                                   id="notes" 
                                   name="notes" 
                                   rows="3" 
-                                  placeholder="Contoh: Semua barang terkirim dengan baik, Customer puas, dll."></textarea>
+                                  placeholder="Tambahkan informasi tambahan jika diperlukan..."></textarea>
                     </div>
 
                     <!-- Action Buttons -->
@@ -183,7 +112,7 @@
                         <a asp-action="Index" asp-route-selectedDate="@Model.ScheduledDate.ToString("yyyy-MM-dd")" class="btn btn-secondary">
                             <i class="bi bi-x-circle"></i> Batal
                         </a>
-                        <button type="submit" class="btn btn-info btn-lg">
+                        <button type="submit" class="btn btn-info btn-lg text-white">
                             <i class="bi bi-check-circle-fill"></i> Konfirmasi Keberangkatan
                         </button>
                     </div>
@@ -200,34 +129,9 @@
             </div>
             <div class="card-body text-center">
                 <h1 class="display-4 text-primary mb-0" id="currentTime">__ : __</h1>
-                <p class="text-muted mb-0" id="currentDate">Minggu, 23 November 2025</p>
+                <p class="text-muted mb-0" id="currentDate">...</p>
             </div>
         </div>
-
-        <!-- Timeline -->
-        @if (Model.ActualStartTime.HasValue)
-        {
-            <div class="card border-success mb-3">
-                <div class="card-header bg-success text-white">
-                    <h6 class="mb-0"><i class="bi bi-clock-history"></i> Timeline</h6>
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <small class="text-muted">Kedatangan:</small>
-                        <div class="fs-5"><strong>@Model.ActualStartTime.Value.ToString("HH:mm")</strong></div>
-                    </div>
-                    <div class="mb-3">
-                        <small class="text-muted">Keberangkatan:</small>
-                        <div class="fs-5 text-primary"><strong id="departureTimeDisplay">--:--</strong></div>
-                    </div>
-                    <hr />
-                    <div>
-                        <small class="text-muted">Total Durasi:</small>
-                        <div class="fs-4 text-success"><strong id="totalDuration">--</strong></div>
-                    </div>
-                </div>
-            </div>
-        }
 
         <!-- Info Card -->
         <div class="card border-info">
@@ -236,13 +140,13 @@
             </div>
             <div class="card-body">
                 <p class="small mb-2">
-                    <strong>Keberangkatan:</strong> Waktu saat Anda selesai loading/unloading dan siap berangkat
+                    <strong>Keberangkatan:</strong> Waktu saat Anda meninggalkan lokasi customer
                 </p>
                 <p class="small mb-2">
                     <strong>Status:</strong> Setelah konfirmasi, status akan berubah menjadi "Completed"
                 </p>
                 <p class="small mb-0">
-                    <strong>Durasi:</strong> Sistem akan menghitung durasi kerja Anda di lokasi
+                    <strong>Durasi:</strong> Sistem akan menghitung durasi waktu tunggu/bongkar muat di customer
                 </p>
             </div>
         </div>
@@ -262,22 +166,15 @@
 
 @section Scripts {
     <script>
-        // Pastikan DOM sudah siap sebelum menjalankan script
         document.addEventListener('DOMContentLoaded', function() {
             
-            var arrivalTime = new Date('@(Model.ActualStartTime?.ToString("yyyy-MM-ddTHH:mm:ss") ?? DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss"))');
-            
-            // Update current time display
             function updateCurrentTime() {
                 var now = new Date();
-                
-                // Format waktu dengan padding untuk digit tunggal
                 var hours = String(now.getHours()).padStart(2, '0');
                 var minutes = String(now.getMinutes()).padStart(2, '0');
                 var seconds = String(now.getSeconds()).padStart(2, '0');
                 var timeStr = hours + ':' + minutes + ':' + seconds;
                 
-                // Format tanggal dalam bahasa Indonesia
                 var days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
                 var months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
                 
@@ -288,138 +185,62 @@
                 
                 var dateStr = dayName + ', ' + day + ' ' + monthName + ' ' + year;
                 
-                // Update elemen HTML
-                var timeElement = document.getElementById('currentTime');
-                var dateElement = document.getElementById('currentDate');
-                
-                if (timeElement) {
-                    timeElement.textContent = timeStr;
-                }
-                if (dateElement) {
-                    dateElement.textContent = dateStr;
-                }
-                
-                // Update estimated duration
-                updateEstimatedDuration();
+                document.getElementById('currentTime').textContent = timeStr;
+                document.getElementById('currentDate').textContent = dateStr;
             }
             
-            function updateEstimatedDuration() {
-                var now = new Date();
-                var diff = now - arrivalTime;
-                var minutes = Math.floor(diff / 60000);
-                var hours = Math.floor(minutes / 60);
-                var mins = minutes % 60;
-                
-                var durationText = hours > 0 ? hours + ' jam ' + mins + ' menit' : minutes + ' menit';
-                var estimatedElement = document.getElementById('estimatedDuration');
-                if (estimatedElement) {
-                    estimatedElement.textContent = durationText;
-                }
-            }
-            
-            // Calculate duration
-            function calculateDuration() {
-                var departureTime = new Date(document.getElementById('departureTime').value);
-                var diff = departureTime - arrivalTime;
-                
-                if (diff > 0) {
-                    var minutes = Math.floor(diff / 60000);
-                    var hours = Math.floor(minutes / 60);
-                    var mins = minutes % 60;
-                    
-                    var durationText = hours > 0 ? hours + ' jam ' + mins + ' menit' : minutes + ' menit';
-                    
-                    var calculatedElement = document.getElementById('calculatedDuration');
-                    var totalElement = document.getElementById('totalDuration');
-                    var departureDisplayElement = document.getElementById('departureTimeDisplay');
-                    
-                    if (calculatedElement) calculatedElement.textContent = durationText;
-                    if (totalElement) totalElement.textContent = durationText;
-                    if (departureDisplayElement) {
-                        var hours = String(departureTime.getHours()).padStart(2, '0');
-                        var minutes = String(departureTime.getMinutes()).padStart(2, '0');
-                        departureDisplayElement.textContent = hours + ':' + minutes;
-                    }
-                } else {
-                    var calculatedElement = document.getElementById('calculatedDuration');
-                    var totalElement = document.getElementById('totalDuration');
-                    if (calculatedElement) calculatedElement.textContent = 'Invalid';
-                    if (totalElement) totalElement.textContent = '--';
-                }
-            }
-            
-            // Set time to now
             window.setTimeNow = function() {
+                var input = document.getElementById('departureTime');
+                if (input && input.type === 'datetime-local') {
+                    var now = new Date();
+                    var dateString = now.getFullYear() + '-' + 
+                                   String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                                   String(now.getDate()).padStart(2, '0') + 'T' + 
+                                   String(now.getHours()).padStart(2, '0') + ':' + 
+                                   String(now.getMinutes()).padStart(2, '0');
+                    input.value = dateString;
+                }
+            }
+            
+            window.adjustTime = function(minutes) {
+                var input = document.getElementById('departureTime');
+                if (input && input.type === 'datetime-local') {
+                    var currentTime = new Date(input.value);
+                    currentTime.setMinutes(currentTime.getMinutes() + minutes);
+                    
+                    var dateString = currentTime.getFullYear() + '-' + 
+                                   String(currentTime.getMonth() + 1).padStart(2, '0') + '-' + 
+                                   String(currentTime.getDate()).padStart(2, '0') + 'T' + 
+                                   String(currentTime.getHours()).padStart(2, '0') + ':' + 
+                                   String(currentTime.getMinutes()).padStart(2, '0');
+                    input.value = dateString;
+                }
+            }
+            
+            updateCurrentTime();
+            setInterval(updateCurrentTime, 1000);
+            
+            document.querySelector('form').addEventListener('submit', function(e) {
+                var input = document.getElementById('departureTime');
                 var now = new Date();
                 var dateString = now.getFullYear() + '-' + 
                                String(now.getMonth() + 1).padStart(2, '0') + '-' + 
                                String(now.getDate()).padStart(2, '0') + 'T' + 
                                String(now.getHours()).padStart(2, '0') + ':' + 
                                String(now.getMinutes()).padStart(2, '0');
-                document.getElementById('departureTime').value = dateString;
-                calculateDuration();
-            }
-            
-            // Adjust time by minutes
-            window.adjustTime = function(minutes) {
-                var input = document.getElementById('departureTime');
-                var currentTime = new Date(input.value);
-                currentTime.setMinutes(currentTime.getMinutes() + minutes);
                 
-                var dateString = currentTime.getFullYear() + '-' + 
-                               String(currentTime.getMonth() + 1).padStart(2, '0') + '-' + 
-                               String(currentTime.getDate()).padStart(2, '0') + 'T' + 
-                               String(currentTime.getHours()).padStart(2, '0') + ':' + 
-                               String(currentTime.getMinutes()).padStart(2, '0');
-                input.value = dateString;
-                calculateDuration();
-            }
-            
-            // Set time to target ETD
-            window.setTimeTarget = function() {
-                @if (Model.ETD.HasValue)
-                {
-                    <text>
-                    var targetTime = new Date('@Model.ETD.Value.ToString("yyyy-MM-ddTHH:mm")');
-                    var dateString = targetTime.getFullYear() + '-' + 
-                                   String(targetTime.getMonth() + 1).padStart(2, '0') + '-' + 
-                                   String(targetTime.getDate()).padStart(2, '0') + 'T' + 
-                                   String(targetTime.getHours()).padStart(2, '0') + ':' + 
-                                   String(targetTime.getMinutes()).padStart(2, '0');
-                    document.getElementById('departureTime').value = dateString;
-                    calculateDuration();
-                    </text>
-                }
-            }
-            
-            // Initialize - Jalankan pertama kali
-            updateCurrentTime();
-            calculateDuration();
-            
-            // Update setiap detik
-            setInterval(updateCurrentTime, 1000);
-            
-            // Update duration when time changes
-            var departureInput = document.getElementById('departureTime');
-            if (departureInput) {
-                departureInput.addEventListener('change', calculateDuration);
-            }
-            
-            // Form validation
-            document.querySelector('form').addEventListener('submit', function(e) {
-                var departureTime = new Date(document.getElementById('departureTime').value);
-                
-                // Validasi: departure tidak boleh lebih awal dari arrival
-                if (departureTime < arrivalTime) {
-                    alert('Waktu keberangkatan tidak boleh lebih awal dari waktu kedatangan!');
-                    e.preventDefault();
-                    return false;
+                if (input && input.type === 'hidden') {
+                    input.value = dateString;
                 }
                 
-                // Warning jika waktu keberangkatan di masa depan (lebih dari 5 menit)
-                var now = new Date();
-                if (departureTime > new Date(now.getTime() + 5 * 60000)) {
-                    if (!confirm('Waktu keberangkatan yang Anda masukkan adalah di masa depan. Apakah ini benar?')) {
+                // Validasi: Keberangkatan tidak boleh sebelum Kedatangan
+                var arrivalTimeStr = "@(Model.ActualStartTime?.ToString("yyyy-MM-ddTHH:mm"))";
+                if (arrivalTimeStr) {
+                    var arrivalTime = new Date(arrivalTimeStr);
+                    var departureTime = new Date(input.value);
+                    
+                    if (departureTime < arrivalTime) {
+                        alert('⚠️ Waktu keberangkatan tidak boleh lebih awal dari waktu kedatangan!');
                         e.preventDefault();
                         return false;
                     }
@@ -428,4 +249,3 @@
         });
     </script>
 }
-

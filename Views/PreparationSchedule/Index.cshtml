@@ -85,7 +85,7 @@
                                 </td>
                                 <td>
                                     <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">CUSTOMER</div>
-                                    <span class="fw-bold">@(schedule.Customer?.CustomerName ?? "-")</span>
+                                    <span class="fw-bold">@(schedule.Customer?.CustomerCode ?? "-")</span>
                                 </td>
                                 <td>
                                     <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">ROUTE</div>
@@ -100,14 +100,15 @@
                                 {
                                     <td style="background: rgba(13, 110, 253, 0.05); border-left: 2px solid #0d6efd;">
                                         <div class="d-flex flex-column">
-                                            @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber) && !string.IsNullOrEmpty(item.Item?.VIN))
+                                            @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
                                             {
-                                                <span class="text-white fw-bold fs-6">@item.Item.CustomerPartNumber</span>
-                                                <span class="text-info small">@item.Item.VIN</span>
-                                            }
-                                            else if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
-                                            {
-                                                <span class="text-white fw-bold">@item.Item.CustomerPartNumber</span>
+                                                <div class="d-flex align-items-center flex-wrap">
+                                                    <span class="text-white fw-bold fs-6">@(item.Item?.CustomerPartNumber ?? "-")</span>
+                                                    @if (!string.IsNullOrEmpty(item.Item?.VIN) && item.Item.VIN != item.Item.CustomerPartNumber)
+                                                    {
+                                                        <span class="text-success fw-bold ms-1" style="font-size: 0.8rem;">/ @item.Item.VIN</span>
+                                                    }
+                                                </div>
                                             }
                                             else
                                             {

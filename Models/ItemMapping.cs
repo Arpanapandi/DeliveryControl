@@ -11,15 +11,15 @@ namespace DeliveryControl.Models
 
         [Required]
         [StringLength(50)]
-        public string VIN { get; set; } // Foreign Key (Logical) to Items.VIN
+        public string VIN { get; set; } = string.Empty; // Foreign Key (Logical) to Items.VIN
 
         [Required]
         [StringLength(100)]
-        public string Customer { get; set; }
+        public string Customer { get; set; } = string.Empty;
 
         [Required]
         [StringLength(100)]
-        public string CustomerPartNumber { get; set; }
+        public string CustomerPartNumber { get; set; } = string.Empty;
         
         // Audit Trail
         public DateTime CreatedDate { get; set; } = DateTime.Now;

@@ -142,15 +142,15 @@ namespace DeliveryControl.Controllers
                     {
                         RepresentativeScheduleId = first.ScheduleId,
                         CustomerName = customerDisplay,
-                        Cycle = first.Cycle,
-                        Route = first.Route,
-                        Area = first.Area,
+                        Cycle = first.Cycle ?? "",
+                        Route = first.Route ?? "",
+                        Area = first.Area ?? "",
                         PickupTime = first.PickupTime,
                         ETD = first.ETD,
                         ActualStartTime = first.ActualStartTime, // Assumes synchronized updates
                         ActualEndTime = first.ActualEndTime,     // Assumes synchronized updates
-                        DriverStatus = first.DriverStatus ?? first.Status,
-                        OverallStatus = first.Status,
+                        DriverStatus = (first.DriverStatus ?? first.Status) ?? "Scheduled",
+                        OverallStatus = first.Status ?? "Scheduled",
                         Schedules = sortedGroup
                     };
                 })
@@ -297,6 +297,39 @@ namespace DeliveryControl.Controllers
             }
         }
 
+        // GET: Driver/Departure/5 - Halaman konfirmasi keberangkatan
+        public async Task<IActionResult> Departure(int? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+        
+            var schedule = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .FirstOrDefaultAsync(s => s.ScheduleId == id);
+        
+            if (schedule == null)
+            {
+                return NotFound();
+            }
+        
+            // Validasi: Harus sudah ada arrival time
+            if (!schedule.ActualStartTime.HasValue)
+            {
+                TempData["ErrorMessage"] = "⚠️ Konfirmasi kedatangan terlebih dahulu!";
+                return RedirectToAction(nameof(Arrival), new { id });
+            }
+        
+            // Cek apakah sudah ada departure time
+            if (schedule.ActualEndTime.HasValue)
+            {
+                TempData["WarningMessage"] = $"Schedule ini sudah dikonfirmasi keberangkatan pada {schedule.ActualEndTime.Value:dd/MM/yyyy HH:mm}";
+            }
+        
+            return View(schedule);
+        }
+        
         // POST: Driver/Departure/5 - Konfirmasi keberangkatan
         [HttpPost]
         [ValidateAntiForgeryToken]

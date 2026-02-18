@@ -390,7 +390,7 @@ namespace DeliveryControl.Controllers
                 // 1. Pre-load ALL existing items into memory with COMPOSITE KEY (v9.0)
                 var existingItems = await _context.Items.ToListAsync();
                 var itemDict = existingItems
-                    .ToDictionary(i => $"{NormalizeKey(i.VIN)}|{NormalizeKey(i.ItemName)}|{NormalizeKey(i.Plant)}|{NormalizeKey(i.Rack)}|{NormalizeKey(i.NoRack?.ToString())}|{NormalizeKey(i.Customer)}", i => i);
+                    .ToDictionary(i => $"{NormalizeKey(i.VIN)}|{NormalizeKey(i.ItemName)}|{NormalizeKey(i.Plant)}|{NormalizeKey(i.Rack)}|{NormalizeKey(i.NoRack?.ToString())}|{NormalizeKey(i.Customer)}|{NormalizeKey(i.Category)}|{NormalizeKey(i.QtyLot?.ToString())}|{NormalizeKey(i.RackMin?.ToString())}|{NormalizeKey(i.ROP?.ToString())}|{NormalizeKey(i.RackMax?.ToString())}", i => i);
 
                 using (var stream = new MemoryStream())
                 {
@@ -439,19 +439,21 @@ namespace DeliveryControl.Controllers
                         // Get Column Letter for Auditor Report
                         string GetColLetter(int colIndex) => colIndex != -1 ? worksheet.Column(colIndex).ColumnLetter() : "?";
 
-                 // Column Mapping
+                // Column Mapping (v10.0: Specific Unique Headers)
                 var colMap = new
                 {
                     Vin = FindCol("VIN INTERNAL", "VIN", "INTERNAL"),
-                    ItemName = FindCol("LOKASI RACK", "NAMA ITEM", "NAMA BARANG", "ITEM NAME", "PART NAME"),
-                    Plant = FindCol("PLANT", "PABRIK"),
-                    Rack = FindCol("RAK", "RACK", "LOKASI"),
-                    NoRack = FindCol("NO RAK", "NO RACK", "NOMOR RAK"),
+                    ItemName = FindCol("Lokasi Rack", "LOKASI RACK", "NAMA ITEM", "NAMA BARANG", "ITEM NAME"),
+                    Plant = FindCol("PROD.Plant", "PLANT", "PABRIK"),
+                    Rack = FindCol("Rak", "RAK", "RACK", "LOKASI"),
+                    NoRack = FindCol("No Rak", "NO RAK", "NOMOR RAK"),
                     Qpc = FindCol("QPC", "QTY PER CARTON", "QTY LOT", "LOT"),
                     MinStock = FindCol("MIN 1D", "MIN STOCK", "MIN", "MINIMUM"),
                     MaxStock = FindCol("MAX 3D", "MAX STOCK", "MAX", "MAXIMUM"),
-                    Customer = FindCol("CUST", "CUSTOMER", "NAMA CUSTOMER")
-                    // Customer & Part No removed from Master Item Import (moved to ItemMapping)
+                    RopStock = FindCol("ROP 2D", "ROP", "REORDER POINT"),
+                    Customer = FindCol("CUST", "CUSTOMER", "NAMA CUSTOMER"),
+                    StatusCol = FindCol("STATUS", "STATUS ITEM", "IS ACTIVE"),
+                    CategoryCol = FindCol("PROD.", "PROD", "PROD.", "KATEGORI", "CATEGORY")
                 };
 
                 // Validasi Kolom Wajib (Hanya VIN yang wajib untuk Master Item)
@@ -491,8 +493,15 @@ namespace DeliveryControl.Controllers
                                     continue;
                                 }
 
-                                // v9.0 Composite Key Construction (Simplified)
-                                string compositeKey = $"{NormalizeKey(vin)}|{NormalizeKey(plt)}|{NormalizeKey(rak)}|{NormalizeKey(nrk)}";
+                                string itemName = GetSafeString(row, colMap.ItemName);
+                                string cat = GetSafeString(row, colMap.CategoryCol);
+                                string qpc = GetSafeNumberString(row, colMap.Qpc);
+                                string min = GetSafeNumberString(row, colMap.MinStock);
+                                string rop = GetSafeNumberString(row, colMap.RopStock);
+                                string max = GetSafeNumberString(row, colMap.MaxStock);
+
+                                // v10.0 Comprehensive Composite Key (All Unique Headers)
+                                string compositeKey = $"{NormalizeKey(vin)}|{NormalizeKey(itemName)}|{NormalizeKey(plt)}|{NormalizeKey(rak)}|{NormalizeKey(nrk)}|{NormalizeKey(cust)}|{NormalizeKey(cat)}|{NormalizeKey(qpc)}|{NormalizeKey(min)}|{NormalizeKey(rop)}|{NormalizeKey(max)}";
                                 
                                 // Capture Samples (First 3 rows)
                                 if (sampleVins.Count < 3) {
@@ -509,18 +518,18 @@ namespace DeliveryControl.Controllers
                                 excelVins.Add(compositeKey);
 
                                 var dto = new ItemDto {
-                                    ItemCode  = GetSafeString(row, colMap.ItemName), // LOKASI RACK maps to ItemName
+                                    ItemCode  = itemName,
                                     Plant     = plt,
                                     Rack      = rak,
                                     NoRackStr = nrk,
                                     Customer  = cust,
-                                    StatusStr = GetSafeString(row, FindCol("STATUS")), // Assuming STATUS is still needed
-                                    Category  = GetSafeString(row, FindCol("PROD")), // Assuming PROD is still needed
+                                    StatusStr = GetSafeString(row, colMap.StatusCol),
+                                    Category  = cat,
                                     VIN       = vin,
-                                    QpcStr    = GetSafeNumberString(row, colMap.Qpc),
-                                    MinStr    = GetSafeNumberString(row, colMap.MinStock), // Fixed: Now getting mapped
-                                    RopStr    = "0", // ROP removed from Import
-                                    MaxStr    = GetSafeNumberString(row, colMap.MaxStock)
+                                    QpcStr    = qpc,
+                                    MinStr    = min, 
+                                    RopStr    = rop,
+                                    MaxStr    = max
                                 };
 
                                 if (itemDict.TryGetValue(compositeKey, out var existingItem))

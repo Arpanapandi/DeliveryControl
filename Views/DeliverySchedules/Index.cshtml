@@ -85,7 +85,7 @@
         @if (Model.Any())
         {
             <div style="max-height: 600px; overflow-y: auto; overflow-x: auto;">
-                <table class="table table-hover table-bordered mb-0 table-sm" style="table-layout: fixed; width: 1200px;">
+                <table class="table table-hover table-bordered mb-0 table-sm" style="table-layout: fixed; width: 100%; min-width: 1440px;">
                     <thead class="table-dark" style="position: sticky; top: 0; z-index: 100; background-color: #212529;">
                         <tr style="font-size: 0.85rem;">
                             @if (Context.Session.GetString("Role") == "Admin")

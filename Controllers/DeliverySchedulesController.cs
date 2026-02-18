@@ -581,6 +581,19 @@ namespace DeliveryControl.Controllers
                 return NotFound();
             }
 
+            // Fetch grouped schedules for the same "Trip" (Customer + Area + Date)
+            var groupSchedules = await _context.DeliverySchedules
+                .AsNoTracking()
+                .Include(s => s.DeliveryItems)
+                    .ThenInclude(di => di.Item)
+                .Where(s => s.CustomerId == schedule.CustomerId && 
+                           s.Area == schedule.Area && 
+                           s.ScheduledDate.Date == schedule.ScheduledDate.Date &&
+                           s.ScheduleId != schedule.ScheduleId)
+                .ToListAsync();
+
+            ViewBag.GroupSchedules = groupSchedules;
+
             return View(schedule);
         }
 

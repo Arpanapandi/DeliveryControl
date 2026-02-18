@@ -122,19 +122,30 @@ namespace DeliveryControl.Controllers
 
         DeliverySchedule? schedule = null;
 
-        // 3. Validation and Disambiguation
         if (!string.IsNullOrEmpty(kanban))
         {
             string kanbanUpper = kanban.ToUpper();
-            schedule = await _context.DeliverySchedules
-                .Include(s => s.Customer)
-                .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
-                .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
-                             ((s.ScheduleNumber ?? "").ToUpper() == kanbanUpper || (s.ScheduleNumber ?? "").ToUpper().StartsWith(kanbanUpper + "/")) &&
-                             s.DeliveryItems.Any(di => di.ItemId == targetItem.ItemId))
-                .FirstOrDefaultAsync();
+            string partNo = (targetItem.CustomerPartNumber ?? "").ToUpper();
+            string itemVin = (targetItem.VIN ?? "").ToUpper();
 
-            if (schedule == null) 
+            // NEW: Split by slash to handle "kode didepan garis miring"
+            string cleanKanban = kanbanUpper.Split('/')[0].Trim();
+            string cleanPartNo = partNo.Split('/')[0].Trim();
+            string cleanVin = itemVin.Split('/')[0].Trim();
+
+            // Validate Kanban input strictly against Part Number or VIN (Part BEFORE slash)
+            if (cleanKanban == cleanPartNo || cleanKanban == cleanVin)
+            {
+                schedule = await _context.DeliverySchedules
+                    .Include(s => s.Customer)
+                    .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
+                    .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
+                                 s.DeliveryItems.Any(di => di.ItemId == targetItem.ItemId))
+                    .OrderBy(s => s.ScheduledDate)
+                    .ThenBy(s => s.ScheduleNumber)
+                    .FirstOrDefaultAsync();
+            }
+            else
             {
                 return Json(new { 
                     success = true, 
@@ -146,7 +157,7 @@ namespace DeliveryControl.Controllers
                         customerPartNumber = targetItem.CustomerPartNumber,
                         qtyLot = targetItem.QtyLot ?? 0
                     },
-                    message = $"Kanban (Manifest) '{kanban}' tidak cocok dengan jadwal aktif untuk item ini!" 
+                    message = $"Kanban '{kanban}' tidak cocok dengan Part No atau VIN item ini!" 
                 });
             }
         }
@@ -287,21 +298,37 @@ namespace DeliveryControl.Controllers
         // For now, assume the first item match is the target (usually VIN is unique)
         var item = items.First();
 
-        // 2. Final Schedule Matching using Kanban (Manifest)
+        // 2. Final Schedule Matching (Strict Part Number Validation + FIFO)
         string kanbanSaveUpper = record.Kanban.ToUpper();
-        var schedule = await _context.DeliverySchedules
-            .Include(s => s.Customer)
-            .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
-            .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
-                         ((s.ScheduleNumber ?? "").ToUpper() == kanbanSaveUpper || (s.ScheduleNumber ?? "").ToUpper().StartsWith(kanbanSaveUpper + "/")) &&
-                         s.DeliveryItems.Any(di => di.ItemId == item.ItemId))
-            .OrderBy(s => s.ScheduledDate)
-            .ThenBy(s => s.ScheduleNumber)
-            .FirstOrDefaultAsync();
+        string partNoSave = (item.CustomerPartNumber ?? "").ToUpper();
+        string vinSave = (item.VIN ?? "").ToUpper();
+
+        DeliverySchedule? schedule = null;
+
+        // NEW: Split by slash to handle "kode didepan garis miring"
+        string cleanKanbanSave = kanbanSaveUpper.Split('/')[0].Trim();
+        string cleanPartNoSave = partNoSave.Split('/')[0].Trim();
+        string cleanVinSave = vinSave.Split('/')[0].Trim();
+
+        if (cleanKanbanSave == cleanPartNoSave || cleanKanbanSave == cleanVinSave)
+        {
+            schedule = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
+                .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
+                             s.DeliveryItems.Any(di => di.ItemId == item.ItemId))
+                .OrderBy(s => s.ScheduledDate)
+                .ThenBy(s => s.ScheduleNumber)
+                .FirstOrDefaultAsync();
+        }
+        else
+        {
+            return Json(new { success = false, message = $"Validasi Gagal! Kanban '{record.Kanban}' tidak cocok dengan Part No atau VIN item ini." });
+        }
 
         if (schedule == null) 
         {
-            return Json(new { success = false, message = $"Validasi Gagal! Kanban (Manifest) '{record.Kanban}' tidak ditemukan untuk item ini." });
+            return Json(new { success = false, message = $"Tidak ada jadwal aktif (FIFO) untuk item '{item.VIN}' / '{item.CustomerPartNumber}'." });
         }
 
         // --- VALIDASI 1: Cek apakah kebutuhan QTY sudah terpenuhi ---

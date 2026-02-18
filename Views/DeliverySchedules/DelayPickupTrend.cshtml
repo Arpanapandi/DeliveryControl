@@ -210,7 +210,9 @@
                                 <td class="text-center align-middle">
                                     @if (item.ActualStartTime.HasValue)
                                     {
-                                        <strong>@item.ActualStartTime.Value.ToString("HH:mm")</strong>
+                                        <strong style="color: white !important;">
+                                            @item.ActualStartTime.Value.ToString("HH:mm")
+                                        </strong>
                                     }
                                     else
                                     {

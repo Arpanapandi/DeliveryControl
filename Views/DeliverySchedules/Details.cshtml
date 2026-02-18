@@ -51,11 +51,26 @@
             <div class="card-body">
                 <div class="row mb-2">
                     <div class="col-md-4"><strong>No. Schedule:</strong></div>
-                    <div class="col-md-8">@Model.ScheduleNumber</div>
+                    <div class="col-md-8">
+                        @Model.ScheduleNumber
+                        @{
+                            var extraSchedules = ViewBag.GroupSchedules as List<DeliveryControl.Models.DeliverySchedule>;
+                            if (extraSchedules != null && extraSchedules.Any())
+                            {
+                                <div class="mt-1 small border-top pt-1">
+                                    <span class="text-muted">Part of Trip Group:</span><br />
+                                    @foreach (var s in extraSchedules)
+                                    {
+                                        <span class="badge bg-light text-dark border me-1">@s.ScheduleNumber</span>
+                                    }
+                                </div>
+                            }
+                        }
+                    </div>
                 </div>
                 <div class="row mb-2">
                     <div class="col-md-4"><strong>Customer:</strong></div>
-                    <div class="col-md-8">@Model.Customer.CustomerName</div>
+                    <div class="col-md-8">@Model.Customer.CustomerCode</div>
                 </div>
                 <div class="row mb-2">
                     <div class="col-md-4"><strong>Tanggal:</strong></div>
@@ -119,27 +134,37 @@
                 @{
                     double totalKbnTarget = 0;
                     double totalKbnActual = 0;
-                    if (Model.DeliveryItems != null)
+                    
+                    // Create a list of all schedules in this trip group
+                    var allSchedules = new List<DeliveryControl.Models.DeliverySchedule> { Model };
+                    if (ViewBag.GroupSchedules != null) {
+                        allSchedules.AddRange((List<DeliveryControl.Models.DeliverySchedule>)ViewBag.GroupSchedules);
+                    }
+
+                    foreach (var s in allSchedules)
                     {
-                        foreach(var di in Model.DeliveryItems)
+                        if (s.DeliveryItems != null)
                         {
-                            var qpc = di.Item?.QtyLot ?? 1;
-                            if (qpc > 0)
+                            foreach (var di in s.DeliveryItems)
                             {
-                                totalKbnTarget += Math.Ceiling((double)di.Quantity / qpc);
-                                totalKbnActual += (double)(di.ActualQuantity ?? 0) / qpc;
+                                var qpc = di.Item?.QtyLot ?? 1;
+                                if (qpc > 0)
+                                {
+                                    totalKbnTarget += Math.Ceiling((double)di.Quantity / qpc);
+                                    totalKbnActual += (double)(di.ActualQuantity ?? 0) / qpc;
+                                }
                             }
                         }
                     }
                 }
                 <div class="row mb-2">
-                    <div class="col-md-4"><strong>Target Kanban:</strong></div>
+                    <div class="col-md-4"><strong>Target Kanban (Group):</strong></div>
                     <div class="col-md-8">@totalKbnTarget.ToString("0.##") KBN</div>
                 </div>
                 <div class="row mb-2">
-                    <div class="col-md-4"><strong>Actual Kanban:</strong></div>
+                    <div class="col-md-4"><strong>Actual Kanban (Group):</strong></div>
                     <div class="col-md-8">
-                        <span class="@(Model.TotalActualQuantity >= Model.TotalTargetQuantity && Model.TotalTargetQuantity > 0 ? "text-success" : (Model.TotalActualQuantity > 0 ? "text-warning" : "")) fw-bold">
+                        <span class="@(totalKbnActual >= totalKbnTarget && totalKbnTarget > 0 ? "text-success" : (totalKbnActual > 0 ? "text-warning" : "")) fw-bold">
                             @totalKbnActual.ToString("0.##") KBN
                         </span>
                         @if (totalKbnTarget > 0)
@@ -153,7 +178,7 @@
                     <div class="col-md-4"><strong>Area:</strong></div>
                     <div class="col-md-8">@(Model.Area ?? "-")</div>
                 </div>
-                <div class="row mb-2">
+                <div class="row mb-2" id="time-actual-row">
                     <div class="col-md-4"><strong>Waktu Actual:</strong></div>
                     <div class="col-md-8">
                         @if (Model.ActualStartTime.HasValue)
@@ -242,46 +267,66 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-box"></i> Item Delivery</h5>
-                <a asp-controller="DeliveryItems" asp-action="Create" asp-route-scheduleId="@Model.ScheduleId" class="btn btn-light btn-sm">
-                    <i class="bi bi-plus-circle"></i> Tambah Item
-                </a>
+                <h5 class="mb-0"><i class="bi bi-box"></i> Item Delivery (Total Trip)</h5>
+                <div>
+                    <span class="badge bg-light text-dark me-2">Grouped: @allSchedules.Count Manifests</span>
+                    <a asp-controller="DeliveryItems" asp-action="Create" asp-route-scheduleId="@Model.ScheduleId" class="btn btn-light btn-sm">
+                        <i class="bi bi-plus-circle"></i> Tambah Item
+                    </a>
+                </div>
             </div>
             <div class="card-body">
-                @if (Model.DeliveryItems != null && Model.DeliveryItems.Any())
+                @{
+                    var combinedItems = allSchedules
+                        .SelectMany(s => s.DeliveryItems.Select(di => new { 
+                            ScheduleNumber = s.ScheduleNumber, 
+                            Item = di.Item, 
+                             di.Quantity, 
+                             di.ActualQuantity, 
+                             di.IsCompleted, 
+                             di.DeliveryItemId
+                        }))
+                        .OrderBy(x => x.ScheduleNumber)
+                        .ThenBy(x => x.Item?.ItemName)
+                        .ToList();
+                }
+
+                @if (combinedItems.Any())
                 {
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead class="table-light">
                                 <tr>
+                                    <th>Manifest</th>
                                     <th>Item</th>
-                                    <th>Target Kanban</th>
-                                    <th>Actual Kanban</th>
-                                    <th>Variance (KBN)</th>
+                                    <th class="text-center">Target</th>
+                                    <th class="text-center">Actual</th>
+                                    <th class="text-center">Variance</th>
                                     <th>Unit</th>
                                     <th>Status</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var item in Model.DeliveryItems)
+                                @foreach (var groupItem in combinedItems)
                                 {
                                     <tr>
+                                        <td><span class="badge bg-secondary">@groupItem.ScheduleNumber</span></td>
                                         <td>
-                                            <strong>@item.Item.ItemName</strong><br />
-                                            <small class="text-muted">@item.Item.ItemCode</small>
+                                            <strong>@groupItem.Item?.ItemName</strong><br />
+                                            <small class="text-muted">@groupItem.Item?.ItemCode</small>
                                         </td>
-                                        <td>
+                                        <td class="text-center">
                                             @{
-                                                var qpc = item.Item?.QtyLot ?? 1;
-                                                var kbnPlan = Math.Ceiling((double)item.Quantity / (qpc > 0 ? qpc : 1));
-                                                var kbnActual = (double)(item.ActualQuantity ?? 0) / (qpc > 0 ? qpc : 1);
+                                                var qpc = groupItem.Item?.QtyLot ?? 1;
+                                                var kbnPlan = Math.Ceiling((double)groupItem.Quantity / (qpc > 0 ? qpc : 1));
+                                                var kbnActual = (double)(groupItem.ActualQuantity ?? 0) / (qpc > 0 ? qpc : 1);
                                                 var kbnVariance = kbnActual - kbnPlan;
                                             }
                                             @kbnPlan.ToString("0.##")
                                         </td>
-                                        <td>@kbnActual.ToString("0.##")</td>
-                                        <td>
+                                        <td class="text-center">@kbnActual.ToString("0.##")</td>
+                                        <td class="text-center">
                                             @{
                                                 var varianceClass = kbnVariance >= 0 ? "text-success" : "text-danger";
                                             }
@@ -289,7 +334,7 @@
                                         </td>
                                         <td>KBN</td>
                                         <td>
-                                            @if (item.IsCompleted)
+                                            @if (groupItem.IsCompleted)
                                             {
                                                 <span class="badge bg-success">Completed</span>
                                             }
@@ -299,7 +344,7 @@
                                             }
                                         </td>
                                         <td>
-                                            <a asp-controller="DeliveryItems" asp-action="Edit" asp-route-id="@item.DeliveryItemId" 
+                                            <a asp-controller="DeliveryItems" asp-action="Edit" asp-route-id="@groupItem.DeliveryItemId" 
                                                class="btn btn-sm btn-warning" title="Edit">
                                                 <i class="bi bi-pencil"></i>
                                             </a>

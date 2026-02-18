@@ -305,21 +305,21 @@
         <td class="text-center align-middle">
             @if (item.ActualPickupTime.HasValue)
             {
-                <div class="text-success fw-bold">
+                <div class="fw-bold" style="color: white !important;">
                     <i class="bi bi-truck"></i> @item.ActualPickupTime.Value.ToString("HH:mm")
                 </div>
             }
             else if (item.ActualEnterDockTime.HasValue)
             {
                 <form asp-controller="Preparation" asp-action="ConfirmPickup" asp-route-id="@item.ScheduleId" method="post">
-                    <button type="submit" class="btn btn-sm btn-neon-success py-1 px-2" style="font-size: 0.7rem;" onclick="return confirm('Konfirmasi Truk Berangkat (Pickup)?')">
+                    <button type="submit" class="btn btn-sm btn-neon-success py-1 px-2 text-white" style="font-size: 0.7rem;" onclick="return confirm('Konfirmasi Truk Berangkat (Pickup)?')">
                         <i class="bi bi-truck"></i> PICKUP
                     </button>
                 </form>
             }
             else
             {
-                <span class="text-muted">Waiting...</span>
+                <span class="fw-bold" style="color: white !important;">Waiting...</span>
             }
         </td>
         <td class="text-center align-middle">
