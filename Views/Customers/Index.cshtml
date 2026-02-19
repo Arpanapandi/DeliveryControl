@@ -65,6 +65,7 @@
                             <th>@Html.DisplayNameFor(model => model.CustomerName)</th>
                             <th>Route</th>
                             <th>Cycle</th>
+                            <th>STD PREPARE</th>
                             <th>Docking</th>
                             <th>Pickup</th>
                             <th>ETD</th>
@@ -93,6 +94,7 @@
                                 <td>@item.CustomerName</td>
                                 <td>@(item.Route ?? "-")</td>
                                 <td>@(item.Cycle ?? "-")</td>
+                                <td class="fw-bold">@item.StdPrepareTime m</td>
                                 <td>@(item.Docking ?? "-")</td>
                                 <td>@(item.Pickup ?? "-")</td>
                                 <td>@(item.ETD ?? "-")</td>

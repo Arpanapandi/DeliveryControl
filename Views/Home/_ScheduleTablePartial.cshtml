@@ -48,7 +48,17 @@
     var tomorrow = today.AddDays(1);
 }
 
-@foreach (var group in Model.GroupBy(s => new { s.CustomerId, s.Area, s.Cycle, Date = s.ScheduledDate.Date }))
+@foreach (var group in Model.GroupBy(s => new { 
+    s.CustomerId, 
+    s.Area, 
+    s.Cycle, 
+    Date = s.ScheduledDate.Date,
+    Manifest = (s.ScheduleNumber ?? "").Contains("/") 
+               ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper() 
+               : (s.ScheduleNumber ?? "").Trim().ToUpper()
+})
+.OrderBy(g => g.All(s => s.ActualEndTime.HasValue) ? 1 : 0)
+.ThenBy(g => g.First().PickupTime))
 {
     var schedules = group.ToList();
     var item = schedules.First();
@@ -177,6 +187,24 @@
             </div>
         </td>
         <td class="text-center align-middle">
+            <div class="fw-bold">@(item.Customer?.StdPrepareTime ?? 0)m</div>
+        </td>
+        <td class="text-center align-middle">
+            @if (item.ReadyToDockTime.HasValue)
+            {
+                <div class="fw-bold" style="color: white !important;">
+                    @item.ReadyToDockTime.Value.ToString("HH:mm")
+                </div>
+                <div class="fw-bold @(item.ActPrepareTime > item.Customer?.StdPrepareTime ? "text-danger" : "text-success")" style="font-size: 0.75rem;">
+                    @Math.Round(item.ActPrepareTime ?? 0)m
+                </div>
+            }
+            else
+            {
+                <span class="text-muted">-</span>
+            }
+        </td>
+        <td class="text-center align-middle">
             @if (item.EnterDockTime.HasValue && estimatedDockTime.HasValue)
             {
                 <div>
@@ -279,7 +307,7 @@
             {
                 <div>
                     <span class="badge badge-delay-pickup" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
-                        <i class="bi bi-exclamation-triangle-fill"></i> Delay Dock In
+                        <i class="bi bi-exclamation-triangle-fill"></i> Delay Prepare
                     </span>
                     <div class="text-danger blink-text" style="font-size: 0.7rem; margin-top: 0.1rem; font-weight: 600;">
                         +@delayPrepareMinutes menit

@@ -117,7 +117,9 @@ namespace DeliveryControl.Controllers
             var groupedSchedules = schedulesForToday
                 .GroupBy(s => new {
                     Date = s.PickupTime?.Date ?? s.ScheduledDate.Date,
-                    // Manifest = (s.ScheduleNumber ?? "").Trim().ToUpper(), // REMOVED to allow grouping by Dock+Cycle+Route
+                    Manifest = (s.ScheduleNumber ?? "").Contains("/")
+                        ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper()
+                        : (s.ScheduleNumber ?? "").Trim().ToUpper(), // Group by Base Manifest (before /)
                     Cycle = (s.Cycle ?? "").Trim().ToUpper(),
                     Route = (s.Route ?? "").Trim().ToUpper(), 
                     Area = (s.Area ?? "").Trim().ToUpper()
@@ -133,11 +135,15 @@ namespace DeliveryControl.Controllers
                         : (uniqueCustomers.FirstOrDefault() ?? "-");
 
                     // Status Logic for the Group
-                    // For Preparation: Group is "Completed" (Prepared) only if ALL items in ALL schedules are done, 
-                    // OR simple check: all schedules have ActualEnterDockTime (based on current logic separation)
+                    // Yellow: Scheduled (Default)
+                    // Orange: In Progress (Scan in progress)
+                    // Blue: Prepared (Ready to Dock in clicked)
+                    // Green: Completed (Konfirmasi masuk dock clicked)
                     
-                    var isGroupCompleted = g.All(x => x.ActualEnterDockTime.HasValue);
-                    var groupStatus = isGroupCompleted ? "Completed" : (g.Any(x => x.ActualEnterDockTime.HasValue) ? "In Progress" : "Scheduled");
+                    var groupStatus = "Scheduled";
+                    if (g.All(x => x.Status == "Completed")) groupStatus = "Completed";
+                    else if (g.Any(x => x.PreparationStatus == "Prepared")) groupStatus = "Prepared";
+                    else if (g.Any(x => x.PreparationStatus == "In Progress" || x.Status == "In Progress" || x.ActualEnterDockTime.HasValue)) groupStatus = "In Progress";
 
                     return new DeliveryControl.Models.ViewModels.DriverTripViewModel
                     {
@@ -155,7 +161,7 @@ namespace DeliveryControl.Controllers
                         Schedules = sortedGroup
                     };
                 })
-                .OrderBy(vm => vm.OverallStatus == "Completed" ? 2 : (vm.OverallStatus == "In Progress" ? 0 : 1)) // Priority: In Progress -> Scheduled -> Completed
+                .OrderBy(vm => vm.OverallStatus == "In Progress" ? 0 : (vm.OverallStatus == "Prepared" ? 1 : (vm.OverallStatus == "Scheduled" ? 2 : 3))) // Priority: In Progress -> Prepared -> Scheduled -> Completed
                 .ThenBy(vm => vm.PickupTime ?? vm.ETD ?? DateTime.MaxValue)
                 .ToList();
 
@@ -167,13 +173,13 @@ namespace DeliveryControl.Controllers
             // But wait, the previous logic was: !s.ActualEnterDockTime.HasValue
             
             var needAction = groupedSchedules
-                .Where(vm => !vm.Schedules.All(s => s.ActualEnterDockTime.HasValue))
+                .Where(vm => vm.OverallStatus != "Completed")
                 .ToList();
-
+            
             var completed = groupedSchedules
-                .Where(vm => vm.Schedules.All(s => s.ActualEnterDockTime.HasValue))
+                .Where(vm => vm.OverallStatus == "Completed")
                 .ToList();
-
+            
             var finalModel = needAction.Concat(completed).ToList();
 
             // Statistics untuk tampilan (Count of Groups)
@@ -260,7 +266,7 @@ namespace DeliveryControl.Controllers
                 );
 
                 // Broadcast update via SignalR
-                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                 {
                     ScheduleNumber = schedule.ScheduleNumber,
                     Action = "enterDock",
@@ -325,63 +331,106 @@ namespace DeliveryControl.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        public async Task<IActionResult> GroupReadyToDock(int id)
+        {
+            var repSchedule = await _context.DeliverySchedules.FindAsync(id);
+            if (repSchedule == null) return NotFound();
+
+            // Find all schedules in the same group (Manifest base prefix + Date + Cycle + Route + Area)
+            // But for simplicity, we treat the RepresentativeScheduleId as the anchor.
+            // Requirement says "Ready to Dock in" button.
+            
+            var manifestPrefix = (repSchedule.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper();
+            var schedules = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .Where(s => s.ScheduledDate.Date == repSchedule.ScheduledDate.Date &&
+                            s.Cycle == repSchedule.Cycle &&
+                            s.Route == repSchedule.Route &&
+                            s.Area == repSchedule.Area)
+                .ToListAsync();
+
+            var now = DateTime.Now;
+            foreach (var s in schedules)
+            {
+                if (s.PreparationStatus != "Prepared" && s.Status != "Completed")
+                {
+                    s.PreparationStatus = "Prepared";
+                    s.ReadyToDockTime = now;
+                    s.UpdatedDate = now;
+                    s.UpdatedBy = User.Identity?.Name ?? "Preparation";
+                    
+                    // Calculate ActPrepareTime (minutes) from first preparation record if available, or just use now - scheduled context
+                    // User asked for ACT PREPARE field. Let's base it on (ReadyToDockTime - first Prep Record CreatedDate)
+                    var firstPrep = await _context.PreparationRecords
+                        .Where(pr => pr.ScheduleId == s.ScheduleId)
+                        .OrderBy(pr => pr.CreatedDate)
+                        .FirstOrDefaultAsync();
+                    
+                    if (firstPrep != null)
+                    {
+                        s.ActPrepareTime = (now - firstPrep.CreatedDate).TotalMinutes;
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("deliveryUpdated", new { action = "readyToDock", manifest = manifestPrefix });
+
+            return RedirectToAction(nameof(Index), new { selectedDate = repSchedule.ScheduledDate });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> QuickEnterDock(int id)
         {
-            var schedule = await _context.DeliverySchedules.FindAsync(id);
+            var repSchedule = await _context.DeliverySchedules.FindAsync(id);
+            if (repSchedule == null) return NotFound();
 
-            if (schedule == null)
+            var schedules = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .Where(s => s.ScheduledDate.Date == repSchedule.ScheduledDate.Date &&
+                            s.Cycle == repSchedule.Cycle &&
+                            s.Route == repSchedule.Route &&
+                            s.Area == repSchedule.Area)
+                .ToListAsync();
+
+            var now = DateTime.Now;
+            foreach (var s in schedules)
             {
-                return NotFound();
+                if (s.Status != "Completed")
+                {
+                    s.ActualEnterDockTime = now;
+                    s.Status = "Completed";
+                    s.PreparationStatus = "Prepared";
+                    s.UpdatedDate = now;
+                    s.UpdatedBy = User.Identity?.Name ?? "Preparation";
+                    
+                    if (!s.ActualStartTime.HasValue)
+                    {
+                        s.ActualStartTime = now;
+                        s.DriverStatus = "In Progress";
+                    }
+                }
             }
-
-            // Determine redirect date (enter dock date, not scheduled date)
-            var redirectDate = schedule.EnterDockTime?.Date ?? schedule.ScheduledDate;
-
-            if (schedule.ActualEnterDockTime.HasValue)
-            {
-                TempData["ErrorMessage"] = "Schedule ini sudah dikonfirmasi masuk dock!";
-                return RedirectToAction(nameof(Index), new { selectedDate = redirectDate });
-            }
-
-            var enterDockTime = DateTime.Now;
-            schedule.ActualEnterDockTime = enterDockTime;
-            
-            // Jika Driver belum confirm arrival, otomatis set Arrival = Enter Dock
-            if (!schedule.ActualStartTime.HasValue)
-            {
-                schedule.ActualStartTime = enterDockTime;
-                schedule.DriverStatus = "In Progress";
-            }
-
-            schedule.PreparationStatus = "In Progress";
-            schedule.UpdatedDate = enterDockTime;
-            schedule.UpdatedBy = User.Identity?.Name ?? "Preparation";
 
             await _context.SaveChangesAsync();
 
-            // Load customer data untuk SignalR message
-            await _context.Entry(schedule).Reference(s => s.Customer).LoadAsync();
-
-            // Log activity
+            // Log activity for the group
             await _logService.LogConfirm(
                 "Preparation",
-                schedule.ScheduleNumber,
-                schedule.ScheduleId,
-                $"Quick konfirmasi masuk dock untuk {schedule.Customer?.CustomerName} pada {enterDockTime:HH:mm}",
+                repSchedule.ScheduleNumber ?? "GROUP",
+                repSchedule.ScheduleId,
+                $"Group konfirmasi masuk dock untuk {repSchedule.Customer?.CustomerName} pada {now:HH:mm}",
                 User.Identity?.Name ?? "Preparation"
             );
 
-            // Broadcast update via SignalR
-            await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
-            {
-                ScheduleNumber = schedule.ScheduleNumber,
-                Action = "enterDock",
-                Message = $"Truk telah masuk dock untuk {schedule.Customer?.CustomerName} pada {enterDockTime:HH:mm}",
-                Timestamp = enterDockTime
+            await _hubContext.Clients.All.SendAsync("deliveryUpdated", new { 
+                action = "enterDock", 
+                scheduleNumber = repSchedule.ScheduleNumber,
+                timestamp = now 
             });
 
-            TempData["SuccessMessage"] = $"✅ Masuk dock dikonfirmasi pada {enterDockTime:HH:mm}!";
-            return RedirectToAction(nameof(Index), new { selectedDate = redirectDate });
+            return RedirectToAction(nameof(Index), new { selectedDate = repSchedule.ScheduledDate });
         }
 
         // POST: Preparation/ConfirmPickup/5 - Quick action untuk konfirmasi keberangkatan truk (Pickup)
@@ -423,12 +472,12 @@ namespace DeliveryControl.Controllers
             );
 
             // Broadcast update via SignalR
-            await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+            await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
             {
-                ScheduleNumber = schedule.ScheduleNumber,
-                Action = "pickup",
-                Message = $"Truk telah berangkat (Pickup) untuk {schedule.Customer?.CustomerName} pada {pickupTime:HH:mm}",
-                Timestamp = pickupTime
+                scheduleNumber = schedule.ScheduleNumber,
+                action = "pickup",
+                message = $"Truk telah berangkat (Pickup) untuk {schedule.Customer?.CustomerName} pada {pickupTime:HH:mm}",
+                timestamp = pickupTime
             });
 
             TempData["SuccessMessage"] = $"✅ Pickup berhasil dikonfirmasi pada {pickupTime:HH:mm}!";

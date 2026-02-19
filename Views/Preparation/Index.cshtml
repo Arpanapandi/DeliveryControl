@@ -38,6 +38,7 @@
         display: flex;
         flex-direction: column;
         box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        cursor: pointer;
     }
 
     .prep-card:hover {
@@ -46,7 +47,8 @@
     }
 
     .prep-card.border-warning { border-color: var(--cyber-yellow) !important; }
-    .prep-card.border-info { border-color: #06b6d4 !important; }
+    .prep-card.border-orange { border-color: #f97316 !important; }
+    .prep-card.border-info { border-color: #3b82f6 !important; }
     .prep-card.border-success { border-color: #10b981 !important; }
 
     .prep-card-header {
@@ -59,8 +61,9 @@
     }
 
     .header-scheduled { background: var(--cyber-yellow); color: #000; }
-    .header-preparing { background: #06b6d4; color: white; }
-    .header-prepared { background: #10b981; color: white; }
+    .header-preparing { background: #f97316; color: white; }
+    .header-prepared { background: #3b82f6; color: white; }
+    .header-completed { background: #10b981; color: white; }
 
     .prep-card-body {
         padding: 24px;
@@ -267,6 +270,7 @@
                 if (firstSch == null) continue;
 
                 var isCompleted = trip.OverallStatus == "Completed";
+                var isPrepared = trip.OverallStatus == "Prepared";
                 var isInProgress = trip.OverallStatus == "In Progress";
                 var isScheduled = trip.OverallStatus == "Scheduled";
                 
@@ -277,17 +281,23 @@
                 if (isInProgress) 
                 { 
                     headerClass = "header-preparing"; 
+                    borderClass = "border-orange";
+                }
+                else if (isPrepared)
+                {
+                    headerClass = "header-prepared";
                     borderClass = "border-info";
                 }
                 else if (isCompleted) 
                 { 
-                    headerClass = "header-prepared"; 
+                    headerClass = "header-completed"; 
                     borderClass = "border-success";
                 }
 
                 <div class="prep-card @borderClass" 
                      id="card-@trip.RepresentativeScheduleId" 
-                     data-schedule-number="@firstSch.ScheduleNumber">
+                     data-schedule-number="@if(firstSch != null) {<text>@firstSch.ScheduleNumber</text>}"
+                     data-date="@(trip.PickupTime?.ToString("yyyy-MM-dd") ?? (firstSch?.ScheduledDate.ToString("yyyy-MM-dd"))) ">
                     
                     <div class="prep-card-header @headerClass">
                         <div class="d-flex flex-wrap gap-1 align-items-center">
@@ -391,17 +401,35 @@
                     </div>
 
                     <div class="prep-card-footer">
-                        @if (!trip.Schedules.All(s => s.ActualEnterDockTime.HasValue))
+                        @if (trip.OverallStatus == "Scheduled")
                         {
                             <div class="text-center text-white-50">
-                                <small><i class="bi bi-upc-scan me-1"></i> SCAN SEMUA ITEM UNTUK SELESAI</small>
+                                <small><i class="bi bi-clock me-1"></i> WAITING FOR SCAN</small>
                             </div>
                         }
-                        else
+                        else if (trip.OverallStatus == "In Progress")
+                        {
+                            <form asp-action="GroupReadyToDock" method="post">
+                                <input type="hidden" name="id" value="@trip.RepresentativeScheduleId" />
+                                <button type="submit" class="btn btn-warning w-100 fw-bold py-2">
+                                    <i class="bi bi-box-seam me-2"></i> Ready to Dock in
+                                </button>
+                            </form>
+                        }
+                        else if (trip.OverallStatus == "Prepared")
+                        {
+                            <form asp-action="QuickEnterDock" method="post">
+                                <input type="hidden" name="id" value="@trip.RepresentativeScheduleId" />
+                                <button type="submit" class="btn btn-info w-100 fw-bold py-3 text-white">
+                                    <i class="bi bi-check-circle-fill me-2"></i> ENTER DOCK
+                                </button>
+                            </form>
+                        }
+                        else if (trip.OverallStatus == "Completed")
                         {
                             <div class="text-center">
                                 <span class="badge bg-success w-100 py-3" style="font-size: 0.9rem; border-radius: 8px;">
-                                    <i class="bi bi-check-circle-fill me-2"></i> MASUK DOCK: @(trip.Schedules.First(s => s.ActualEnterDockTime.HasValue).ActualEnterDockTime?.ToString("HH:mm") ?? "-")
+                                    <i class="bi bi-check-circle-fill me-2"></i> COMPLETED: @(trip.Schedules.First(s => s.ActualEnterDockTime.HasValue).ActualEnterDockTime?.ToString("HH:mm") ?? "-")
                                 </span>
                             </div>
                         }
@@ -418,18 +446,19 @@
         // SignalR Connection
         var connection = new signalR.HubConnectionBuilder().withUrl("/deliveryHub").build();
 
-        connection.on("DeliveryUpdated", function (data) {
+        connection.on("deliveryUpdated", function (data) {
             console.log("Update received:", data);
             
-            var action = data.action || data.Action;
-            var scheduleNum = data.scheduleNumber || data.ScheduleNumber;
+            // Use camelCase for data properties
+            var action = data.action;
+            var scheduleNum = data.scheduleNumber;
 
             if (action === "preparation" && scheduleNum) {
                 var selector = `.prep-card[data-schedule-number='${scheduleNum}']`;
                 var card = document.querySelector(selector);
                 
                 if (card) {
-                    // 1. Update UI Elements directly (No Reload)
+                    // Update UI Elements directly
                     updateCardUI(card, data);
 
                     // 2. Move to Top
@@ -448,8 +477,8 @@
                     // Card not found (maybe new?), reload filtering might be needed but try not to disrupt
                     // location.reload(); 
                 }
-            } else if (action === "enterDock") {
-                 // specific logic for enter dock (maybe reload or update badge)
+            } else if (action === "enterDock" || action === "readyToDock") {
+                 // specific logic for enter dock / ready to dock (full reload to refresh buttons)
                  location.reload();
             }
         });
@@ -461,18 +490,27 @@
                 var status = data.status || data.Status;
                 var prepStatus = data.preparationStatus || data.PreparationStatus;
                 
-                header.classList.remove('header-scheduled', 'header-preparing', 'header-prepared');
+                header.classList.remove('header-scheduled', 'header-preparing', 'header-prepared', 'header-completed');
+                card.classList.remove('border-warning', 'border-orange', 'border-info', 'border-success');
                 
-                if ((status === "Preparing" || status === "In Progress" || prepStatus === "Preparing" || prepStatus === "In Progress") && status !== "Completed" && prepStatus !== "Prepared") {
-                    header.classList.add('header-preparing');
-                    var badge = header.querySelector('.badge-status');
-                    if(badge) badge.innerText = "PREPARING";
-                } else if (status === "Completed" || prepStatus === "Prepared") {
-                    header.classList.add('header-prepared');
-                    var badge = header.querySelector('.badge-status');
+                var badge = header.querySelector('.badge-status');
+
+                if (status === "Completed") {
+                    header.classList.add('header-completed');
+                    card.classList.add('border-success');
                     if(badge) badge.innerText = "COMPLETED";
+                } else if (prepStatus === "Prepared") {
+                    header.classList.add('header-prepared');
+                    card.classList.add('border-info');
+                    if(badge) badge.innerText = "PREPARED";
+                } else if (status === "In Progress" || prepStatus === "In Progress" || status === "Preparing" || prepStatus === "Preparing") {
+                    header.classList.add('header-preparing');
+                    card.classList.add('border-orange');
+                    if(badge) badge.innerText = "IN PROGRESS";
                 } else {
                     header.classList.add('header-scheduled');
+                    card.classList.add('border-warning');
+                    if(badge) badge.innerText = "SCHEDULED";
                 }
             }
 
@@ -513,6 +551,19 @@
 
         connection.start().catch(function (err) {
             return console.error(err.toString());
+        });
+
+        // Card Click Redirection
+        document.querySelectorAll('.prep-card').forEach(card => {
+            card.addEventListener('click', function(e) {
+                // Jangan redirect jika klik pada tombol atau elemen interaktif lain (jika ada)
+                if (e.target.closest('button, a, input, select')) return;
+                
+                const date = this.getAttribute('data-date');
+                if (date) {
+                    window.location.href = `/PreparationWorkflow/Index?filterDate=${date}`;
+                }
+            });
         });
 
         // Remove auto-reload to keep state stable

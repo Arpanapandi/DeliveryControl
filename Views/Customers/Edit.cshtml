@@ -43,15 +43,20 @@
                     </div>
 
                     <div class="row mb-3">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label asp-for="Route" class="form-label"></label>
                             <input asp-for="Route" class="form-control" />
                             <span asp-validation-for="Route" class="text-danger"></span>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label asp-for="Cycle" class="form-label"></label>
                             <input asp-for="Cycle" class="form-control" />
                             <span asp-validation-for="Cycle" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="StdPrepareTime" class="form-label">Std Prepare (Min)</label>
+                            <input asp-for="StdPrepareTime" class="form-control" type="number" />
+                            <span asp-validation-for="StdPrepareTime" class="text-danger"></span>
                         </div>
                     </div>
 

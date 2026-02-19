@@ -400,16 +400,16 @@ namespace DeliveryControl.Controllers
                     CurrentStock = labelStockCount, // Ini akan muncul di kolom ACT
                     LevelStock = (latestPiece.Item?.RackMin ?? 5) > 0 ? labelStockCount / (latestPiece.Item?.RackMin ?? 5) : 0, 
                     Operator = latestPiece.CreatedBy ?? "-", 
-                    Status = status
+                    Status = status,
+                    LastActivityDate = latestPiece.CreatedDate
                 });
             }
             
-            // Sort by Plant -> Location -> Label for a stable dashboard view
+            // Sort by LastActivityDate DESC (Newest Scan first) -> Then stability sorts
             stockDetails = stockDetails
-                .OrderBy(s => s.Plant)
+                .OrderByDescending(s => s.LastActivityDate)
+                .ThenBy(s => s.Plant)
                 .ThenBy(s => s.Location)
-                .ThenBy(s => s.ItemName)
-                .ThenBy(s => s.Label)
                 .ToList();
 
             var totalItems = stockDetails.Count;

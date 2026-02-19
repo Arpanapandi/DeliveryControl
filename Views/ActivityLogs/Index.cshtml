@@ -207,7 +207,7 @@
         }
 
         // SignalR event handlers
-        connection.on("Connected", function(connectionId) {
+        connection.on("connected", function(connectionId) {
             console.log("✅ SignalR Connected! Connection ID:", connectionId);
             isConnected = true;
             usePollingFallback = false;
@@ -215,7 +215,7 @@
             updateStatusBadge('live', 'Live');
         });
 
-        connection.on("DeliveryUpdated", function(data) {
+        connection.on("deliveryUpdated", function(data) {
             console.log("🔔 Activity log update received:", data);
             // Refresh activity logs when there's a delivery update
             updateActivityLogs();

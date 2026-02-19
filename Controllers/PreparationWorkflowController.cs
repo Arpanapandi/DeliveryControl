@@ -121,9 +121,9 @@ namespace DeliveryControl.Controllers
                 var targetItem = itemsInSchedule.FirstOrDefault() ?? items.First();
 
                 // Calculate current stock to show to user
-                var currentStock = await _context.PullingRecords
-                    .CountAsync(r => r.ItemId == targetItem.ItemId && 
-                                    !_context.PreparationRecords.Any(p => p.Tag == r.Tag && p.Label == r.Label));
+                var totalPulled = await _context.PullingRecords.CountAsync(r => r.ItemId == targetItem.ItemId);
+                var totalPrepared = await _context.PreparationRecords.CountAsync(r => r.Tag == targetItem.VIN || r.Tag == targetItem.ItemCode);
+                var currentStock = Math.Max(0, totalPulled - totalPrepared);
 
         DeliverySchedule? schedule = null;
 
@@ -279,135 +279,108 @@ namespace DeliveryControl.Controllers
                 return Json(new { success = false, message = "Tag, Label, dan Kanban wajib diisi!" });
             }
 
+            using var transaction = await _context.Database.BeginTransactionAsync();
             try 
             {
                 record.Tag = record.Tag.Trim();
                 record.Label = record.Label.Trim();
                 record.Kanban = record.Kanban.Trim();
+
+                // Double-Submission Prevention: Check if this exact scan was recorded in the last 10 seconds
+                var recentDuplicate = await _context.PreparationRecords
+                    .AnyAsync(p => p.Tag == record.Tag && p.Label == record.Label && p.CreatedDate > DateTime.Now.AddSeconds(-10));
+                
+                if (recentDuplicate)
+                {
+                    return Json(new { success = false, message = "Data sedang diproses atau sudah tersimpan (Duplicate Prevention)." });
+                }
+
                 record.CreatedDate = DateTime.Now;
                 record.CreatedBy = HttpContext.Session.GetString("FullName") ?? "Operator";
 
-                // 1. Identification & Disambiguation
-                var items = await _context.Items
-                    .Where(i => i.VIN == record.Tag || i.ItemCode == record.Tag)
-                    .ToListAsync();
+                // 1. Identification & Item Lookup
+                var item = await _context.Items
+                    .FirstOrDefaultAsync(i => i.VIN == record.Tag || i.ItemCode == record.Tag);
                 
-                if (!items.Any())
+                if (item == null)
                 {
                     var pulling = await _context.PullingRecords.OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.Tag == record.Tag);
                     if (pulling != null)
                     {
-                        var pItem = await _context.Items.FindAsync(pulling.ItemId);
-                        if (pItem != null) items.Add(pItem);
+                        item = await _context.Items.FindAsync(pulling.ItemId);
                     }
                 }
 
-        if (!items.Any()) return Json(new { success = false, message = "TAG / VIN tidak terdaftar (Master)" });
+                if (item == null) return Json(new { success = false, message = "TAG / VIN tidak terdaftar (Master)" });
 
-        // For now, assume the first item match is the target (usually VIN is unique)
-        var item = items.First();
+                // 2. Final Schedule Matching (Strict Part Number Validation + FIFO)
+                string kanbanSaveUpper = record.Kanban.ToUpper();
+                string partNoSave = (item.CustomerPartNumber ?? "").ToUpper();
+                string vinSave = (item.VIN ?? "").ToUpper();
 
-        // 2. Final Schedule Matching (Strict Part Number Validation + FIFO)
-        string kanbanSaveUpper = record.Kanban.ToUpper();
-        string partNoSave = (item.CustomerPartNumber ?? "").ToUpper();
-        string vinSave = (item.VIN ?? "").ToUpper();
+                // Handle "kode didepan garis miring"
+                string cleanKanbanSave = kanbanSaveUpper.Split('/')[0].Trim();
+                string cleanPartNoSave = partNoSave.Split('/')[0].Trim();
+                string cleanVinSave = vinSave.Split('/')[0].Trim();
 
-        DeliverySchedule? schedule = null;
+                if (cleanKanbanSave != cleanPartNoSave && cleanKanbanSave != cleanVinSave)
+                {
+                    return Json(new { success = false, message = $"KANBAN tidak sesuai dengan produk!" });
+                }
 
-        // NEW: Split by slash to handle "kode didepan garis miring"
-        string cleanKanbanSave = kanbanSaveUpper.Split('/')[0].Trim();
-        string cleanPartNoSave = partNoSave.Split('/')[0].Trim();
-        string cleanVinSave = vinSave.Split('/')[0].Trim();
+                var schedule = await _context.DeliverySchedules
+                    .Include(s => s.Customer)
+                    .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
+                    .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
+                                 s.DeliveryItems.Any(di => di.ItemId == item.ItemId))
+                    .OrderBy(s => s.ScheduledDate)
+                    .ThenBy(s => s.ScheduleNumber)
+                    .FirstOrDefaultAsync();
 
-        if (cleanKanbanSave == cleanPartNoSave || cleanKanbanSave == cleanVinSave)
-        {
-            schedule = await _context.DeliverySchedules
-                .Include(s => s.Customer)
-                .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
-                .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
-                             s.DeliveryItems.Any(di => di.ItemId == item.ItemId))
-                .OrderBy(s => s.ScheduledDate)
-                .ThenBy(s => s.ScheduleNumber)
-                .FirstOrDefaultAsync();
-        }
-        else
-        {
-            return Json(new { success = false, message = $"KANBAN tidak sesuai dengan produk!" });
-        }
+                if (schedule == null) 
+                {
+                    return Json(new { success = false, message = "Produk OK, tapi JADWAL tidak ditemukan" });
+                }
 
-        if (schedule == null) 
-        {
-            return Json(new { success = false, message = "Produk OK, tapi JADWAL tidak ditemukan" });
-        }
+                // --- VALIDASI 1: Cek apakah kebutuhan QTY sudah terpenuhi ---
+                var dItem = schedule.DeliveryItems.FirstOrDefault(di => di.ItemId == item.ItemId);
+                if (dItem != null && (dItem.ActualQuantity ?? 0) >= dItem.Quantity)
+                {
+                    return Json(new { success = false, message = $"QTY sudah CUKUP untuk jadwal ini" });
+                }
 
-        // --- VALIDASI 1: Cek apakah kebutuhan QTY sudah terpenuhi ---
-        var dItem = schedule.DeliveryItems.FirstOrDefault(di => di.ItemId == item.ItemId);
-        if (dItem != null && (dItem.ActualQuantity ?? 0) >= dItem.Quantity)
-        {
-            return Json(new { success = false, message = $"QTY sudah CUKUP untuk jadwal ini" });
-        }
+                // --- VALIDASI 2: Cek Saldo Stok Riil (Per Label & FIFO) ---
+                var countPulled = await _context.PullingRecords.CountAsync(p => p.Tag == record.Tag && p.Label == record.Label);
+                var countPrepared = await _context.PreparationRecords.CountAsync(p => p.Tag == record.Tag && p.Label == record.Label);
 
-        // --- VALIDASI 2: Cek Saldo Stok Riil (Per Label & FIFO) ---
-        // Hitung saldo: Total Pulling - Total Preparation untuk Tag/Label ini
-        var countPulled = await _context.PullingRecords
-            .CountAsync(p => p.Tag == record.Tag && p.Label == record.Label);
-        
-        var countPrepared = await _context.PreparationRecords
-            .CountAsync(p => p.Tag == record.Tag && p.Label == record.Label);
+                var allPullings = await _context.PullingRecords.Where(p => p.Tag == record.Tag).OrderBy(p => p.CreatedDate).ToListAsync();
+                var allPreps = await _context.PreparationRecords.Where(p => p.Tag == record.Tag).ToListAsync();
 
-        // Cari semua Pulling untuk Item/Tag ini (FIFO)
-        var allPullings = await _context.PullingRecords
-            .Where(p => p.Tag == record.Tag)
-            .OrderBy(p => p.CreatedDate)
-            .ToListAsync();
-        
-        var allPreps = await _context.PreparationRecords
-            .Where(p => p.Tag == record.Tag)
-            .ToListAsync();
+                var consumedPullingIds = new HashSet<int>();
+                foreach (var p in allPreps)
+                {
+                    var pLabel = (p.Label ?? "").Trim().ToUpper();
+                    var match = allPullings.FirstOrDefault(pl => !consumedPullingIds.Contains(pl.PullingId) && (pl.Label ?? "").Trim().ToUpper() == pLabel);
+                    if (match != null) consumedPullingIds.Add(match.PullingId);
+                }
 
-        var consumedPullingIds = new HashSet<int>();
-        foreach (var p in allPreps)
-        {
-            var pLabel = (p.Label ?? "").Trim().ToUpper();
-            var match = allPullings.FirstOrDefault(pl => 
-                            !consumedPullingIds.Contains(pl.PullingId) && 
-                            (pl.Label ?? "").Trim().ToUpper() == pLabel);
-            if (match != null) consumedPullingIds.Add(match.PullingId);
-        }
+                if (countPulled <= countPrepared)
+                {
+                    var replacement = allPullings.FirstOrDefault(pl => !consumedPullingIds.Contains(pl.PullingId));
+                    if (replacement != null)
+                    {
+                        record.Label = replacement.Label; 
+                    }
+                    else
+                    {
+                        return Json(new { success = false, message = "STOCK tidak tersedia di Rak" });
+                    }
+                }
 
-        bool labelAvailable = (countPulled > countPrepared);
-        string successMessage = "Data preparation berhasil disimpan!";
+                record.Plant = item.Plant ?? "-";
+                record.ScheduleId = schedule.ScheduleId;
 
-        if (labelAvailable)
-        {
-            // CASE A: Label physical tersedia (Stok Pulled > Prep) -> Gunakan.
-        }
-        else
-        {
-            // CASE B: Label tidak ditemukan / sudah terpakai -> CARI PENGGANTI (FIFO)
-            var replacement = allPullings.FirstOrDefault(pl => !consumedPullingIds.Contains(pl.PullingId));
-            
-            if (replacement != null)
-            {
-                // Auto-Correct Label
-                // Kita gunakan label dari sistem agar nanti StockController bisa match dan menghilangkan stoknya.
-                string oldLabel = record.Label;
-                record.Label = replacement.Label; 
-                successMessage = $"INFO: Label '{oldLabel}' tidak ditemukan/habis. Digantikan otomatis dengan stok terlama (FIFO): '{replacement.Label}'. Data disimpan.";
-            }
-            else
-            {
-                // CASE C: Benar-benar habis
-                return Json(new { success = false, message = "STOCK tidak tersedia di Rak" });
-            }
-        }
-
-        record.Plant = item.Plant ?? "-";
-        record.ScheduleId = schedule.ScheduleId;
-
-                // 3. Update Stats
-                // LOGIKA BARU: 1x Input = 1 Kanban (Box)
-                // Jadi Actual Qty bertambah sebesar QPC (Qty per Lot), bukan bertambah 1
+                // 3. Update Stats (Atomic Increment)
                 int qpc = (item.QtyLot != null && item.QtyLot > 0) ? item.QtyLot.Value : 1;
                 
                 schedule.TotalActualQuantity += qpc;
@@ -421,104 +394,66 @@ namespace DeliveryControl.Controllers
                     if (dItem.ActualQuantity >= dItem.Quantity) dItem.IsCompleted = true;
                 }
 
-                // Check if ALL items in this schedule are completed
-                bool allDone = schedule.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity);
-
-                if (allDone)
+                if (schedule.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity))
                 {
-                    schedule.Status = "Completed";
-                    schedule.PreparationStatus = "Prepared";
-                    
-                    // --- LOGIKA AUTO-CONFIRM ENTER DOCK ---
-                    // Jika preparation selesai, otomatis set status truk sudah masuk dock
-                    if (!schedule.ActualEnterDockTime.HasValue)
-                    {
-                        var now = DateTime.Now;
-                        schedule.ActualEnterDockTime = now;
-                        
-                        // Jika driver belum confirm arrival, otomatis set juga
-                        if (!schedule.ActualStartTime.HasValue)
-                        {
-                            schedule.ActualStartTime = now;
-                            schedule.DriverStatus = "In Progress";
-                        }
-                        
-                        schedule.UpdatedBy = "Auto-System";
-
-                        // Log Activity
-                        await _logService.LogConfirm(
-                            "System",
-                            schedule.ScheduleNumber ?? "UNKNOWN",
-                            schedule.ScheduleId,
-                            $"Auto-Confirm: Preparation Selesai -> Otomatis Set Masuk Dock pada {now:HH:mm}",
-                            "System"
-                        );
-
-                        // Broadcast EXTRA notification for Enter Dock
-                        await _deliveryHubContext.Clients.All.SendAsync("DeliveryUpdated", new { 
-                            Action = "enterDock", 
-                            ScheduleNumber = schedule.ScheduleNumber,
-                            Message = $"[AUTO] Persiapan Selesai! Truk masuk dock untuk {schedule.Customer?.CustomerName}",
-                            Timestamp = now
-                        });
-                    }
-                    // ---------------------------------------
+                    // No longer auto-confirming. User must click "Ready to Dock" or "Confirm" in portal.
+                    // schedule.Status = "Completed";
+                    // schedule.PreparationStatus = "Prepared";
                 }
 
                 _context.PreparationRecords.Add(record);
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
                 
                 var totalTarget = schedule.DeliveryItems.Sum(di => di.Quantity);
                 var totalActual = schedule.DeliveryItems.Sum(di => di.ActualQuantity ?? 0);
                 var totalPercent = totalTarget > 0 ? ((double)totalActual / (double)totalTarget * 100) : 0;
 
                 var broadcastData = new {
-                    Action = "preparation",
-                    ScheduleNumber = schedule.ScheduleNumber,
-                    Status = schedule.Status,
-                    PreparationStatus = schedule.PreparationStatus,
-                    TotalPercent = totalPercent,
-                    CustomerName = schedule.Customer?.CustomerName,
-                    Items = schedule.DeliveryItems.Select(di => new {
-                        ItemId = di.ItemId,
-                        VIN = di.Item?.VIN,
-                        Actual = di.ActualQuantity ?? 0,
-                        Target = di.Quantity,
-                        Percent = (di.Quantity > 0) ? ((double)(di.ActualQuantity ?? 0) / (double)di.Quantity * 100) : 0
+                    action = "preparation",
+                    scheduleNumber = schedule.ScheduleNumber,
+                    status = schedule.Status,
+                    preparationStatus = schedule.PreparationStatus,
+                    totalPercent = totalPercent,
+                    customerName = schedule.Customer?.CustomerName,
+                    items = schedule.DeliveryItems.Select(di => new {
+                        itemId = di.ItemId,
+                        vin = di.Item?.VIN,
+                        actual = di.ActualQuantity ?? 0,
+                        target = di.Quantity,
+                        percent = (di.Quantity > 0) ? ((double)(di.ActualQuantity ?? 0) / (double)di.Quantity * 100) : 0
                     }).ToList()
                 };
 
-                await _deliveryHubContext.Clients.All.SendAsync("DeliveryUpdated", broadcastData);
-                await _stockHubContext.Clients.All.SendAsync("UpdateStock");
-
-                // Return detailed info for the UI progress area
-                var details = new
-                {
-                    schedule.ScheduleId,
-                    schedule.ScheduleNumber,
-                    CustomerName = schedule.Customer?.CustomerName,
-                    TotalPercent = totalPercent,
-                    Items = schedule.DeliveryItems.Select(di => {
-                        var qpc = (di.Item?.QtyLot > 0) ? di.Item.QtyLot.Value : 1;
-                        return new {
-                            ItemName = di.Item?.ItemName ?? "Unknown",
-                            VIN = di.Item?.VIN ?? "-",
-                            Target = di.Quantity,
-                            Actual = di.ActualQuantity ?? 0,
-                            TargetKanban = Math.Ceiling((double)di.Quantity / qpc),
-                            ActualKanban = ((double)(di.ActualQuantity ?? 0) / qpc)
-                        };
-                    }).ToList()
-                };
+                await _deliveryHubContext.Clients.All.SendAsync("deliveryUpdated", broadcastData);
+                await _stockHubContext.Clients.All.SendAsync("updateStock");
 
                 return Json(new { 
                     success = true, 
                     message = $"Berhasil! Persiapan tersimpan.",
-                    scheduleDetails = details
+                    scheduleDetails = new
+                    {
+                        schedule.ScheduleId,
+                        schedule.ScheduleNumber,
+                        CustomerName = schedule.Customer?.CustomerName,
+                        TotalPercent = totalPercent,
+                        Items = schedule.DeliveryItems.Select(di => {
+                            var iQpc = (di.Item?.QtyLot > 0) ? di.Item.QtyLot.Value : 1;
+                            return new {
+                                itemName = di.Item?.ItemName ?? "Unknown",
+                                vin = di.Item?.VIN ?? "-",
+                                target = di.Quantity,
+                                actual = di.ActualQuantity ?? 0,
+                                targetKanban = Math.Ceiling((double)di.Quantity / iQpc),
+                                actualKanban = ((double)(di.ActualQuantity ?? 0) / iQpc)
+                            };
+                        }).ToList()
+                    }
                 });
             }
             catch (Exception ex)
             {
+                await transaction.RollbackAsync();
                 return Json(new { success = false, message = "Error: " + ex.Message });
             }
         }
@@ -533,9 +468,91 @@ namespace DeliveryControl.Controllers
             schedule.UpdatedDate = DateTime.Now;
 
             await _context.SaveChangesAsync();
-            await _deliveryHubContext.Clients.All.SendAsync("DeliveryUpdated", new { Action = "preparation", ScheduleNumber = schedule.ScheduleNumber });
+            await _deliveryHubContext.Clients.All.SendAsync("deliveryUpdated", new { action = "preparation", scheduleNumber = schedule.ScheduleNumber });
 
             return Json(new { success = true });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetSchedulesJson(DateTime? filterDate, string? vin)
+        {
+            var today = DateTime.Today;
+            var query = _context.DeliverySchedules
+                .AsNoTracking()
+                .Include(s => s.Customer)
+                .Include(s => s.DeliveryItems)
+                    .ThenInclude(di => di.Item)
+                .Where(s => s.Status != "Cancelled");
+
+            // 1. Date Filter (Default: Today)
+            if (filterDate.HasValue)
+            {
+                query = query.Where(s => s.ScheduledDate.Date == filterDate.Value.Date);
+            }
+            else
+            {
+                query = query.Where(s => s.ScheduledDate.Date == today);
+            }
+
+            // 2. VIN Filter (Partial Match)
+            if (!string.IsNullOrEmpty(vin))
+            {
+                var vinLower = vin.ToLower();
+                query = query.Where(s => s.DeliveryItems.Any(di => 
+                    (di.Item != null && di.Item.VIN != null && di.Item.VIN.ToLower().Contains(vinLower)) ||
+                    (di.Item != null && di.Item.CustomerPartNumber != null && di.Item.CustomerPartNumber.ToLower().Contains(vinLower))
+                ));
+            }
+
+            var rawSchedules = await query.ToListAsync();
+
+            // 3. Priority Sorting & Projection
+            var result = rawSchedules
+                .Select(s => {
+                    var status = s.PreparationStatus ?? s.Status;
+                    int priority = 3; // Default (lowest)
+                    
+                    if (status == "In Progress" || status == "Preparing") priority = 0;
+                    else if (status == "Scheduled" || status == "Waiting") priority = 1;
+                    else if (status == "Prepared" || status == "Completed") priority = 2;
+
+                    // Calculate Kanban Counts
+                    double totalKanbanTarget = 0;
+                    double totalKanbanActual = 0;
+
+                    foreach(var item in s.DeliveryItems)
+                    {
+                        var qpc = (item.Item?.QtyLot != null && item.Item.QtyLot > 0) ? item.Item.QtyLot.Value : 1;
+                        totalKanbanTarget += Math.Ceiling((double)item.Quantity / qpc);
+                        totalKanbanActual += (double)(item.ActualQuantity ?? 0) / qpc;
+                    }
+
+                    // Get Unique VINs or Part Numbers
+                    var vinList = s.DeliveryItems
+                        .Where(di => di.Item != null)
+                        .Select(di => !string.IsNullOrEmpty(di.Item.VIN) ? di.Item.VIN : di.Item.CustomerPartNumber)
+                        .Where(v => !string.IsNullOrEmpty(v))
+                        .Distinct()
+                        .ToList();
+
+                    return new {
+                        s.ScheduleId,
+                        s.ScheduleNumber,
+                        CustomerName = s.Customer?.CustomerName ?? "-",
+                        Dock = string.IsNullOrEmpty(s.Area) ? (s.Customer?.Docking ?? "-") : s.Area,
+                        VINs = string.Join(", ", vinList),
+                        Status = status,
+                        Priority = priority,
+                        TotalKanbanActual = totalKanbanActual, 
+                        TotalKanbanTarget = totalKanbanTarget,
+                        ScheduledDate = s.ScheduledDate
+                    };
+                })
+                .OrderBy(x => x.Priority)
+                .ThenBy(x => x.ScheduledDate)
+                .ThenBy(x => x.ScheduleNumber);
+
+            return Json(result);
         }
     }
 }

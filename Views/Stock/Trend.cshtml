@@ -613,7 +613,7 @@
             .withAutomaticReconnect()
             .build();
 
-        connection.on("UpdateStock", function () {
+        connection.on("updateStock", function () {
             console.log("Stock update received, refreshing trends...");
             refreshDashboard();
         });

@@ -58,9 +58,11 @@ namespace DeliveryControl.Models
 
         // Fields untuk integrasi Preparation
         [Display(Name = "Total Target Quantity")]
+        [Column(TypeName = "decimal(18,2)")]
         public decimal TotalTargetQuantity { get; set; }
 
         [Display(Name = "Total Actual Quantity")]
+        [Column(TypeName = "decimal(18,2)")]
         public decimal TotalActualQuantity { get; set; }
 
         [Display(Name = "Actual Pickup Time")]
@@ -79,6 +81,12 @@ namespace DeliveryControl.Models
 
         [Display(Name = "Actual End Time")]
         public DateTime? ActualEndTime { get; set; }
+
+        [Display(Name = "Ready to Dock Time")]
+        public DateTime? ReadyToDockTime { get; set; }
+
+        [Display(Name = "Actual Prepare Time")]
+        public double? ActPrepareTime { get; set; }
 
         [StringLength(20)]
         [Display(Name = "Preparation Status")]

@@ -45,5 +45,6 @@ namespace DeliveryControl.Models
         public decimal LevelStock { get; set; }
         public string Operator { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty; // Shortage, Normal, Over
+        public DateTime LastActivityDate { get; set; }
     }
 }

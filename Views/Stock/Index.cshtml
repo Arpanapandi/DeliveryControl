@@ -244,7 +244,7 @@
                 .withAutomaticReconnect()
                 .build();
 
-            connection.on("UpdateStock", function () {
+            connection.on("updateStock", function () {
                 refreshDashboard();
             });
 

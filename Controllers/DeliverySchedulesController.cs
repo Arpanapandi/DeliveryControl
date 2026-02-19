@@ -529,7 +529,8 @@ namespace DeliveryControl.Controllers
             int pageSize = 20;
 
             var items = await schedules
-                .OrderBy(s => s.ScheduledDate)
+                .OrderBy(s => s.Status == "Completed" ? 1 : 0) // Priority: Not Completed first
+                .ThenBy(s => s.ScheduledDate)
                 .ThenBy(s => s.ETD)
                 .ThenBy(s => s.ScheduleId)
                 .Skip((pageNumber - 1) * pageSize)
@@ -763,11 +764,11 @@ namespace DeliveryControl.Controllers
                         await transaction.CommitAsync();
                         
                         // Notify Dashboard via SignalR
-                        await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                        await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                         {
-                            Action = "bulk_create",
-                            Message = $"Berhasil membuat {schedules.Count} schedule delivery untuk tanggal {model.ScheduledDate:dd/MM/yyyy}",
-                            Timestamp = DateTime.Now
+                            action = "bulk_create",
+                            message = $"Berhasil membuat {schedules.Count} schedule delivery untuk tanggal {model.ScheduledDate:dd/MM/yyyy}",
+                            timestamp = DateTime.Now
                         });
 
                         TempData["SuccessMessage"] = $"✅ Berhasil membuat {schedules.Count} schedule delivery untuk tanggal {model.ScheduledDate:dd/MM/yyyy}!";
@@ -1027,12 +1028,12 @@ namespace DeliveryControl.Controllers
                     await transaction.CommitAsync();
                     
                     // Notify Dashboard via SignalR
-                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                     {
-                        ScheduleNumber = schedule.ScheduleNumber,
-                        Action = "create",
-                        Message = $"Schedule baru {schedule.ScheduleNumber} telah dibuat",
-                        Timestamp = DateTime.Now
+                        scheduleNumber = schedule.ScheduleNumber,
+                        action = "create",
+                        message = $"Schedule baru {schedule.ScheduleNumber} telah dibuat",
+                        timestamp = DateTime.Now
                     });
 
                     TempData["SuccessMessage"] = "Schedule berhasil ditambahkan!";
@@ -1128,12 +1129,12 @@ namespace DeliveryControl.Controllers
                     TempData["SuccessMessage"] = "Schedule berhasil diupdate!";
                     
                     // Kirim SignalR notification untuk update dashboard real-time
-                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                     {
-                        ScheduleNumber = schedule.ScheduleNumber,
-                        Action = "update",
-                        Message = $"Schedule {schedule.ScheduleNumber} ({schedule.Customer?.CustomerName ?? "N/A"}) telah diupdate",
-                        Timestamp = DateTime.Now
+                        scheduleNumber = schedule.ScheduleNumber,
+                        action = "update",
+                        message = $"Schedule {schedule.ScheduleNumber} ({schedule.Customer?.CustomerName ?? "N/A"}) telah diupdate",
+                        timestamp = DateTime.Now
                     });
                 }
                 catch (DbUpdateConcurrencyException)
@@ -1187,12 +1188,12 @@ namespace DeliveryControl.Controllers
             await _context.Entry(schedule).Reference(s => s.Customer).LoadAsync();
             
             // Broadcast update via SignalR
-            await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+            await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
             {
-                ScheduleNumber = schedule.ScheduleNumber,
-                Action = "arrival",
-                Message = $"Delivery ke {schedule.Customer?.CustomerName} dimulai",
-                Timestamp = DateTime.Now
+                scheduleNumber = schedule.ScheduleNumber,
+                action = "arrival",
+                message = $"Delivery ke {schedule.Customer?.CustomerName} dimulai",
+                timestamp = DateTime.Now
             });
             
             TempData["SuccessMessage"] = "Delivery dimulai!";
@@ -1235,12 +1236,12 @@ namespace DeliveryControl.Controllers
             }
             
             // Broadcast update via SignalR
-            await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+            await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
             {
-                ScheduleNumber = schedule.ScheduleNumber,
-                Action = "departure",
-                Message = $"Delivery ke {schedule.Customer?.CustomerName} selesai{(string.IsNullOrEmpty(durationText) ? "" : $". Durasi: {durationText}")}",
-                Timestamp = DateTime.Now
+                scheduleNumber = schedule.ScheduleNumber,
+                action = "departure",
+                message = $"Delivery ke {schedule.Customer?.CustomerName} selesai{(string.IsNullOrEmpty(durationText) ? "" : $". Durasi: {durationText}")}",
+                timestamp = DateTime.Now
             });
             
             TempData["SuccessMessage"] = "Delivery selesai!";
@@ -1300,12 +1301,12 @@ namespace DeliveryControl.Controllers
                     await _context.SaveChangesAsync();
 
                     // Notify Dashboard via SignalR
-                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                     {
-                        ScheduleNumber = schedule.ScheduleNumber,
-                        Action = "delete",
-                        Message = $"Schedule {schedule.ScheduleNumber} telah dihapus",
-                        Timestamp = DateTime.Now
+                        scheduleNumber = schedule.ScheduleNumber,
+                        action = "delete",
+                        message = $"Schedule {schedule.ScheduleNumber} telah dihapus",
+                        timestamp = DateTime.Now
                     });
 
                     TempData["SuccessMessage"] = "Schedule berhasil dihapus!";
@@ -1397,11 +1398,11 @@ namespace DeliveryControl.Controllers
         await _context.SaveChangesAsync();
 
                 // Notify Dashboard via SignalR
-                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                 {
-                    Action = "bulk_delete",
-                    Message = $"Berhasil menghapus {deletedSchedules} schedule dan {totalItems} item",
-                    Timestamp = DateTime.Now
+                    action = "bulk_delete",
+                    message = $"Berhasil menghapus {deletedSchedules} schedule dan {totalItems} item",
+                    timestamp = DateTime.Now
                 });
 
                 TempData["SuccessMessage"] = $"✅ Berhasil menghapus {deletedSchedules} schedule{(deletedSchedules > 1 ? "" : "")} dan {totalItems} delivery item{(totalItems != 1 ? "s" : "")}!";
@@ -1613,11 +1614,11 @@ namespace DeliveryControl.Controllers
                         await transaction.CommitAsync();
 
                     // Notify Dashboard via SignalR
-                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                     {
-                        Action = "import",
-                        Message = $"Berhasil import {schedules.Count} schedule dari Excel",
-                        Timestamp = DateTime.Now
+                        action = "import",
+                        message = $"Berhasil import {schedules.Count} schedule dari Excel",
+                        timestamp = DateTime.Now
                     });
 
                         TempData["SuccessMessage"] = $"Berhasil import {schedules.Count} schedule dari Excel!";

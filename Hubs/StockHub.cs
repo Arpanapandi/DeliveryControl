@@ -6,7 +6,7 @@ namespace DeliveryControl.Hubs
     {
         public async Task NotifyStockUpdate()
         {
-            await Clients.All.SendAsync("UpdateStock");
+            await Clients.All.SendAsync("updateStock");
         }
     }
 }

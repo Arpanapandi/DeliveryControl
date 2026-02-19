@@ -120,10 +120,10 @@ URL: http://localhost:5000
 
 // Saat ada update dari driver
 🔔 Delivery Update Received: {
-  ScheduleNumber: "SCH-20251123-001",
-  Action: "arrival",
-  Message: "Driver telah tiba di PT ABC pada 10:30",
-  Timestamp: "2025-11-23T10:30:00"
+  scheduleNumber: "SCH-20251123-001",
+  action: "arrival",
+  message: "Driver telah tiba di PT ABC pada 10:30",
+  timestamp: "2025-11-23T10:30:00"
 }
 📊 Statistics updated: {
   todaySchedules: 10,

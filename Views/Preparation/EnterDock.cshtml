@@ -1,18 +1,18 @@
 @model DeliveryControl.Models.DeliverySchedule
 
 @{
-    ViewData["Title"] = "Konfirmasi Masuk Dock";
+    ViewData["Title"] = "ENTER DOCK";
     var now = DateTime.Now;
     var isAdmin = Context.Session.GetString("Role") == "Admin";
 }
 
 <div class="row mb-4">
     <div class="col-12">
-        <h2><i class="bi bi-box-arrow-in-right"></i> Konfirmasi Masuk Dock</h2>
+        <h2><i class="bi bi-box-arrow-in-right"></i> ENTER DOCK</h2>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a asp-action="Index">Portal Preparation</a></li>
-                <li class="breadcrumb-item active" aria-current="page">Konfirmasi Masuk Dock</li>
+                <li class="breadcrumb-item active" aria-current="page">ENTER DOCK</li>
             </ol>
         </nav>
     </div>
@@ -22,7 +22,7 @@
     <div class="col-md-8">
         <div class="card border-warning">
             <div class="card-header bg-warning text-dark">
-                <h5 class="mb-0"><i class="bi bi-box-arrow-in-right"></i> Konfirmasi Waktu Masuk Dock</h5>
+                <h5 class="mb-0"><i class="bi bi-box-arrow-in-right"></i> ENTER DOCK TIME</h5>
             </div>
             <div class="card-body">
                 <form asp-action="EnterDock" method="post">
@@ -139,7 +139,7 @@
                             <i class="bi bi-x-circle"></i> Batal
                         </a>
                         <button type="submit" class="btn btn-warning btn-lg">
-                            <i class="bi bi-check-circle-fill"></i> Konfirmasi Masuk Dock
+                            <i class="bi bi-check-circle-fill"></i> ENTER DOCK
                         </button>
                     </div>
                 </form>

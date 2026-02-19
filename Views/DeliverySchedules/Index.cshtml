@@ -99,10 +99,12 @@
                             <th class="text-center align-middle" style="width: 80px; background-color: #212529;">ROUTE</th>
                             <th class="text-center align-middle" style="width: 60px; background-color: #212529;">CYCLE</th>
                             <th class="text-center align-middle" style="width: 80px; background-color: #212529;">QTY KBN</th>
+                            <th class="text-center align-middle" style="width: 80px; background-color: #212529;">STD PREPARE</th>
+                            <th class="text-center align-middle" style="width: 80px; background-color: #212529;">ACT PREPARE</th>
                             <th class="text-center align-middle" style="width: 80px; background-color: #212529;">ENTER DOCK</th>
+                            <th class="text-center align-middle" style="width: 100px; background-color: #212529;">ACT ENTER DOCK</th>
                             <th class="text-center align-middle" style="width: 90px; background-color: #212529;">EST SELESAI</th>
-                            <th class="text-center align-middle" style="width: 90px; background-color: #212529;">ACT ENTER DOCK</th>
-                            <th class="text-center align-middle" style="width: 90px; background-color: #212529;">EST ACT SELESAI</th>
+                            <th class="text-center align-middle" style="width: 100px; background-color: #212529;">ACT SELESAI</th>
                             <th class="text-center align-middle" style="width: 80px; background-color: #212529;">PICKUP</th>
                             <th class="text-center align-middle" style="width: 100px; background-color: #212529;">ACT PICKUP</th>
                             <th class="text-center align-middle" style="width: 60px; background-color: #212529;">ETD</th>
@@ -197,16 +199,16 @@
                 });
             }
 
-            connection.on("Connected", function(id) {
+            connection.on("connected", function(id) {
                 console.log("✅ SignalR Connected for History!");
             });
 
-            connection.on("UpdateStock", function() {
+            connection.on("updateStock", function() {
                 console.log("📦 Stock update received on History page! Refreshing...");
                 updateTableData();
             });
 
-            connection.on("DeliveryUpdated", function(data) {
+            connection.on("deliveryUpdated", function(data) {
                 console.log("🔔 Delivery update received on History page:", data);
                 updateTableData();
             });

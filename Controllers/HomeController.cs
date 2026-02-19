@@ -66,7 +66,15 @@ public class HomeController : Controller
         
         // HITUNG STATISTIK BERDASARKAN GRUP (MANIFEST)
         var groupedSchedules = activeSchedules
-            .GroupBy(s => new { s.CustomerId, s.Area, s.Cycle, Date = s.ScheduledDate.Date })
+            .GroupBy(s => new { 
+                s.CustomerId, 
+                s.Area, 
+                s.Cycle, 
+                Manifest = (s.ScheduleNumber ?? "").Contains("/")
+                    ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper()
+                    : (s.ScheduleNumber ?? "").Trim().ToUpper(), // Group by Base Manifest (before /) 
+                Date = s.ScheduledDate.Date 
+            })
             .Select(g => new { 
                 Schedules = g.ToList(),
                 First = g.First(),

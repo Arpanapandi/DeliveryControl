@@ -945,19 +945,23 @@ else
         }
 
         // SignalR event handlers
-        connection.on("Connected", function(connectionId) {
+        connection.on("connected", function(connectionId) {
             console.log("✅ SignalR Connected! Connection ID:", connectionId);
             isConnected = true;
             reconnectAttempts = 0;
             updateStatusBadge('live', 'Live');
         });
 
-        connection.on("DeliveryUpdated", function(data) {
+        connection.on("deliveryUpdated", function(data) {
             console.log("🔔 Delivery Update Received:", data);
             
+            // Use camelCase for data properties
+            const action = data.action || data.Action;
+            const message = data.message || data.Message;
+            
             // Show notification
-            const icon = data.Action === 'arrival' ? '🚚' : '✅';
-            showToast(`${icon} ${data.Message}`, 'success');
+            const icon = action === 'arrival' ? '🚚' : '✅';
+            showToast(`${icon} ${message}`, 'success');
             
             // Refresh Gantt Chart after a short delay (allow animation)
             setTimeout(() => {

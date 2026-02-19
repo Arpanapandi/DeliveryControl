@@ -216,6 +216,54 @@
         box-shadow: 0 0 15px rgba(250, 204, 21, 0.5) !important;
         background: rgba(30, 41, 59, 0.9) !important;
     }
+    .modal-cyber {
+        background: var(--cyber-bg) !important;
+        border: 2px solid var(--cyber-border) !important;
+        box-shadow: 0 0 30px rgba(250, 204, 21, 0.2);
+    }
+    
+    .modal-cyber .modal-header {
+        background: rgba(15, 23, 42, 0.95);
+        border-bottom: 2px solid var(--cyber-yellow) !important;
+        padding: 0.8rem 1.25rem !important;
+        align-items: center;
+    }
+
+    .modal-cyber .modal-title {
+        color: var(--cyber-yellow);
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+        margin-bottom: 0;
+        line-height: 1.2;
+    }
+
+    .table-dark {
+        background: transparent !important;
+    }
+
+    #tableScheduleList thead th {
+        background: #1e293b !important;
+        color: var(--cyber-yellow) !important;
+        z-index: 1000;
+        padding: 8px 12px !important;
+        font-size: 0.75rem !important;
+        border-bottom: 2px solid var(--cyber-border);
+        position: sticky;
+        top: 0;
+    }
+    
+    #tableScheduleList tbody td {
+        padding: 8px 12px !important;
+        font-size: 0.8rem !important;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    #scheduleModal .modal-body {
+        max-height: 420px;
+        overflow-y: auto;
+    }
 </style>
 
 <div class="container-fluid py-4">
@@ -309,6 +357,8 @@
         </div>
     </div>
 
+</div>
+
 <!-- Modal Scanner -->
 <div class="modal fade" id="scannerModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
@@ -333,6 +383,63 @@
     </div>
 </div>
 
+<!-- Floating Action Button -->
+<button type="button" class="floating-fab" id="btnShowSchedule" title="Lihat Jadwal Preparation">
+    <i class="bi bi-calendar3"></i>
+</button>
+
+<!-- Modal Jadwal Preparation -->
+<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content modal-cyber text-white">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title fw-bold text-yellow">
+                    <i class="bi bi-list-check me-2"></i> JADWAL PREPARATION
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            
+            <!-- Filter Bar (Fixed) -->
+            <div class="p-3 bg-dark bg-opacity-50 border-bottom border-secondary d-flex flex-wrap gap-2 align-items-center">
+                 <div class="input-group input-group-sm flex-grow-1" style="min-width: 150px; max-width: 250px;">
+                    <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-calendar3"></i></span>
+                    <input type="date" id="filterSchedDate" class="form-control bg-dark text-white border-secondary" value="@DateTime.Today.ToString("yyyy-MM-dd")">
+                </div>
+                 <div class="input-group input-group-sm flex-grow-1" style="min-width: 200px;">
+                    <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-upc-scan"></i></span>
+                    <input type="text" id="filterSchedVin" class="form-control bg-dark text-white border-secondary" placeholder="Cari VIN / Part No...">
+                </div>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover mb-0 align-middle" id="tableScheduleList">
+                        <thead class="sticky-top">
+                            <tr class="text-uppercase text-secondary small" style="background: #1e293b;">
+                                <th class="p-3">Manifest</th>
+                                <th class="p-3">Customer / Dock</th>
+                                <th class="p-3">VIN / Part No</th>
+                                <th class="p-3 text-center">Progress</th>
+                                <th class="p-3 text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scheduleListBody">
+                            <tr>
+                                <td colspan="5" class="text-center py-5">
+                                    <div class="spinner-border text-yellow" role="status"></div>
+                                    <div class="mt-2">Memuat data...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 </div>
 
 @section Scripts {
@@ -345,6 +452,7 @@
             const scannerModal = new bootstrap.Modal(scannerModalEl);
             let activeInputId = null;
             let currentScheduleId = null;
+            let isSubmitting = false; // Flag to prevent duplicate requests
 
             // --- SCANNER HANDLERS ---
             $('.btn-scan-trigger').click(function() {
@@ -431,12 +539,20 @@
             }
 
             function triggerPrepAutoSave() {
-                if ($('#btnSavePreparation').prop('disabled')) return;
+                if (isSubmitting || $('#btnSavePreparation').prop('disabled')) return;
                 $('#btnSavePreparation').click();
             }
 
             $('#tagInput, #labelInput, #kanbanInput').on('change keypress', function(e) {
-                if(e.type === 'keypress' && e.which !== 13) return;
+                // Prevent duplicate trigger if Enter is pressed (Internal Scanner)
+                if(e.type === 'change' && $(this).data('last-event') === 'keypress') {
+                    $(this).data('last-event', '');
+                    return;
+                }
+                if(e.type === 'keypress') {
+                    $(this).data('last-event', 'keypress');
+                    if(e.which !== 13) return;
+                }
                 
                 const id = $(this).attr('id');
                 if (id === 'kanbanInput') {
@@ -448,6 +564,7 @@
 
             function resetInputs() {
                 $('#idStatusSection').slideUp();
+                $('#tagInput, #labelInput, #kanbanInput').val('');
                 $('#labelInput, #kanbanInput, .btn-scan-trigger[data-target="labelInput"], .btn-scan-trigger[data-target="kanbanInput"]').prop('disabled', true);
                 currentScheduleId = null;
             }
@@ -516,7 +633,7 @@
                         } else {
                             if (res.message) showScannerToast(res.message, "danger");
                             resetInputs();
-                            $('#tagInput').focus();
+                            $('#tagInput').val('').focus();
                         }
                     },
                     error: function() {
@@ -526,6 +643,8 @@
             }
 
             $('#btnSavePreparation').click(function () {
+                if (isSubmitting) return;
+
                 const data = {
                     Tag: $('#tagInput').val().trim(),
                     Label: $('#labelInput').val().trim(),
@@ -534,6 +653,7 @@
 
                 if (!data.Tag || !data.Label || !data.Kanban) return; 
 
+                isSubmitting = true;
                 const $btn = $(this);
                 $btn.prop('disabled', true);
                 $('#prepLoadingIndicator').show();
@@ -553,6 +673,7 @@
                             }
                         } else {
                             showScannerToast(res.message, "danger");
+                            isSubmitting = false; // Reset on failure
                             $btn.prop('disabled', false);
                             $('#prepLoadingIndicator').hide();
                             $('#kanbanInput').val('').focus();
@@ -560,6 +681,7 @@
                     },
                     error: function() {
                          showScannerToast("Connection Error", "danger");
+                         isSubmitting = false; // Reset on error
                          $btn.prop('disabled', false);
                          $('#prepLoadingIndicator').hide();
                     }
@@ -595,6 +717,83 @@
             }).on('blur', function() {
                 $(this).closest('.custom-cyber-input-group').removeClass('selected-glow');
             });
+
+            // --- FLOATING BUTTON & SCHEDULE MODAL LOGIC ---
+            const scheduleModal = new bootstrap.Modal(document.getElementById('scheduleModal'));
+            
+            $('#btnShowSchedule').click(function() {
+                scheduleModal.show();
+                loadScheduleList();
+            });
+
+            // Filter Event Listeners
+            let filterTimeout;
+            $('#filterSchedDate, #filterSchedVin').on('input change', function() {
+                clearTimeout(filterTimeout);
+                filterTimeout = setTimeout(loadScheduleList, 500);
+            });
+
+            function loadScheduleList() {
+                const date = $('#filterSchedDate').val();
+                const vin = $('#filterSchedVin').val();
+
+                $('#scheduleListBody').html(`
+                    <tr>
+                        <td colspan="5" class="text-center py-5">
+                            <div class="spinner-border text-yellow" role="status"></div>
+                            <div class="mt-2">Memuat data...</div>
+                        </td>
+                    </tr>
+                `);
+
+                $.ajax({
+                    url: '/PreparationWorkflow/GetSchedulesJson',
+                    type: 'GET',
+                    data: { filterDate: date, vin: vin },
+                    success: function(data) {
+                        let html = '';
+                        if (data && data.length > 0) {
+                            data.forEach(item => {
+                                let statusClass = 'bg-secondary';
+                                if (item.status === 'Prepared' || item.status === 'Completed') statusClass = 'bg-success';
+                                else if (item.status === 'Preparing' || item.status === 'In Progress') statusClass = 'bg-info text-dark';
+                                else if (item.status === 'Scheduled' || item.status === 'Waiting') statusClass = 'bg-secondary';
+
+                                // Kanban Fraction Display
+                                let actual = item.totalKanbanActual || 0;
+                                let target = item.totalKanbanTarget || 0;
+                                let progressClass = 'bg-info text-dark';
+                                if (actual >= target && target > 0) progressClass = 'bg-success text-white';
+
+                                html += `
+                                    <tr>
+                                        <td class="p-2 fw-bold text-info">${item.scheduleNumber}</td>
+                                        <td class="p-2">
+                                            <div class="fw-bold">${item.customerName}</div>
+                                            <small class="text-muted"><i class="bi bi-geo-alt"></i> ${item.dock}</small>
+                                        </td>
+                                        <td class="p-2">
+                                            <div class="text-white small" style="white-space: pre-wrap; word-break: break-word; max-width: 250px;">${item.viNs || '-'}</div>
+                                        </td>
+                                        <td class="p-2 text-center">
+                                            <span class="badge ${progressClass} fs-7" style="min-width: 50px;">${actual} / ${target}</span>
+                                        </td>
+                                        <td class="p-2 text-center">
+                                            <span class="badge ${statusClass}" style="font-size: 0.7rem;">${item.status ? item.status.toUpperCase() : '-'}</span>
+                                        </td>
+                                    </tr>
+                                `;
+                            });
+                        } else {
+                            html = '<tr><td colspan="5" class="text-center py-4 text-muted fst-italic">Tidak ada jadwal ditemukan.</td></tr>';
+                        }
+                        $('#scheduleListBody').html(html);
+                    },
+                    error: function() {
+                        $('#scheduleListBody').html('<tr><td colspan="5" class="text-center py-4 text-danger">Gagal memuat data.</td></tr>');
+                    }
+                });
+            }
         });
     </script>
 }

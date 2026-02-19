@@ -133,7 +133,7 @@ namespace DeliveryControl.Controllers
                 );
 
                 // Notify all clients via SignalR
-                await _hubContext.Clients.All.SendAsync("UpdateStock");
+                await _hubContext.Clients.All.SendAsync("updateStock");
                 
                 // Get updated stock for feedback
                 var updatedStockCount = await _context.PullingRecords

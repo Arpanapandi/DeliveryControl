@@ -44,7 +44,10 @@ namespace DeliveryControl.Controllers
             int pageSize = 20;
 
             var schedules = await filteredQuery
-                .OrderBy(s => s.ScheduledDate)
+                .OrderBy(s => s.Status == "In Progress" ? 0 : 
+                             s.Status == "Scheduled" ? 1 : 
+                             s.Status == "Completed" ? 2 : 3)
+                .ThenBy(s => s.ScheduledDate)
                 .ThenBy(s => s.ScheduleNumber)
                 .ThenBy(s => s.ScheduleId)
                 .Skip((pageNumber - 1) * pageSize)
@@ -150,11 +153,11 @@ namespace DeliveryControl.Controllers
                     await _context.SaveChangesAsync();
 
                     // Notify Dashboard via SignalR
-                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                     {
-                        Action = "create",
-                        Message = $"New schedule {deliverySchedule.ScheduleNumber} created manually.",
-                        Timestamp = DateTime.Now
+                        action = "create",
+                        message = $"New schedule {deliverySchedule.ScheduleNumber} created manually.",
+                        timestamp = DateTime.Now
                     });
 
                     return RedirectToAction(nameof(Index));
@@ -185,11 +188,11 @@ namespace DeliveryControl.Controllers
                 await _context.SaveChangesAsync();
 
                 // Notify Dashboard via SignalR
-                await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                 {
-                    Action = "delete",
-                    Message = $"Preparation schedule {deliverySchedule.ScheduleNumber} deleted.",
-                    Timestamp = DateTime.Now
+                    action = "delete",
+                    message = $"Preparation schedule {deliverySchedule.ScheduleNumber} deleted.",
+                    timestamp = DateTime.Now
                 });
             }
             return RedirectToAction(nameof(Index));
@@ -317,7 +320,7 @@ namespace DeliveryControl.Controllers
                         await _context.SaveChangesAsync();
                         await transaction.CommitAsync();
 
-                        await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new { Action = "bulk_create", Message = $"Created {schedules.Count} schedules" });
+                        await _hubContext.Clients.All.SendAsync("deliveryUpdated", new { action = "bulk_create", message = $"Created {schedules.Count} schedules", timestamp = DateTime.Now });
 
                         TempData["SuccessMessage"] = $"Berhasil membuat {schedules.Count} schedule!";
                         return RedirectToAction(nameof(Index));
@@ -742,11 +745,11 @@ namespace DeliveryControl.Controllers
                         await _context.SaveChangesAsync();
 
                         // Notify Dashboard via SignalR
-                        await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                        await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                         {
-                            Action = "import",
-                            Message = $"Berhasil import {successCount} schedule preparation dari Excel.",
-                            Timestamp = DateTime.Now
+                            action = "import",
+                            message = $"Berhasil import {successCount} schedule preparation dari Excel.",
+                            timestamp = DateTime.Now
                         });
                     }
                 }

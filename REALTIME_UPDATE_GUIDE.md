@@ -86,7 +86,7 @@ Partial view untuk table rows yang dapat di-update secara dynamic
 2. **Controller Simpan Data & Broadcast**
    ```csharp
    await _context.SaveChangesAsync();
-   await _hubContext.Clients.All.SendAsync("DeliveryUpdated", data);
+   await _hubContext.Clients.All.SendAsync("deliveryUpdated", data);
    ```
 
 3. **SignalR Broadcast ke Semua Client**
@@ -96,8 +96,8 @@ Partial view untuk table rows yang dapat di-update secara dynamic
 
 4. **Dashboard Terima Event & Update**
    ```javascript
-   connection.on("DeliveryUpdated", function(data) {
-       showToast(data.Message);
+   connection.on("deliveryUpdated", function(data) {
+       showToast(data.message);
        updateStatistics();  // Update card numbers
        updateTableData();   // Update table
    });

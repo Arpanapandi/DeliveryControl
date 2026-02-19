@@ -101,9 +101,17 @@
             </div>
         </td>
         <td class="text-center align-middle">
-            @if (item.EnterDockTime.HasValue)
+            <div class="fw-bold">@(item.Customer?.StdPrepareTime ?? 0)m</div>
+        </td>
+        <td class="text-center align-middle">
+            @if (item.ReadyToDockTime.HasValue)
             {
-                <strong>@item.EnterDockTime.Value.ToString("HH:mm")</strong>
+                <div class="fw-bold">
+                    @item.ReadyToDockTime.Value.ToString("HH:mm")
+                </div>
+                <div class="fw-bold @(item.ActPrepareTime > item.Customer?.StdPrepareTime ? "text-danger" : "text-success")" style="font-size: 0.75rem;">
+                    @Math.Round(item.ActPrepareTime ?? 0)m
+                </div>
             }
             else
             {
@@ -111,17 +119,9 @@
             }
         </td>
         <td class="text-center align-middle">
-            @if (estimatedDockTime.HasValue)
+            @if (item.EnterDockTime.HasValue)
             {
-                <strong>@estimatedDockTime.Value.ToString("HH:mm")</strong>
-                <div class="text-muted" style="font-size: 0.75rem;">(+15m)</div>
-            }
-            else if (item.EnterDockTime.HasValue)
-            {
-                <div>
-                    <strong>@item.EnterDockTime.Value.AddMinutes(15).ToString("HH:mm")</strong>
-                </div>
-                <div class="text-muted" style="font-size: 0.75rem;">(+15m)</div>
+                <strong>@item.EnterDockTime.Value.ToString("HH:mm")</strong>
             }
             else
             {
@@ -155,6 +155,24 @@
                         <i class="bi bi-check-circle-fill"></i> On Time
                     </small>
                 }
+            }
+            else
+            {
+                <span class="text-muted">-</span>
+            }
+        </td>
+        <td class="text-center align-middle">
+            @if (estimatedDockTime.HasValue)
+            {
+                <strong>@estimatedDockTime.Value.ToString("HH:mm")</strong>
+                <div class="text-muted" style="font-size: 0.75rem;">(+15m)</div>
+            }
+            else if (item.EnterDockTime.HasValue)
+            {
+                <div>
+                    <strong>@item.EnterDockTime.Value.AddMinutes(15).ToString("HH:mm")</strong>
+                </div>
+                <div class="text-muted" style="font-size: 0.75rem;">(+15m)</div>
             }
             else
             {

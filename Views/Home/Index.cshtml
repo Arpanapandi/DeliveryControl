@@ -203,7 +203,7 @@
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
                         <p class="text-white mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px; opacity: 0.9;">
-                            <i class="bi bi-hourglass-split"></i> Delay Dock In
+                            <i class="bi bi-door-open"></i> Delay Dock In
                         </p>
                         <h2 class="fw-bold mb-0 text-white" style="font-size: 2.5rem;">
                             <span id="delayPrepareStatValue">@(ViewBag.NotArrivedCount ?? 0)</span> <span class="stat-unit">ORDER</span>
@@ -223,28 +223,29 @@
         </div>
     </div>
 
-    <!-- PREPARED CARD -->
+    <!-- DELAY PREPARE CARD (Replaces Siap Kirim) -->
     <div class="col-xl col-md-4 col-sm-6">
-        <div class="cyber-card stat-card stat-card-blue h-100 filter-card" data-filter="prepared" onclick="filterSchedules('prepared')" style="cursor: pointer; border: 2px solid #10b981; background: rgba(16, 185, 129, 0.05);">
+        <div class="cyber-card stat-card h-100 filter-card @(ViewBag.NotArrivedCount > 0 ? "stat-card-red" : "")" data-filter="delayprepare" onclick="filterSchedules('delayprepare')" 
+             style="cursor: pointer; @(ViewBag.NotArrivedCount > 0 ? "background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); animation: pulse-card 2s ease-in-out infinite;" : "border: 2px solid #10b981; background: rgba(16, 185, 129, 0.05);")">
             <div class="card-body p-4">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
-                        <p class="text-muted mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px;">
-                            <i class="bi bi-patch-check-fill text-success"></i> Siap Kirim
+                        <p class="@(ViewBag.NotArrivedCount > 0 ? "text-white" : "text-muted") mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px;">
+                            <i class="bi bi-hourglass-split @(ViewBag.NotArrivedCount > 0 ? "" : "text-success")"></i> Delay Prepare
                         </p>
-                        <h2 class="fw-bold mb-0" style="font-size: 2.5rem; color: #10b981;">
-                            <span id="preparedStatValue">@(ViewBag.PreparedCount ?? 0)</span> <span class="stat-unit">ORDER</span>
+                        <h2 class="fw-bold mb-0" style="font-size: 2.5rem; color: @(ViewBag.NotArrivedCount > 0 ? "white" : "#10b981");">
+                            <span id="delayPrepareStatValue2">@(ViewBag.NotArrivedCount ?? 0)</span> <span class="stat-unit">DELAY PREPARE</span>
                         </h2>
-                        <small class="text-muted">
-                            <i class="bi bi-check-circle-fill text-success"></i> Prepared
+                        <small class="@(ViewBag.NotArrivedCount > 0 ? "text-white" : "text-muted")" style="@(ViewBag.NotArrivedCount > 0 ? "opacity: 0.8;" : "")">
+                            <i class="bi bi-clock-history @(ViewBag.NotArrivedCount > 0 ? "" : "text-success")"></i> Terlambat Prepare
                         </small>
                     </div>
-                    <div class="stat-icon" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">
-                        <i class="bi bi-patch-check-fill"></i>
+                    <div class="stat-icon" style="background: @(ViewBag.NotArrivedCount > 0 ? "rgba(255, 255, 255, 0.2)" : "rgba(16, 185, 129, 0.15)"); color: @(ViewBag.NotArrivedCount > 0 ? "white" : "#10b981");">
+                        <i class="bi bi-hourglass-split"></i>
                     </div>
                 </div>
                 <div class="progress mt-3" style="height: 4px; background: rgba(16, 185, 129, 0.2);">
-                    <div class="progress-bar bg-success" role="progressbar" style="width: @SafePercent(prepared, totalToday).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%;"></div>
+                    <div class="progress-bar @(ViewBag.NotArrivedCount > 0 ? "bg-danger" : "bg-success")" role="progressbar" style="width: @notArrivedPct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%;"></div>
                 </div>
             </div>
         </div>
@@ -301,6 +302,8 @@
                                     <th class="text-center" style="width: 120px; background-color: #212529;"><i class="bi bi-building"></i> CUSTOMER</th>
                                     <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-arrow-repeat"></i> CYCLE</th>
                                     <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-box-seam"></i> QTY PREP</th>
+                                    <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-hourglass-split"></i> STD PREPARE</th>
+                                    <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-stopwatch"></i> ACT PREPARE</th>
                                     <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-door-open"></i> STD DOCK IN</th>
                                     <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-door-open-fill"></i> ACT DOCK IN</th>
                                     <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-clock"></i> STD PICKUP</th>
@@ -1158,7 +1161,7 @@
     }
 
     // SignalR event handlers
-    connection.on("Connected", function(connectionId) {
+    connection.on("connected", function(connectionId) {
         console.log("✅ SignalR Connected! Connection ID:", connectionId);
         isConnected = true;
         reconnectAttempts = 0;
@@ -1168,21 +1171,25 @@
     });
 
     // Listen for Stock updates (often related to preparation)
-    connection.on("UpdateStock", function() {
+    connection.on("updateStock", function() {
         console.log("📦 Stock update received! Refreshing dashboard...");
         Promise.all([updateStatistics(), updateTableData()]);
     });
 
-    connection.on("DeliveryUpdated", function(data) {
+    connection.on("deliveryUpdated", function(data) {
         const timestamp = new Date().toLocaleTimeString();
         console.log(`🔔 [${timestamp}] Delivery Update Received:`, data);
         
         // Update connection indicator to show work in progress
         updateStatusBadge('reconnecting', 'Updating...');
         
+        // Use camelCase for data properties (SignalR default)
+        const action = data.action || data.Action;
+        const message = data.message || data.Message;
+        
         // Show notification
-        const icon = data.Action === 'arrival' ? '🚚' : (data.Action === 'departure' ? '✅' : '🔄');
-        showToast(`${icon} ${data.Message}`, 'success');
+        const icon = action === 'arrival' ? '🚚' : (action === 'departure' ? '✅' : '🔄');
+        showToast(`${icon} ${message}`, 'success');
         
         // Update dashboard data in parallel
         Promise.all([updateStatistics(), updateTableData()]).finally(() => {

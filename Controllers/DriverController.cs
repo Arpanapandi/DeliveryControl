@@ -124,6 +124,9 @@ namespace DeliveryControl.Controllers
             var groupedSchedules = schedulesForSelectedDate
                 .GroupBy(s => new {
                     Date = s.PickupTime?.Date ?? s.ScheduledDate.Date,
+                    Manifest = (s.ScheduleNumber ?? "").Contains("/")
+                        ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper()
+                        : (s.ScheduleNumber ?? "").Trim().ToUpper(), // Group by Base Manifest (before /)
                     Cycle = (s.Cycle ?? "").Trim().ToUpper(),
                     Route = (s.Route ?? "").Trim().ToUpper(),
                     Area = (s.Area ?? "").Trim().ToUpper()
@@ -278,12 +281,12 @@ namespace DeliveryControl.Controllers
                 // However, Index reloads every 60s or on action. RedirectToAction Index will reload page.
                 // Realtime update on Dashboard needs to know all changed.
                 foreach(var s in groupSchedules) {
-                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                     {
-                        ScheduleNumber = s.ScheduleNumber,
-                        Action = "arrival",
-                        Message = $"Driver tiba di {s.Customer?.CustomerName}",
-                        Timestamp = DateTime.Now
+                        scheduleNumber = s.ScheduleNumber,
+                        action = "arrival",
+                        message = $"Driver tiba di {s.Customer?.CustomerName}",
+                        timestamp = DateTime.Now
                     });
                 }
 
@@ -386,12 +389,12 @@ namespace DeliveryControl.Controllers
                 );
 
                 foreach(var s in groupSchedules) {
-                    await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new
+                    await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                     {
-                        ScheduleNumber = s.ScheduleNumber,
-                        Action = "departure",
-                        Message = $"Delivery ke {s.Customer?.CustomerName} selesai.",
-                        Timestamp = DateTime.Now
+                        scheduleNumber = s.ScheduleNumber,
+                        action = "departure",
+                        message = $"Delivery ke {s.Customer?.CustomerName} selesai.",
+                        timestamp = DateTime.Now
                     });
                 }
 
@@ -439,7 +442,7 @@ namespace DeliveryControl.Controllers
                 await _logService.LogConfirm("Driver", $"Group-{baseSchedule.Cycle}", baseSchedule.ScheduleId, $"Quick Arrival Group ({groupSchedules.Count})", User.Identity?.Name ?? "Driver");
                 
                 foreach(var s in groupSchedules) {
-                     await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new { ScheduleNumber = s.ScheduleNumber, Action = "arrival", Message = "Driver Tiba", Timestamp = arrivalTime });
+                     await _hubContext.Clients.All.SendAsync("deliveryUpdated", new { scheduleNumber = s.ScheduleNumber, action = "arrival", message = "Driver Tiba", timestamp = arrivalTime });
                 }
 
                 TempData["SuccessMessage"] = $"✅ Kedatangan dikonfirmasi untuk {groupSchedules.Count} Manifest!";
@@ -487,7 +490,7 @@ namespace DeliveryControl.Controllers
 
                  await _logService.LogConfirm("Driver", $"Group-{baseSchedule.Cycle}", baseSchedule.ScheduleId, $"Quick Departure Group ({groupSchedules.Count})", User.Identity?.Name ?? "Driver");
                  foreach(var s in groupSchedules) {
-                     await _hubContext.Clients.All.SendAsync("DeliveryUpdated", new { ScheduleNumber = s.ScheduleNumber, Action = "departure", Message = "Driver Berangkat", Timestamp = departureTime });
+                      await _hubContext.Clients.All.SendAsync("deliveryUpdated", new { scheduleNumber = s.ScheduleNumber, action = "departure", message = "Driver Berangkat", timestamp = departureTime });
                 }
 
                 TempData["SuccessMessage"] = $"✅ Keberangkatan dikonfirmasi untuk {groupSchedules.Count} Manifest!";
