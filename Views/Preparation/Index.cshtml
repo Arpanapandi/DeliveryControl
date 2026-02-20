@@ -300,12 +300,18 @@
                      data-date="@(trip.PickupTime?.ToString("yyyy-MM-dd") ?? (firstSch?.ScheduledDate.ToString("yyyy-MM-dd"))) ">
                     
                     <div class="prep-card-header @headerClass">
-                        <div class="d-flex flex-wrap gap-1 align-items-center">
-                            @foreach(var m in trip.Schedules) {
-                                <span class="badge bg-light text-dark opacity-75" style="font-size: 0.8rem; border: 1px solid rgba(0,0,0,0.1);">@m.ScheduleNumber</span>
-                            }
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 2px 8px;">
+                                <i class="bi bi-list-check me-1"></i> MANIFESTS (@trip.Schedules.Count())
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 180px; z-index: 1050;">
+                                @foreach (var m in trip.Schedules.OrderBy(x => x.ScheduleNumber))
+                                {
+                                    <li><span class="dropdown-item-text py-1 px-3" style="font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.05);">@m.ScheduleNumber</span></li>
+                                }
+                            </ul>
                         </div>
-                        <span class="badge-status ms-2">@trip.OverallStatus.ToUpper()</span>
+                        <span class="badge-status ms-2">@(trip.OverallStatus == "Completed" ? "PREPARED" : trip.OverallStatus.ToUpper())</span>
                     </div>
                     
                     <div class="prep-card-body">
@@ -409,12 +415,9 @@
                         }
                         else if (trip.OverallStatus == "In Progress")
                         {
-                            <form asp-action="GroupReadyToDock" method="post">
-                                <input type="hidden" name="id" value="@trip.RepresentativeScheduleId" />
-                                <button type="submit" class="btn btn-warning w-100 fw-bold py-2">
-                                    <i class="bi bi-box-seam me-2"></i> Ready to Dock in
-                                </button>
-                            </form>
+                            <div class="text-center text-orange">
+                                <small><i class="bi bi-person-walking me-1"></i> PREPARATION IN PROGRESS</small>
+                            </div>
                         }
                         else if (trip.OverallStatus == "Prepared")
                         {
@@ -429,7 +432,11 @@
                         {
                             <div class="text-center">
                                 <span class="badge bg-success w-100 py-3" style="font-size: 0.9rem; border-radius: 8px;">
-                                    <i class="bi bi-check-circle-fill me-2"></i> COMPLETED: @(trip.Schedules.First(s => s.ActualEnterDockTime.HasValue).ActualEnterDockTime?.ToString("HH:mm") ?? "-")
+                                    @{
+                                        var compTime = trip.Schedules.FirstOrDefault(s => s.ActualEnterDockTime.HasValue)?.ActualEnterDockTime 
+                                                      ?? trip.Schedules.FirstOrDefault(s => s.ReadyToDockTime.HasValue)?.ReadyToDockTime;
+                                    }
+                                    <i class="bi bi-check-circle-fill me-2"></i> COMPLETED@(compTime.HasValue ? ": " + compTime.Value.ToString("HH:mm") : "")
                                 </span>
                             </div>
                         }

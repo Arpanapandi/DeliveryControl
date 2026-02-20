@@ -95,8 +95,11 @@ namespace DeliveryControl.Models
         [Display(Name = "Area")]
         public string? Area { get; set; }
 
-        [Display(Name = "STD PREPARE (Min)")]
+        [Display(Name = "END PREP")]
         public int StdPrepareTime { get; set; }
+
+        [Display(Name = "START PREP")]
+        public int StartPrepareTime { get; set; }
 
         public bool IsActive { get; set; } = true;
 

@@ -49,9 +49,16 @@
                             <input asp-for="Cycle" class="form-control" placeholder="Cycle" />
                             <span asp-validation-for="Cycle" class="text-danger"></span>
                         </div>
-                        <div class="col-md-4">
-                            <label asp-for="StdPrepareTime" class="form-label">Std Prepare (Min)</label>
-                            <input asp-for="StdPrepareTime" class="form-control" type="number" placeholder="Minutes" />
+                        <div class="col-md-2">
+                            <label class="form-label">Start Prep</label>
+                            <input type="text" class="form-control time-input-helper" placeholder="00:15" />
+                            <input type="hidden" asp-for="StartPrepareTime" class="actual-minutes" />
+                            <span asp-validation-for="StartPrepareTime" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">End Prep</label>
+                            <input type="text" class="form-control time-input-helper" placeholder="00:30" />
+                            <input type="hidden" asp-for="StdPrepareTime" class="actual-minutes" />
                             <span asp-validation-for="StdPrepareTime" class="text-danger"></span>
                         </div>
                     </div>
@@ -267,5 +274,26 @@
 
 @section Scripts {
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        $(document).ready(function() {
+            $('form').on('submit', function() {
+                $('.time-input-helper').each(function() {
+                    var val = $(this).val().trim();
+                    var minutes = 0;
+                    if (val.includes(':')) {
+                        var parts = val.split(':');
+                        if (parts.length >= 2) {
+                            var hours = parseInt(parts[0]) || 0;
+                            var mins = parseInt(parts[1]) || 0;
+                            minutes = (hours * 60) + mins;
+                        }
+                    } else if (!isNaN(val) && val !== '') {
+                        minutes = parseInt(val);
+                    }
+                    $(this).siblings('.actual-minutes').val(minutes);
+                });
+            });
+        });
+    </script>
 }
 

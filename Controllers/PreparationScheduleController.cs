@@ -40,19 +40,48 @@ namespace DeliveryControl.Controllers
 
             var filteredQuery = query.Where(s => s.ScheduledDate == dateToFilter);
             
-            var totalItems = await filteredQuery.CountAsync();
+            var rawSchedules = await filteredQuery.ToListAsync();
+
+            // Self-Correct Status for display & sorting (Old data fix)
+            foreach (var s in rawSchedules)
+            {
+                if (s.DeliveryItems != null && s.DeliveryItems.Any() && s.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity))
+                {
+                    if (s.PreparationStatus != "Prepared")
+                    {
+                        s.PreparationStatus = "Prepared";
+                    }
+
+                    if (s.ActualEndTime.HasValue)
+                    {
+                        s.Status = "Completed";
+                    }
+                    else if (s.ActualEnterDockTime.HasValue || s.ActualStartTime.HasValue)
+                    {
+                        s.Status = "In Progress";
+                    }
+                    else
+                    {
+                        // 100% scan but not entered dock yet -> Status remains Scheduled/In Progress but PrepStatus is Prepared
+                        // In dashboard logic, we might want to keep it as In Progress if it was already marked as such
+                    }
+                }
+            }
+
+            var totalItems = rawSchedules.Count;
             int pageSize = 20;
 
-            var schedules = await filteredQuery
-                .OrderBy(s => s.Status == "In Progress" ? 0 : 
-                             s.Status == "Scheduled" ? 1 : 
-                             s.Status == "Completed" ? 2 : 3)
+            var schedules = rawSchedules
+                .OrderBy(s => (s.Status == "In Progress" || s.PreparationStatus == "In Progress") ? 0 : 
+                             (s.PreparationStatus == "Prepared") ? 1 :
+                             (s.Status == "Scheduled" || s.Status == "Waiting" || string.IsNullOrEmpty(s.Status)) ? 2 : 
+                             3) // Completed or anything else goes to bottom
                 .ThenBy(s => s.ScheduledDate)
                 .ThenBy(s => s.ScheduleNumber)
                 .ThenBy(s => s.ScheduleId)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
-                .ToListAsync();
+                .ToList();
 
             ViewBag.FilterDate = dateToFilter.ToString("yyyy-MM-dd");
             ViewBag.CurrentPage = pageNumber;

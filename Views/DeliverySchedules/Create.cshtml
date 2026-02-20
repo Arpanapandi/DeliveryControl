@@ -123,7 +123,19 @@
                                     </div>
 
                                     <div class="row mb-3">
-                                        <div class="col-md-12">
+                                        <div class="col-md-4">
+                                            <label class="form-label">Start Prep</label>
+                                            <input type="text" class="form-control time-input-helper" placeholder="00:15" />
+                                            <input type="hidden" asp-for="StartPrepareTime" class="actual-minutes" id="startPrepareInput" />
+                                            <span asp-validation-for="StartPrepareTime" class="text-danger"></span>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">End Prep</label>
+                                            <input type="text" class="form-control time-input-helper" placeholder="00:30" />
+                                            <input type="hidden" asp-for="StdPrepareTime" class="actual-minutes" id="stdPrepareInput" />
+                                            <span asp-validation-for="StdPrepareTime" class="text-danger"></span>
+                                        </div>
+                                        <div class="col-md-4">
                                             <label asp-for="TotalTargetQuantity" class="form-label">Total Target Quantity (Pcs)</label>
                                             <input asp-for="TotalTargetQuantity" class="form-control" type="number" placeholder="0" />
                                             <span asp-validation-for="TotalTargetQuantity" class="text-danger"></span>
@@ -310,6 +322,8 @@
                         $('#cycleInput').val(data.cycle);
                         $('#skidInput').val(data.skid);
                         $('#areaInput').val(data.area);
+                        $('#startPrepareInput').val(data.startPrepareTime);
+                        $('#stdPrepareInput').val(data.stdPrepareTime);
                     }).fail(function() {
                         alert('Gagal memuat data customer');
                     });
@@ -361,6 +375,25 @@
             
             $('input[name="PickupTime"]').change(calculateRange);
             $('input[name="ETD"]').change(calculateRange);
+
+            // Time input helper conversion
+            $('form').on('submit', function() {
+                $('.time-input-helper').each(function() {
+                    var val = $(this).val().trim();
+                    var minutes = 0;
+                    if (val.includes(':')) {
+                        var parts = val.split(':');
+                        if (parts.length >= 2) {
+                            var hours = parseInt(parts[0]) || 0;
+                            var mins = parseInt(parts[1]) || 0;
+                            minutes = (hours * 60) + mins;
+                        }
+                    } else if (!isNaN(val) && val !== '') {
+                        minutes = parseInt(val);
+                    }
+                    $(this).siblings('.actual-minutes').val(minutes);
+                });
+            });
         });
     </script>
 }

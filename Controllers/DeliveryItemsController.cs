@@ -29,8 +29,11 @@ namespace DeliveryControl.Controllers
                 // Also update status if all items are prepared
                 if (schedule.DeliveryItems.Any() && schedule.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity))
                 {
-                    schedule.PreparationStatus = "Prepared";
-                    schedule.Status = "Completed";
+                    if (schedule.PreparationStatus != "Prepared")
+                    {
+                        schedule.PreparationStatus = "Prepared";
+                        schedule.ReadyToDockTime = DateTime.Now;
+                    }
                 }
                 
                 await _context.SaveChangesAsync();

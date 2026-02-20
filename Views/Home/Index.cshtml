@@ -101,8 +101,8 @@
     var now = DateTime.Now;
     var shouldBeDelivered = (int?)ViewBag.ShouldBeDeliveredCount 
         ?? (Model?.Count(x => x.ETD.HasValue && x.ETD.Value <= now) ?? 0);
-    var completedDisplay = shouldBeDelivered > 0
-        ? $"{completed} / {shouldBeDelivered}"
+    var completedDisplay = totalToday > 0
+        ? $"{completed} / {totalToday}"
         : completed.ToString();
 
     double SafePercent(int part, int total)
@@ -151,7 +151,7 @@
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
                         <p class="text-muted mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px;">
-                            <i class="bi bi-check-circle"></i> Sudah Delivery / Jam sekarang
+                            <i class="bi bi-check-circle"></i> Sudah Delivery
                         </p>
                         <h2 class="fw-bold mb-0" style="font-size: 2.5rem; color: var(--success-green);">
                             <span id="completedStatValue">@completedDisplay</span> <span class="stat-unit">ORDER</span>
@@ -203,17 +203,17 @@
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
                         <p class="text-white mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px; opacity: 0.9;">
-                            <i class="bi bi-door-open"></i> Delay Dock In
+                            <i class="bi bi-truck-flatbed"></i> Delay Dock In
                         </p>
                         <h2 class="fw-bold mb-0 text-white" style="font-size: 2.5rem;">
-                            <span id="delayPrepareStatValue">@(ViewBag.NotArrivedCount ?? 0)</span> <span class="stat-unit">ORDER</span>
+                            <span id="delayDockInStatValue">@(ViewBag.NotArrivedCount ?? 0)</span> <span class="stat-unit">ORDER</span>
                         </h2>
                         <small class="text-white" style="opacity: 0.8;">
                             <i class="bi bi-clock-history"></i> Terlambat Masuk Dock
                         </small>
                     </div>
                     <div class="stat-icon" style="background: rgba(255, 255, 255, 0.2); color: white;">
-                        <i class="bi bi-hourglass-split"></i>
+                        <i class="bi bi-box-arrow-in-right"></i>
                     </div>
                 </div>
                 <div class="progress mt-3" style="height: 4px; background: rgba(255, 255, 255, 0.3);">
@@ -223,29 +223,29 @@
         </div>
     </div>
 
-    <!-- DELAY PREPARE CARD (Replaces Siap Kirim) -->
+    <!-- DELAY PREPARE CARD -->
     <div class="col-xl col-md-4 col-sm-6">
-        <div class="cyber-card stat-card h-100 filter-card @(ViewBag.NotArrivedCount > 0 ? "stat-card-red" : "")" data-filter="delayprepare" onclick="filterSchedules('delayprepare')" 
-             style="cursor: pointer; @(ViewBag.NotArrivedCount > 0 ? "background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); animation: pulse-card 2s ease-in-out infinite;" : "border: 2px solid #10b981; background: rgba(16, 185, 129, 0.05);")">
+        <div class="cyber-card stat-card stat-card-red h-100 filter-card" data-filter="delayprepare" onclick="filterSchedules('delayprepare')" 
+             style="cursor: pointer; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); animation: pulse-card 2s ease-in-out infinite;">
             <div class="card-body p-4">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
-                        <p class="@(ViewBag.NotArrivedCount > 0 ? "text-white" : "text-muted") mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px;">
-                            <i class="bi bi-hourglass-split @(ViewBag.NotArrivedCount > 0 ? "" : "text-success")"></i> Delay Prepare
+                        <p class="text-white mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px; opacity: 0.9;">
+                            <i class="bi bi-hourglass-bottom"></i> Delay Prepare
                         </p>
-                        <h2 class="fw-bold mb-0" style="font-size: 2.5rem; color: @(ViewBag.NotArrivedCount > 0 ? "white" : "#10b981");">
-                            <span id="delayPrepareStatValue2">@(ViewBag.NotArrivedCount ?? 0)</span> <span class="stat-unit">DELAY PREPARE</span>
+                        <h2 class="fw-bold mb-0 text-white" style="font-size: 2.5rem;">
+                            <span id="delayPrepareStatValue">@(ViewBag.DelayPrepareCount ?? 0)</span> <span class="stat-unit">DELAY</span>
                         </h2>
-                        <small class="@(ViewBag.NotArrivedCount > 0 ? "text-white" : "text-muted")" style="@(ViewBag.NotArrivedCount > 0 ? "opacity: 0.8;" : "")">
-                            <i class="bi bi-clock-history @(ViewBag.NotArrivedCount > 0 ? "" : "text-success")"></i> Terlambat Prepare
+                        <small class="text-white" style="opacity: 0.8;">
+                            <i class="bi bi-clock-history"></i> Terlambat Prepare
                         </small>
                     </div>
-                    <div class="stat-icon" style="background: @(ViewBag.NotArrivedCount > 0 ? "rgba(255, 255, 255, 0.2)" : "rgba(16, 185, 129, 0.15)"); color: @(ViewBag.NotArrivedCount > 0 ? "white" : "#10b981");">
+                    <div class="stat-icon" style="background: rgba(255, 255, 255, 0.2); color: white;">
                         <i class="bi bi-hourglass-split"></i>
                     </div>
                 </div>
-                <div class="progress mt-3" style="height: 4px; background: rgba(16, 185, 129, 0.2);">
-                    <div class="progress-bar @(ViewBag.NotArrivedCount > 0 ? "bg-danger" : "bg-success")" role="progressbar" style="width: @notArrivedPct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%;"></div>
+                <div class="progress mt-3" style="height: 4px; background: rgba(255, 255, 255, 0.3);">
+                    <div class="progress-bar" role="progressbar" style="width: @notArrivedPct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%; background: white;"></div>
                 </div>
             </div>
         </div>
@@ -302,10 +302,11 @@
                                     <th class="text-center" style="width: 120px; background-color: #212529;"><i class="bi bi-building"></i> CUSTOMER</th>
                                     <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-arrow-repeat"></i> CYCLE</th>
                                     <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-box-seam"></i> QTY PREP</th>
-                                    <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-hourglass-split"></i> STD PREPARE</th>
-                                    <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-stopwatch"></i> ACT PREPARE</th>
+                                    <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-hourglass"></i> START PREP</th>
+                                    <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-hourglass-bottom"></i> END PREP</th>
+                                    <th class="text-center" style="width: 140px; background-color: #212529;"><i class="bi bi-stopwatch"></i> ACT PREPARE</th>
                                     <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-door-open"></i> STD DOCK IN</th>
-                                    <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-door-open-fill"></i> ACT DOCK IN</th>
+                                    <th class="text-center" style="width: 140px; background-color: #212529;"><i class="bi bi-door-open-fill"></i> ACT DOCK IN</th>
                                     <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-clock"></i> STD PICKUP</th>
                                     <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-truck"></i> ACT PICKUP</th>
                                     <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-geo-alt-fill"></i> ACT DELIVERY</th>
@@ -708,18 +709,21 @@
     }
 
     #table-container table {
-        table-layout: fixed;
+        table-layout: auto;
         width: 100%;
+        min-width: 1200px;
     }
 
     #table-container td, #table-container th {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        word-break: break-word;
     }
 
-    #table-container td:nth-child(5) {
-        white-space: normal;
+    /* Specific column adjustments if needed */
+    #table-container td, #table-container th {
+        padding: 8px 4px;
     }
 
     /* Legend Styles */
@@ -908,8 +912,10 @@
                 shouldShow = status === 'inprogress';
             } else if (filter === 'delaypickup') {
                 shouldShow = isDelayPickup;
-            } else if (filter === 'delayprepare' || filter === 'notarrived') {
-                shouldShow = isDelayPrepare === true; // Filter untuk Delay Prepare
+            } else if (filter === 'delayprepare') {
+                shouldShow = isDelayPrepare === true; // Filter untuk Delay Prepare (Slow Work)
+            } else if (filter === 'notarrived') {
+                shouldShow = row.getAttribute('data-notarrived') === 'true'; // Filter untuk Delay Dock In
             } else if (filter === 'prepared') {
                 shouldShow = row.getAttribute('data-prepared') === 'true';
             }
@@ -1092,7 +1098,8 @@
                 $('#totalTodayStatValue').text(data.todaySchedules);
                 $('#completedStatValue').text(completedDisplay);
                 $('#delayPickupStatValue').text(data.delayPickupCount);
-                $('#delayPrepareStatValue').text(data.notArrivedCount);
+                $('#delayDockInStatValue').text(data.notArrivedCount);
+                $('#delayPrepareStatValue').text(data.delayPrepareCount);
                 if ($('#preparedStatValue').length) {
                     $('#preparedStatValue').text(data.preparedCount);
                 }

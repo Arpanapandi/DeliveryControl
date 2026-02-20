@@ -47,6 +47,7 @@ namespace DeliveryControl.Controllers
             // Agar admin yang baru buat jadwal langsung muncul di Portal Preparation
             var allSchedules = await _context.DeliverySchedules
                 .Include(s => s.Customer)
+                .Include(s => s.DeliveryItems)
                 .Where(s => s.Status != "Cancelled")
                 .ToListAsync();
             
@@ -61,10 +62,26 @@ namespace DeliveryControl.Controllers
             {
                 if (s.DeliveryItems != null && s.DeliveryItems.Any() && s.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity))
                 {
-                    if (s.Status != "Completed" || s.PreparationStatus != "Prepared")
+                    if (s.PreparationStatus != "Prepared")
                     {
-                        s.Status = "Completed";
                         s.PreparationStatus = "Prepared";
+                    }
+
+                    if (s.ActualEnterDockTime.HasValue)
+                    {
+                        // Only "Completed" if it has ActualEndTime (Delivery Finished)
+                        if (s.ActualEndTime.HasValue) 
+                        {
+                            s.Status = "Completed";
+                        }
+                        else
+                        {
+                            s.Status = "In Progress";
+                        }
+                    }
+                    else
+                    {
+                        s.Status = "In Progress";
                     }
                 }
             }
@@ -137,13 +154,14 @@ namespace DeliveryControl.Controllers
                     // Status Logic for the Group
                     // Yellow: Scheduled (Default)
                     // Orange: In Progress (Scan in progress)
-                    // Blue: Prepared (Ready to Dock in clicked)
+                    // Blue: Prepared (Ready to Dock in clicked) / Scan done
                     // Green: Completed (Konfirmasi masuk dock clicked)
                     
                     var groupStatus = "Scheduled";
                     if (g.All(x => x.Status == "Completed")) groupStatus = "Completed";
+                    else if (g.Any(x => x.Status == "In Progress" || x.ActualEnterDockTime.HasValue)) groupStatus = "In Progress";
                     else if (g.Any(x => x.PreparationStatus == "Prepared")) groupStatus = "Prepared";
-                    else if (g.Any(x => x.PreparationStatus == "In Progress" || x.Status == "In Progress" || x.ActualEnterDockTime.HasValue)) groupStatus = "In Progress";
+                    else if (g.Any(x => x.PreparationStatus == "In Progress")) groupStatus = "In Progress";
 
                     return new DeliveryControl.Models.ViewModels.DriverTripViewModel
                     {
@@ -242,7 +260,10 @@ namespace DeliveryControl.Controllers
                     schedule.DriverStatus = "In Progress"; 
                 }
 
-                schedule.PreparationStatus = "In Progress";
+                if (schedule.PreparationStatus != "Prepared")
+                {
+                    schedule.PreparationStatus = "In Progress";
+                }
                 schedule.UpdatedDate = DateTime.Now;
                 schedule.UpdatedBy = User.Identity?.Name ?? "Preparation";
                 
@@ -346,30 +367,35 @@ namespace DeliveryControl.Controllers
                 .Where(s => s.ScheduledDate.Date == repSchedule.ScheduledDate.Date &&
                             s.Cycle == repSchedule.Cycle &&
                             s.Route == repSchedule.Route &&
-                            s.Area == repSchedule.Area)
+                            s.Area == repSchedule.Area &&
+                            (s.ScheduleNumber ?? "").ToUpper().StartsWith(manifestPrefix))
                 .ToListAsync();
 
             var now = DateTime.Now;
             foreach (var s in schedules)
             {
-                if (s.PreparationStatus != "Prepared" && s.Status != "Completed")
+                if (s.PreparationStatus != "Prepared")
                 {
                     s.PreparationStatus = "Prepared";
+                }
+                
+                if (!s.ReadyToDockTime.HasValue)
+                {
                     s.ReadyToDockTime = now;
-                    s.UpdatedDate = now;
-                    s.UpdatedBy = User.Identity?.Name ?? "Preparation";
-                    
-                    // Calculate ActPrepareTime (minutes) from first preparation record if available, or just use now - scheduled context
-                    // User asked for ACT PREPARE field. Let's base it on (ReadyToDockTime - first Prep Record CreatedDate)
-                    var firstPrep = await _context.PreparationRecords
-                        .Where(pr => pr.ScheduleId == s.ScheduleId)
-                        .OrderBy(pr => pr.CreatedDate)
-                        .FirstOrDefaultAsync();
-                    
-                    if (firstPrep != null)
-                    {
-                        s.ActPrepareTime = (now - firstPrep.CreatedDate).TotalMinutes;
-                    }
+                }
+                
+                s.UpdatedDate = now;
+                s.UpdatedBy = User.Identity?.Name ?? "Preparation";
+                
+                // Calculate ActPrepareTime (minutes) from first preparation record if available
+                var firstPrep = await _context.PreparationRecords
+                    .Where(pr => pr.ScheduleId == s.ScheduleId)
+                    .OrderBy(pr => pr.CreatedDate)
+                    .FirstOrDefaultAsync();
+                
+                if (firstPrep != null)
+                {
+                    s.ActPrepareTime = (now - firstPrep.CreatedDate).TotalMinutes;
                 }
             }
 
@@ -386,30 +412,37 @@ namespace DeliveryControl.Controllers
             var repSchedule = await _context.DeliverySchedules.FindAsync(id);
             if (repSchedule == null) return NotFound();
 
+            var manifestPrefix = (repSchedule.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper();
             var schedules = await _context.DeliverySchedules
                 .Include(s => s.Customer)
                 .Where(s => s.ScheduledDate.Date == repSchedule.ScheduledDate.Date &&
                             s.Cycle == repSchedule.Cycle &&
                             s.Route == repSchedule.Route &&
-                            s.Area == repSchedule.Area)
+                            s.Area == repSchedule.Area &&
+                            (s.ScheduleNumber ?? "").ToUpper().StartsWith(manifestPrefix))
                 .ToListAsync();
 
             var now = DateTime.Now;
             foreach (var s in schedules)
             {
-                if (s.Status != "Completed")
+                // Always set timestamps even if "Completed" (scan done)
+                s.ActualEnterDockTime = now;
+                s.Status = "In Progress"; // Corrected: Must be In Progress to show PICKUP button on dashboard
+                s.PreparationStatus = "Prepared";
+                
+                // Ensure ReadyToDockTime (Act Prep) is recorded if not already set by scan
+                if (!s.ReadyToDockTime.HasValue)
                 {
-                    s.ActualEnterDockTime = now;
-                    s.Status = "Completed";
-                    s.PreparationStatus = "Prepared";
-                    s.UpdatedDate = now;
-                    s.UpdatedBy = User.Identity?.Name ?? "Preparation";
-                    
-                    if (!s.ActualStartTime.HasValue)
-                    {
-                        s.ActualStartTime = now;
-                        s.DriverStatus = "In Progress";
-                    }
+                    s.ReadyToDockTime = now;
+                }
+                
+                s.UpdatedDate = now;
+                s.UpdatedBy = User.Identity?.Name ?? "Preparation";
+                
+                if (!s.ActualStartTime.HasValue)
+                {
+                    s.ActualStartTime = now;
+                    s.DriverStatus = "In Progress";
                 }
             }
 
@@ -453,6 +486,13 @@ namespace DeliveryControl.Controllers
 
             var pickupTime = DateTime.Now;
             schedule.ActualPickupTime = pickupTime;
+            
+            // Sync with ActualStartTime for dashboard/driver portal consistency
+            if (!schedule.ActualStartTime.HasValue)
+            {
+                schedule.ActualStartTime = pickupTime;
+            }
+
             schedule.Status = "In Progress"; // Jika belum In Progress
             schedule.UpdatedDate = pickupTime;
             schedule.UpdatedBy = User.Identity?.Name ?? "Preparation";

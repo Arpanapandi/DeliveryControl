@@ -101,7 +101,16 @@
             </div>
         </td>
         <td class="text-center align-middle">
-            <div class="fw-bold">@(item.Customer?.StdPrepareTime ?? 0)m</div>
+            <div>@{
+                var startP = item.StartPrepareTime > 0 ? item.StartPrepareTime : (item.Customer?.StartPrepareTime ?? 0);
+                @($"{startP / 60:D2}:{startP % 60:D2}")
+            }</div>
+        </td>
+        <td class="text-center align-middle">
+            <div>@{
+                var stdP = item.StdPrepareTime > 0 ? item.StdPrepareTime : (item.Customer?.StdPrepareTime ?? 0);
+                @($"{stdP / 60:D2}:{stdP % 60:D2}")
+            }</div>
         </td>
         <td class="text-center align-middle">
             @if (item.ReadyToDockTime.HasValue)

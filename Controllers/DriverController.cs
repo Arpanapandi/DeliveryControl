@@ -54,10 +54,12 @@ namespace DeliveryControl.Controllers
                 .Where(s => s.ScheduledDate.Date >= yesterday.Date && s.ScheduledDate.Date <= tomorrow.Date)
                 .ToListAsync();
 
-            // Filter berdasarkan PICKUP DATE (bukan ScheduledDate atau OperationalDate)
+            // Filter berdasarkan PICKUP DATE
             var schedulesForSelectedDate = rawSchedules
                 .Where(s => s.PickupTime.HasValue && s.PickupTime.Value.Date == scheduleDate.Date)
                 .Where(s => s.Status != "Cancelled")
+                // Only show if Prepared in preparation workflow or already being handled by driver
+                .Where(s => s.PreparationStatus == "Prepared" || s.Status == "Completed" || s.Status == "In Progress")
                 .ToList();
 
             // Filter by customer jika ada
@@ -163,7 +165,8 @@ namespace DeliveryControl.Controllers
             // Split into "Need Action" and "Completed"
             var needAction = groupedSchedules
                 .Where(vm => !vm.HasDeparted)
-                .OrderBy(vm => {
+                .OrderByDescending(vm => vm.Schedules.Any(s => s.ActualEnterDockTime.HasValue)) // Priority 1: Enter Dock
+                .ThenBy(vm => {
                     if (!vm.HasArrived) return 0; // Scheduled
                     return 1; // In Progress (Arrived but not Departed)
                 })

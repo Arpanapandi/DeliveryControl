@@ -88,6 +88,9 @@ namespace DeliveryControl.Models
         [Display(Name = "Actual Prepare Time")]
         public double? ActPrepareTime { get; set; }
 
+        public int StartPrepareTime { get; set; }
+        public int StdPrepareTime { get; set; }
+
         [StringLength(20)]
         [Display(Name = "Preparation Status")]
         public string? PreparationStatus { get; set; } = "Scheduled";

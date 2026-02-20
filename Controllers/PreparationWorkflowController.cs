@@ -125,6 +125,15 @@ namespace DeliveryControl.Controllers
                 var totalPrepared = await _context.PreparationRecords.CountAsync(r => r.Tag == targetItem.VIN || r.Tag == targetItem.ItemCode);
                 var currentStock = Math.Max(0, totalPulled - totalPrepared);
 
+                // --- EARLY VALIDATION: Check for empty stock right away ---
+                if (currentStock <= 0)
+                {
+                    return Json(new { 
+                        success = false, 
+                        message = $"STOCK HABIS! ({targetItem.ItemName}) Tidak bisa lanjut scan." 
+                    });
+                }
+
         DeliverySchedule? schedule = null;
 
         if (!string.IsNullOrEmpty(kanban))
@@ -392,13 +401,44 @@ namespace DeliveryControl.Controllers
                 {
                     dItem.ActualQuantity = (dItem.ActualQuantity ?? 0) + qpc;
                     if (dItem.ActualQuantity >= dItem.Quantity) dItem.IsCompleted = true;
+
+                    // Update main schedule status if all items are done
+                    if (schedule.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity))
+                    {
+                        if (schedule.PreparationStatus != "Prepared")
+                        {
+                            schedule.PreparationStatus = "Prepared";
+                            schedule.ReadyToDockTime = DateTime.Now;
+                        }
+                    }
                 }
 
-                if (schedule.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity))
+                // --- AUTO PREPARED LOGIC: Automate "Ready to Pickup" when all scans for the group are done ---
+                var groupDate = schedule.ScheduledDate.Date;
+                var groupSchedules = await _context.DeliverySchedules
+                    .Include(s => s.DeliveryItems)
+                    .Where(s => s.ScheduledDate.Date == groupDate &&
+                                s.Cycle == schedule.Cycle &&
+                                s.Route == schedule.Route &&
+                                s.Area == schedule.Area &&
+                                s.Status != "Cancelled")
+                    .ToListAsync();
+
+                if (groupSchedules.All(gs => gs.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity)))
                 {
-                    // No longer auto-confirming. User must click "Ready to Dock" or "Confirm" in portal.
-                    // schedule.Status = "Completed";
-                    // schedule.PreparationStatus = "Prepared";
+                    var scanTime = DateTime.Now;
+                    foreach (var gs in groupSchedules)
+                    {
+                        if (gs.PreparationStatus != "Prepared")
+                        {
+                            gs.PreparationStatus = "Prepared";
+                            if (!gs.ReadyToDockTime.HasValue)
+                            {
+                                gs.ReadyToDockTime = scanTime;
+                            }
+                            gs.UpdatedDate = scanTime;
+                        }
+                    }
                 }
 
                 _context.PreparationRecords.Add(record);

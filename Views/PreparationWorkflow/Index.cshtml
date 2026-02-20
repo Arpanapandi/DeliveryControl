@@ -564,9 +564,10 @@
 
             function resetInputs() {
                 $('#idStatusSection').slideUp();
-                $('#tagInput, #labelInput, #kanbanInput').val('');
+                $('#tagInput, #labelInput, #kanbanInput').val('').removeClass('active-scan');
                 $('#labelInput, #kanbanInput, .btn-scan-trigger[data-target="labelInput"], .btn-scan-trigger[data-target="kanbanInput"]').prop('disabled', true);
                 currentScheduleId = null;
+                $('#tagInput').focus();
             }
 
             function performLookup() {
@@ -633,7 +634,12 @@
                         } else {
                             if (res.message) showScannerToast(res.message, "danger");
                             resetInputs();
-                            $('#tagInput').val('').focus();
+                            // If stock is empty, we want to stay on tag input or clear it
+                            if (res.message && res.message.includes("STOCK HABIS")) {
+                                $('#tagInput').val('').focus();
+                            } else {
+                                $('#tagInput').focus();
+                            }
                         }
                     },
                     error: function() {
@@ -665,18 +671,36 @@
                     data: JSON.stringify(data),
                     success: function (res) {
                         if (res.success) {
+                            showScannerToast(res.message, "success");
+                            // Update progress detail if needed, but for effectiveness, we reset and stay on page
+                            if (res.scheduleDetails) {
+                                $('#progressTargetName').text(res.scheduleDetails.customerName);
+                                $('#progressPercentTotal').text(Math.round(res.scheduleDetails.totalPercent) + '%');
+                                $('#progressDetailArea').fadeIn();
+                                setTimeout(() => $('#progressDetailArea').fadeOut(), 3000);
+                            }
+
+                            isSubmitting = false;
+                            $btn.prop('disabled', false);
+                            $('#prepLoadingIndicator').hide();
+                            resetInputs();
+                            
+                            // If it was a critical message (FIFO), maybe we still want to reload after a bit
                             if (res.isFallback || (res.message && res.message.includes("FIFO"))) {
-                                showScannerToast(res.message, "warning");
                                 setTimeout(() => location.reload(), 2000);
-                            } else {
-                                location.reload();
                             }
                         } else {
                             showScannerToast(res.message, "danger");
-                            isSubmitting = false; // Reset on failure
+                            isSubmitting = false;
                             $btn.prop('disabled', false);
                             $('#prepLoadingIndicator').hide();
-                            $('#kanbanInput').val('').focus();
+                            
+                            // IF QTY FULL: Reset to VIN as per user request
+                            if (res.message && res.message.includes("CUKUP")) {
+                                resetInputs();
+                            } else {
+                                $('#kanbanInput').val('').focus();
+                            }
                         }
                     },
                     error: function() {

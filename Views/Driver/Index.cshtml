@@ -119,7 +119,7 @@
                             name="status"
                             value="In Progress"
                             class="@inProgressClass">
-                        In&nbsp;Progress
+                        Ready To Pickup
                     </button>
                     <button type="submit"
                             name="status"
@@ -195,13 +195,19 @@ else
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
                                         <strong>TRIP: @trip.Cycle - @trip.Route</strong>
-                                        <div class="small" style="font-size:0.8rem">
-                                            @foreach(var m in trip.Schedules) {
-                                                <span class="badge bg-light text-dark opacity-75 me-1">@m.ScheduleNumber</span>
-                                            }
+                                        <div class="dropdown mt-1">
+                                            <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 1px 6px;">
+                                                <i class="bi bi-list-check me-1"></i> MANIFESTS (@trip.Schedules.Count())
+                                            </button>
+                                            <ul class="dropdown-menu shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 180px; z-index: 1051;">
+                                                @foreach (var m in trip.Schedules.OrderBy(x => x.ScheduleNumber))
+                                                {
+                                                    <li><span class="dropdown-item-text py-1 px-3" style="font-size: 0.8rem; border-bottom: 1px solid rgba(0,0,0,0.05);">@m.ScheduleNumber</span></li>
+                                                }
+                                            </ul>
                                         </div>
                                     </div>
-                                    <span class="badge bg-white text-dark">@displayStatus</span>
+                                    <span class="badge bg-white text-dark">@(displayStatus == "Completed" ? "DELIVERED" : (displayStatus == "In Progress" ? "Ready To Pickup" : displayStatus))</span>
                                 </div>
                             </div>
                             <div class="card-body">
@@ -398,13 +404,19 @@ else
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
                                         <strong>TRIP: @trip.Cycle - @trip.Route</strong>
-                                        <div class="small" style="font-size:0.8rem">
-                                            @foreach(var m in trip.Schedules) {
-                                                <span class="badge bg-light text-dark opacity-75 me-1">@m.ScheduleNumber</span>
-                                            }
+                                        <div class="dropdown mt-1">
+                                            <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 1px 6px;">
+                                                <i class="bi bi-list-check me-1"></i> MANIFESTS (@trip.Schedules.Count())
+                                            </button>
+                                            <ul class="dropdown-menu shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 180px; z-index: 1051;">
+                                                @foreach (var m in trip.Schedules.OrderBy(x => x.ScheduleNumber))
+                                                {
+                                                    <li><span class="dropdown-item-text py-1 px-3" style="font-size: 0.8rem; border-bottom: 1px solid rgba(0,0,0,0.05);">@m.ScheduleNumber</span></li>
+                                                }
+                                            </ul>
                                         </div>
                                     </div>
-                                    <span class="badge bg-white text-dark">@displayStatus</span>
+                                    <span class="badge bg-white text-dark">@(displayStatus == "Completed" ? "DELIVERED" : (displayStatus == "In Progress" ? "Ready To Pickup" : displayStatus))</span>
                                 </div>
                             </div>
                             <div class="card-body">

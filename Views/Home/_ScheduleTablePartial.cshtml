@@ -92,7 +92,8 @@
     // (Logic: If any is In Progress, whole group is In Progress. If all Completed, whole group is Completed)
     string displayStatus = "Scheduled";
     if (schedules.All(s => s.ActualEndTime.HasValue)) displayStatus = "Completed";
-    else if (schedules.Any(s => s.ActualStartTime.HasValue)) displayStatus = "In Progress";
+    else if (schedules.Any(s => s.ActualStartTime.HasValue) || schedules.Any(s => s.ActualEnterDockTime.HasValue)) displayStatus = "In Progress";
+    else if (schedules.All(s => s.PreparationStatus == "Prepared")) displayStatus = "Prepared";
     else displayStatus = (item.DriverStatus ?? item.Status) ?? "Scheduled";
 
     var isCompleted = displayStatus.Equals("Completed", StringComparison.OrdinalIgnoreCase);
@@ -107,13 +108,10 @@
     // [Time-related variables logic same as before but using 'item' as representative]
     var isPickupLate = false;
     var pickupDelayMinutes = 0;
-    var isPickupEarly = false;
-    var pickupEarlyMinutes = 0;
-    if (item.ActualStartTime.HasValue && item.PickupTime.HasValue)
+    if (item.ActualPickupTime.HasValue && item.PickupTime.HasValue)
     {
-        var delay = item.ActualStartTime.Value - item.PickupTime.Value;
+        var delay = item.ActualPickupTime.Value - item.PickupTime.Value;
         if (delay.TotalMinutes > 0) { isPickupLate = true; pickupDelayMinutes = (int)delay.TotalMinutes; }
-        else if (delay.TotalMinutes < 0) { isPickupEarly = true; pickupEarlyMinutes = (int)Math.Abs(delay.TotalMinutes); }
     }
 
     var isDelayPickup = false;
@@ -146,16 +144,56 @@
         else if (dockDiff.TotalMinutes < 0) { isDockEarly = true; dockDiffMinutes = (int)Math.Abs(dockDiff.TotalMinutes); }
     }
 
-    var isDelayPrepare = false;
-    var delayPrepareMinutes = 0;
+    // 1. Delay Dock In (Truk telat datang / telat masuk dock)
+    var isDelayDockIn = false;
+    var delayDockInMinutes = 0;
     if (!item.ActualEnterDockTime.HasValue && item.EnterDockTime.HasValue && !isCompleted)
     {
-        var nowDock = DateTime.Now;
-        var enterDock = item.EnterDockTime.Value;
-        if (nowDock > enterDock) { isDelayPrepare = true; delayPrepareMinutes = (int)(nowDock - enterDock).TotalMinutes; }
+        var nowD = DateTime.Now;
+        var planD = item.EnterDockTime.Value;
+        if (nowD > planD) 
+        { 
+            isDelayDockIn = true; 
+            delayDockInMinutes = (int)(nowD - planD).TotalMinutes; 
+        }
     }
 
-    <tr class="schedule-row" data-status="@normalizedStatus" data-arrived="@(item.ActualStartTime.HasValue ? "true" : "false")" data-delaypickup="@(isDelayPickup ? "true" : "false")" data-delayprepare="@(isDelayPrepare ? "true" : "false")" data-prepared="@(schedules.All(s => s.PreparationStatus == "Prepared") ? "true" : "false")">
+    var isTruckArrivedAtGate = !item.ActualEnterDockTime.HasValue && item.ActualStartTime.HasValue && !isCompleted;
+    var isWaitingForTruckAtGate = !item.ActualEnterDockTime.HasValue && !item.ActualStartTime.HasValue && !isCompleted;
+
+    // 2. Delay Preparation (Kerja telat/lambat) - Based on Clock Time
+    var isDelayPrepare = false;
+    var delayPrepDiff = 0;
+    if (!isCompleted && item.PreparationStatus != "Prepared")
+    {
+        var stdPMinutes = item.StdPrepareTime > 0 ? item.StdPrepareTime : (item.Customer?.StdPrepareTime ?? 0);
+        var planEndTime = item.ScheduledDate.Date.AddMinutes(stdPMinutes);
+        
+        if (DateTime.Now > planEndTime)
+        {
+            isDelayPrepare = true;
+            delayPrepDiff = (int)(DateTime.Now - planEndTime).TotalMinutes;
+        }
+    }
+    else if (item.PreparationStatus == "Prepared" && item.ReadyToDockTime.HasValue)
+    {
+        var stdPMinutes = item.StdPrepareTime > 0 ? item.StdPrepareTime : (item.Customer?.StdPrepareTime ?? 0);
+        var planEndTime = item.ScheduledDate.Date.AddMinutes(stdPMinutes);
+        
+        if (item.ReadyToDockTime.Value > planEndTime)
+        {
+            isDelayPrepare = true;
+            delayPrepDiff = (int)(item.ReadyToDockTime.Value - planEndTime).TotalMinutes;
+        }
+    }
+
+    <tr class="schedule-row" 
+        data-status="@normalizedStatus" 
+        data-arrived="@(item.ActualStartTime.HasValue ? "true" : "false")" 
+        data-delaypickup="@(isDelayPickup ? "true" : "false")" 
+        data-delayprepare="@(isDelayPrepare ? "true" : "false")" 
+        data-notarrived="@(isDelayDockIn ? "true" : "false")"
+        data-prepared="@(schedules.All(s => s.PreparationStatus == "Prepared") ? "true" : "false")">
         <td class="text-center align-middle">
             <div class="fw-bold">@item.Customer.CustomerCode</div>
             <div class="small text-muted" style="font-size: 0.7rem;">@dock</div>
@@ -187,16 +225,47 @@
             </div>
         </td>
         <td class="text-center align-middle">
-            <div class="fw-bold">@(item.Customer?.StdPrepareTime ?? 0)m</div>
+            <div>@{
+                var startP = item.StartPrepareTime > 0 ? item.StartPrepareTime : (item.Customer?.StartPrepareTime ?? 0);
+                @($"{startP / 60:D2}:{startP % 60:D2}")
+            }</div>
         </td>
         <td class="text-center align-middle">
-            @if (item.ReadyToDockTime.HasValue)
+            <div>@{
+                var stdP = item.StdPrepareTime > 0 ? item.StdPrepareTime : (item.Customer?.StdPrepareTime ?? 0);
+                @($"{stdP / 60:D2}:{stdP % 60:D2}")
+            }</div>
+        </td>
+        <td class="text-center align-middle">
+            @if (item.PreparationStatus == "Prepared")
             {
-                <div class="fw-bold" style="color: white !important;">
-                    @item.ReadyToDockTime.Value.ToString("HH:mm")
+                <div class="d-flex flex-column align-items-center">
+                    <div class="d-inline-block">
+                        <strong class="text-white">@((item.ReadyToDockTime ?? item.UpdatedDate ?? DateTime.Now).ToString("HH:mm"))</strong>
+                        @if (isDelayPrepare)
+                        {
+                            <span class="badge bg-danger ms-1" style="font-size: 0.65rem;">
+                                <i class="bi bi-exclamation-triangle-fill"></i> Delay Prep +@delayPrepDiff m
+                            </span>
+                        }
+                    </div>
                 </div>
-                <div class="fw-bold @(item.ActPrepareTime > item.Customer?.StdPrepareTime ? "text-danger" : "text-success")" style="font-size: 0.75rem;">
-                    @Math.Round(item.ActPrepareTime ?? 0)m
+            }
+            else if (isDelayPrepare)
+            {
+                <div class="d-flex flex-column align-items-center">
+                    <span class="badge bg-danger mb-1" style="font-size: 0.65rem; padding: 0.3rem 0.5rem;">
+                        <i class="bi bi-exclamation-triangle-fill"></i> Delay Prepare
+                    </span>
+                    <div class="text-danger blink-text small fw-bold">+@delayPrepDiff m</div>
+                </div>
+            }
+            else if (item.PreparationStatus == "In Progress")
+            {
+                <div class="text-center">
+                    <span class="badge bg-info text-dark" style="font-size: 0.7rem; padding: 0.3rem 0.6rem;">
+                        <i class="bi bi-play-fill"></i> In Progress
+                    </span>
                 </div>
             }
             else
@@ -270,48 +339,34 @@
             }
             else if (item.ActualEnterDockTime.HasValue)
             {
-                <div>
+                <div class="d-flex flex-column align-items-center">
                     <div class="d-inline-block">
-                        <i class="bi bi-door-open-fill" style="color: @(isDockDelay ? "#dc3545" : (isDockEarly ? "#10b981" : "#10b981"));"></i>
-                        <strong style="color: @(isDockDelay ? "#dc3545" : (isDockEarly ? "#10b981" : "#10b981"));">
+                        <i class="bi bi-door-open-fill" style="color: @(isDockDelay ? "#dc3545" : "#10b981");"></i>
+                        <strong style="color: @(isDockDelay ? "#dc3545" : "#10b981");">
                             @item.ActualEnterDockTime.Value.ToString("HH:mm")
                         </strong>
-                        @if (item.EnterDockTime.HasValue)
+                        @if (isDockDelay)
                         {
-                            @if (isDockDelay)
-                            {
-                                <span class="badge bg-danger ms-1" style="font-size: 0.65rem;">
-                                    <i class="bi bi-exclamation-triangle-fill"></i> Delay +@dockDiffMinutes m
-                                </span>
-                            }
-                            else if (isDockEarly)
-                            {
-                                <span class="badge bg-success ms-1" style="font-size: 0.65rem;">
-                                    <i class="bi bi-check-circle-fill"></i> On Time -@dockDiffMinutes m
-                                </span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-success ms-1" style="font-size: 0.65rem;">
-                                    <i class="bi bi-check-circle-fill"></i> On Time
-                                </span>
-                            }
+                            <span class="badge bg-danger ms-1" style="font-size: 0.65rem;">
+                                <i class="bi bi-exclamation-triangle-fill"></i> Delay +@dockDiffMinutes m
+                            </span>
                         }
                     </div>
-                </div>
-                <div class="mt-1 text-muted">
-                    <small>+15m</small>
+                    @if (actualEstimatedDockTime.HasValue)
+                    {
+                        <div class="text-muted" style="font-size: 0.8rem; margin-top: -2px;">
+                            <i class="bi bi-clock"></i> @actualEstimatedDockTime.Value.ToString("HH:mm")
+                        </div>
+                    }
                 </div>
             }
-            else if (isDelayPrepare && item.PreparationStatus != "Prepared")
+            else if (isDelayDockIn)
             {
-                <div>
-                    <span class="badge badge-delay-pickup" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
-                        <i class="bi bi-exclamation-triangle-fill"></i> Delay Prepare
+                <div class="d-flex flex-column align-items-center">
+                    <span class="badge bg-danger mb-1" style="font-size: 0.65rem; padding: 0.3rem 0.5rem;">
+                        <i class="bi bi-exclamation-triangle-fill"></i> Delay Dock In
                     </span>
-                    <div class="text-danger blink-text" style="font-size: 0.7rem; margin-top: 0.1rem; font-weight: 600;">
-                        +@delayPrepareMinutes menit
-                    </div>
+                    <div class="text-danger blink-text small fw-bold">+@delayDockInMinutes m</div>
                 </div>
             }
             else
@@ -333,35 +388,55 @@
         <td class="text-center align-middle">
             @if (item.ActualPickupTime.HasValue)
             {
-                <div class="fw-bold" style="color: white !important;">
-                    <i class="bi bi-truck"></i> @item.ActualPickupTime.Value.ToString("HH:mm")
+                <div class="d-flex flex-column align-items-center">
+                    <div class="d-inline-block">
+                        <i class="bi bi-truck" style="color: @(isPickupLate ? "#dc3545" : "#10b981");"></i>
+                        <strong style="color: @(isPickupLate ? "#dc3545" : "#10b981");">
+                            @item.ActualPickupTime.Value.ToString("HH:mm")
+                        </strong>
+                        @if (isPickupLate)
+                        {
+                            <span class="badge bg-danger ms-1" style="font-size: 0.65rem;">
+                                <i class="bi bi-exclamation-triangle-fill"></i> Delay +@pickupDelayMinutes m
+                            </span>
+                        }
+                    </div>
                 </div>
             }
-            else if (item.ActualEnterDockTime.HasValue)
+            else if (item.ActualEnterDockTime.HasValue && !isCompleted)
             {
-                <form asp-controller="Preparation" asp-action="ConfirmPickup" asp-route-id="@item.ScheduleId" method="post">
-                    <button type="submit" class="btn btn-sm btn-neon-success py-1 px-2 text-white" style="font-size: 0.7rem;" onclick="return confirm('Konfirmasi Truk Berangkat (Pickup)?')">
-                        <i class="bi bi-truck"></i> PICKUP
-                    </button>
-                </form>
+                <div class="d-flex flex-column align-items-center">
+                    @if (isDelayPickup)
+                    {
+                        <span class="badge bg-danger mb-1" style="font-size: 0.65rem; padding: 0.3rem 0.5rem;">
+                            <i class="bi bi-exclamation-triangle-fill"></i> Delay Pickup
+                        </span>
+                        <div class="text-danger blink-text small fw-bold mb-1">+@delayPickupMinutes m</div>
+                    }
+                    <form asp-controller="Preparation" asp-action="ConfirmPickup" asp-route-id="@item.ScheduleId" method="post">
+                        <button type="submit" class="btn btn-sm btn-neon-success py-1 px-2 text-white" style="font-size: 0.7rem;" onclick="return confirm('Konfirmasi Truk Berangkat (Pickup)?')">
+                            <i class="bi bi-truck"></i> PICKUP
+                        </button>
+                    </form>
+                </div>
             }
             else
             {
-                <span class="fw-bold" style="color: white !important;">Waiting...</span>
+                <span class="fw-bold text-muted" style="font-size: 0.8rem;">-</span>
             }
         </td>
         <td class="text-center align-middle">
-            @if (item.ActualStartTime.HasValue)
+            @if (item.ActualEndTime.HasValue)
             {
                 <div class="d-inline-block">
-                    <i class="bi bi-geo-alt-fill" style="color: @(isPickupLate ? "#dc3545" : (isPickupEarly ? "#10b981" : "#10b981"));"></i>
-                    <strong style="color: @(isPickupLate ? "#dc3545" : (isPickupEarly ? "#10b981" : "#10b981"));">
-                        @item.ActualStartTime.Value.ToString("HH:mm")
+                    <i class="bi bi-geo-alt-fill" style="color: @(isDeliveryLate ? "#dc3545" : "#10b981");"></i>
+                    <strong style="color: @(isDeliveryLate ? "#dc3545" : "#10b981");">
+                        @item.ActualEndTime.Value.ToString("HH:mm")
                     </strong>
-                    @if (isPickupLate)
+                    @if (isDeliveryLate)
                     {
                         <span class="badge bg-danger ms-1" style="font-size: 0.65rem;">
-                            <i class="bi bi-exclamation-triangle-fill"></i> +@pickupDelayMinutes m
+                            <i class="bi bi-exclamation-triangle-fill"></i> +@deliveryDelayMinutes m
                         </span>
                     }
                 </div>
@@ -377,6 +452,7 @@
             {
                 "completed" => "bg-success",
                 "inprogress" => "bg-warning text-dark",
+                "prepared" => "bg-info text-white",
                 "delaypickup" => "bg-danger",
                 "notarrived" => "bg-secondary",
                 _ => "bg-secondary"
@@ -385,6 +461,7 @@
             {
                 "completed" => "bi-check-circle-fill",
                 "inprogress" => "bi-arrow-repeat",
+                "prepared" => "bi-check2-all",
                 "delaypickup" => "bi-exclamation-triangle-fill",
                 "notarrived" => "bi-hourglass-split",
                 _ => "bi-clock"
@@ -427,7 +504,7 @@
             @if (item.ActualEndTime.HasValue)
             {
                 <div class="text-light mt-1" style="font-size: 0.7rem;">
-                    Dep: @item.ActualEndTime.Value.ToString("HH:mm")
+                    Deliv: @item.ActualEndTime.Value.ToString("HH:mm")
                 </div>
             }
         </td>

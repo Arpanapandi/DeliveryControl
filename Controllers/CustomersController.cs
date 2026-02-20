@@ -76,7 +76,7 @@ namespace DeliveryControl.Controllers
         // POST: Customers/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("CustomerId,CustomerCode,CustomerName,Route,Cycle,Docking,Pickup,ETD,SKID,Area,IsActive")] Customer customer)
+        public async Task<IActionResult> Create([Bind("CustomerId,CustomerCode,CustomerName,Route,Cycle,Docking,Pickup,ETD,SKID,Area,IsActive,StdPrepareTime,StartPrepareTime")] Customer customer)
         {
             // Remove CustomerCode from ModelState since it's auto-generated
             ModelState.Remove("Range"); // Range is auto-calculated
@@ -144,7 +144,7 @@ namespace DeliveryControl.Controllers
         // POST: Customers/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("CustomerId,CustomerCode,CustomerName,Route,Cycle,Docking,Pickup,ETD,SKID,Area,IsActive,CreatedDate")] Customer customer)
+        public async Task<IActionResult> Edit(int id, [Bind("CustomerId,CustomerCode,CustomerName,Route,Cycle,Docking,Pickup,ETD,SKID,Area,IsActive,CreatedDate,StdPrepareTime,StartPrepareTime")] Customer customer)
         {
             if (id != customer.CustomerId)
             {
@@ -419,9 +419,10 @@ namespace DeliveryControl.Controllers
             {
                 var worksheet = workbook.Worksheets.Add("Template Customer");
 
-                // Header matches the application table
+                // Header matches the application table (KODE is auto-generated)
                 var headers = new[] { 
-                    "KODE", "NAMA CUSTOMER", "DOCK", "ROUTE", "CYCLE", 
+                    "NAMA CUSTOMER", "DOCK", "ROUTE", "CYCLE", 
+                    "START PREP", "END PREP",
                     "DOCKING", "PICKUP", "ETD", "RANGE", "SKID", "AREA" 
                 };
 
@@ -442,32 +443,34 @@ namespace DeliveryControl.Controllers
                 var sampleCustomer = _context.Customers.FirstOrDefault();
                 if (sampleCustomer != null)
                 {
-                    worksheet.Cell(2, 1).Value = sampleCustomer.AutoCode;
-                    worksheet.Cell(2, 2).Value = sampleCustomer.CustomerCode;
-                    worksheet.Cell(2, 3).Value = sampleCustomer.CustomerName;
-                    worksheet.Cell(2, 4).Value = sampleCustomer.Route;
-                    worksheet.Cell(2, 5).Value = sampleCustomer.Cycle;
-                    worksheet.Cell(2, 6).Value = sampleCustomer.Docking;
-                    worksheet.Cell(2, 7).Value = sampleCustomer.Pickup;
-                    worksheet.Cell(2, 8).Value = sampleCustomer.ETD;
-                    worksheet.Cell(2, 9).Value = sampleCustomer.Range ?? ""; 
-                    worksheet.Cell(2, 10).Value = sampleCustomer.SKID;
-                    worksheet.Cell(2, 11).Value = sampleCustomer.Area;
+                    worksheet.Cell(2, 1).Value = sampleCustomer.CustomerCode;
+                    worksheet.Cell(2, 2).Value = sampleCustomer.CustomerName;
+                    worksheet.Cell(2, 3).Value = sampleCustomer.Route;
+                    worksheet.Cell(2, 4).Value = sampleCustomer.Cycle;
+                    worksheet.Cell(2, 5).Value = FormatPrepTime(sampleCustomer.StartPrepareTime);
+                    worksheet.Cell(2, 6).Value = FormatPrepTime(sampleCustomer.StdPrepareTime);
+                    worksheet.Cell(2, 7).Value = sampleCustomer.Docking;
+                    worksheet.Cell(2, 8).Value = sampleCustomer.Pickup;
+                    worksheet.Cell(2, 9).Value = sampleCustomer.ETD;
+                    worksheet.Cell(2, 10).Value = sampleCustomer.Range ?? ""; 
+                    worksheet.Cell(2, 11).Value = sampleCustomer.SKID;
+                    worksheet.Cell(2, 12).Value = sampleCustomer.Area;
                 }
                 else
                 {
                     // Fallback
-                    worksheet.Cell(2, 1).Value = "C-0001";
-                    worksheet.Cell(2, 2).Value = "PT. ASTRA HONDA MOTOR"; 
-                    worksheet.Cell(2, 3).Value = "DOCK 42";
-                    worksheet.Cell(2, 4).Value = "RC25";
-                    worksheet.Cell(2, 5).Value = "C1";
-                    worksheet.Cell(2, 6).Value = "21:00";
-                    worksheet.Cell(2, 7).Value = "04:00";
-                    worksheet.Cell(2, 8).Value = "04:30";
-                    worksheet.Cell(2, 9).Value = "30 Menit";
-                    worksheet.Cell(2, 10).Value = "4 - 8"; 
-                    worksheet.Cell(2, 11).Value = "A1-2"; 
+                    worksheet.Cell(2, 1).Value = "PT. ASTRA HONDA MOTOR"; 
+                    worksheet.Cell(2, 2).Value = "DOCK 42";
+                    worksheet.Cell(2, 3).Value = "RC25";
+                    worksheet.Cell(2, 4).Value = "C1";
+                    worksheet.Cell(2, 5).Value = "00:15";
+                    worksheet.Cell(2, 6).Value = "00:30";
+                    worksheet.Cell(2, 7).Value = "21:00";
+                    worksheet.Cell(2, 8).Value = "04:00";
+                    worksheet.Cell(2, 9).Value = "04:30";
+                    worksheet.Cell(2, 10).Value = "30 Menit";
+                    worksheet.Cell(2, 11).Value = "4 - 8"; 
+                    worksheet.Cell(2, 12).Value = "A1-2"; 
                 }
 
                 // Instructions
@@ -499,6 +502,7 @@ namespace DeliveryControl.Controllers
                 // Headers
                 var headers = new[] { 
                     "KODE", "NAMA CUSTOMER", "DOCK", "ROUTE", "CYCLE", 
+                    "START PREP", "END PREP",
                     "DOCKING", "PICKUP", "ETD", "RANGE", "SKID", "AREA" 
                 };
 
@@ -523,12 +527,14 @@ namespace DeliveryControl.Controllers
                     worksheet.Cell(rowIdx, 3).Value = c.CustomerName;
                     worksheet.Cell(rowIdx, 4).Value = c.Route;
                     worksheet.Cell(rowIdx, 5).Value = c.Cycle;
-                    worksheet.Cell(rowIdx, 6).Value = c.Docking;
-                    worksheet.Cell(rowIdx, 7).Value = c.Pickup;
-                    worksheet.Cell(rowIdx, 8).Value = c.ETD;
-                    worksheet.Cell(rowIdx, 9).Value = c.Range;
-                    worksheet.Cell(rowIdx, 10).Value = c.SKID;
-                    worksheet.Cell(rowIdx, 11).Value = c.Area;
+                    worksheet.Cell(rowIdx, 6).Value = FormatPrepTime(c.StartPrepareTime);
+                    worksheet.Cell(rowIdx, 7).Value = FormatPrepTime(c.StdPrepareTime);
+                    worksheet.Cell(rowIdx, 8).Value = c.Docking;
+                    worksheet.Cell(rowIdx, 9).Value = c.Pickup;
+                    worksheet.Cell(rowIdx, 10).Value = c.ETD;
+                    worksheet.Cell(rowIdx, 11).Value = c.Range;
+                    worksheet.Cell(rowIdx, 12).Value = c.SKID;
+                    worksheet.Cell(rowIdx, 13).Value = c.Area;
                     rowIdx++;
                 }
 
@@ -547,6 +553,47 @@ namespace DeliveryControl.Controllers
         {
             if (string.IsNullOrEmpty(header)) return "";
             return new string(header.ToUpper().Where(c => char.IsLetterOrDigit(c)).ToArray());
+        }
+
+        private int ParsePrepTime(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return 0;
+            value = value.Trim();
+            if (value.Contains(":"))
+            {
+                // Try format HH:mm or H:mm
+                var parts = value.Split(':');
+                if (parts.Length >= 2 && int.TryParse(parts[0], out int hours) && int.TryParse(parts[1], out int mins))
+                {
+                    return (hours * 60) + mins;
+                }
+                
+                if (TimeSpan.TryParse(value, out var ts))
+                {
+                    return (int)ts.TotalMinutes;
+                }
+            }
+            
+            // Try numeric
+            if (double.TryParse(value, out double numericVal))
+            {
+                // If it's a fractional number like 0.8263888 (Excel's way of representing time)
+                if (numericVal < 1 && numericVal > 0)
+                {
+                    return (int)Math.Round(numericVal * 24 * 60);
+                }
+                return (int)Math.Round(numericVal);
+            }
+            
+            return 0;
+        }
+
+        private string FormatPrepTime(int totalMinutes)
+        {
+            if (totalMinutes <= 0) return "00:00";
+            int hours = totalMinutes / 60;
+            int minutes = totalMinutes % 60;
+            return $"{hours:D2}:{minutes:D2}";
         }
 
         // Import Excel Mapping
@@ -607,6 +654,8 @@ namespace DeliveryControl.Controllers
                         int colDock = FindCol("DOCK", "DOCKNAME", "NAMA DOCK"); // Removed DOCKING
                         int colRoute = FindCol("ROUTE", "RUTE");
                         int colCycle = FindCol("CYCLE");
+                        int colStartPrep = FindCol("START PREP", "START PREPARE", "START");
+                        int colEndPrep = FindCol("END PREP", "END PREPARE", "STD PREPARE", "PREPARE");
                         int colDocking = FindCol("DOCKING", "WAKTU DOCKING");
                         int colPickup = FindCol("PICKUP", "WAKTU PICKUP");
                         int colEtd = FindCol("ETD");
@@ -682,19 +731,25 @@ namespace DeliveryControl.Controllers
 
                                 var route = colRoute != -1 ? row.Cell(colRoute).GetString().Trim() : "";
                                 var cycle = colCycle != -1 ? row.Cell(colCycle).GetString().Trim() : "";
+                                
+                                int startPrep = ParsePrepTime(colStartPrep != -1 ? row.Cell(colStartPrep).GetString().Trim() : "0");
+                                int endPrep = ParsePrepTime(colEndPrep != -1 ? row.Cell(colEndPrep).GetString().Trim() : "0");
+
                                 var docking = colDocking != -1 ? row.Cell(colDocking).GetString().Trim() : "";
                                 var pickup = colPickup != -1 ? row.Cell(colPickup).GetString().Trim() : "";
                                 var etd = colEtd != -1 ? row.Cell(colEtd).GetString().Trim() : "";
                                 var skidStr = colSkid != -1 ? row.Cell(colSkid).GetString().Trim() : "";
                                 var area = colArea != -1 ? row.Cell(colArea).GetString().Trim() : "";
 
-                                var key = $"{customerCode.ToUpper()}|{customerName.ToUpper()}|{route.ToUpper()}|{cycle.ToUpper()}|{docking.ToUpper()}|{pickup.ToUpper()}|{etd.ToUpper()}|{rangeExcel.ToUpper()}|{skidStr.ToUpper()}|{area.ToUpper()}";
+                                var key = $"{customerCode.ToUpper()}|{customerName.ToUpper()}|{route.ToUpper()}|{cycle.ToUpper()}|{docking.ToUpper()}|{pickup.ToUpper()}|{etd.ToUpper()}|{rangeExcel.ToUpper()}|{skidStr.ToUpper()}|{area.ToUpper()}|{startPrep}|{endPrep}";
                                 
                                 if (customerLookup.TryGetValue(key, out var existing))
                                 {
                                     // Update existing record
                                     existing.Route = string.IsNullOrWhiteSpace(route) ? null : route;
                                     existing.Cycle = string.IsNullOrWhiteSpace(cycle) ? null : cycle;
+                                    existing.StartPrepareTime = startPrep;
+                                    existing.StdPrepareTime = endPrep;
                                     existing.Docking = string.IsNullOrWhiteSpace(docking) ? null : docking;
                                     existing.Pickup = string.IsNullOrWhiteSpace(pickup) ? null : pickup;
                                     existing.ETD = string.IsNullOrWhiteSpace(etd) ? null : etd;
@@ -720,6 +775,8 @@ namespace DeliveryControl.Controllers
                                         CustomerName = customerName,
                                         Route = string.IsNullOrWhiteSpace(route) ? null : route,
                                         Cycle = string.IsNullOrWhiteSpace(cycle) ? null : cycle,
+                                        StartPrepareTime = startPrep,
+                                        StdPrepareTime = endPrep,
                                         Docking = string.IsNullOrWhiteSpace(docking) ? null : docking,
                                         Pickup = string.IsNullOrWhiteSpace(pickup) ? null : pickup,
                                         ETD = string.IsNullOrWhiteSpace(etd) ? null : etd,

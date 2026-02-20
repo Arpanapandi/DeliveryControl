@@ -746,6 +746,8 @@ namespace DeliveryControl.Controllers
                         Range = customer.Range,
                         SKID = ParseSKID(customer.SKID),
                         Area = customer.Area,
+                        StartPrepareTime = customer.StartPrepareTime,
+                        StdPrepareTime = customer.StdPrepareTime,
                         Status = "Scheduled",
                         CreatedDate = DateTime.Now,
                         CreatedBy = User.Identity?.Name ?? "System"
@@ -947,7 +949,9 @@ namespace DeliveryControl.Controllers
                     route = c.Route ?? "",
                     cycle = c.Cycle ?? "",
                     skid = c.SKID ?? "",
-                    area = c.Area ?? ""
+                    area = c.Area ?? "",
+                    startPrepareTime = c.StartPrepareTime,
+                    stdPrepareTime = c.StdPrepareTime
                 })
                 .FirstOrDefault();
             
@@ -1099,7 +1103,7 @@ namespace DeliveryControl.Controllers
         // POST: DeliverySchedules/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("ScheduleId,ScheduleNumber,CustomerId,ScheduledDate,Route,Cycle,EnterDockTime,ActualEnterDockTime,PickupTime,ETD,Range,SKID,Area,ActualStartTime,ActualEndTime,ActualPickupTime,VehicleNumber,DriverName,DriverPhone,Notes,Status,CreatedDate,CreatedBy,TotalTargetQuantity,TotalActualQuantity")] DeliverySchedule schedule)
+        public async Task<IActionResult> Edit(int id, [Bind("ScheduleId,ScheduleNumber,CustomerId,ScheduledDate,Route,Cycle,EnterDockTime,ActualEnterDockTime,PickupTime,ETD,Range,SKID,Area,ActualStartTime,ActualEndTime,ActualPickupTime,VehicleNumber,DriverName,DriverPhone,Notes,Status,CreatedDate,CreatedBy,TotalTargetQuantity,TotalActualQuantity,StartPrepareTime,StdPrepareTime")] DeliverySchedule schedule)
         {
             if (id != schedule.ScheduleId)
             {
@@ -1435,10 +1439,12 @@ namespace DeliveryControl.Controllers
             worksheet.Cell(1, 7).Value = "Range";
             worksheet.Cell(1, 8).Value = "SKID";
             worksheet.Cell(1, 9).Value = "AREA";
-            worksheet.Cell(1, 10).Value = "QTY TARGET";
+            worksheet.Cell(1, 10).Value = "START PREP";
+            worksheet.Cell(1, 11).Value = "END PREP";
+            worksheet.Cell(1, 12).Value = "QTY TARGET";
 
             // Style header
-            var headerRange = worksheet.Range(1, 1, 1, 10);
+            var headerRange = worksheet.Range(1, 1, 1, 12);
             headerRange.Style.Font.Bold = true;
             headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
             headerRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
@@ -1453,7 +1459,9 @@ namespace DeliveryControl.Controllers
             worksheet.Cell(2, 7).Value = "10-15 KM";
             worksheet.Cell(2, 8).Value = 10;
             worksheet.Cell(2, 9).Value = "Area 1";
-            worksheet.Cell(2, 10).Value = 100;
+            worksheet.Cell(2, 10).Value = 15;
+            worksheet.Cell(2, 11).Value = 30;
+            worksheet.Cell(2, 12).Value = 100;
 
             // Auto fit columns
             worksheet.Columns().AdjustToContents();
@@ -1515,7 +1523,9 @@ namespace DeliveryControl.Controllers
                         var range = row.Cell(7).GetString().Trim();
                         var skidStr = row.Cell(8).GetString().Trim();
                         var area = row.Cell(9).GetString().Trim();
-                        var targetQtyStr = row.Cell(10).GetString().Trim();
+                        var targetQtyStr = row.Cell(12).GetString().Trim();
+                        var startPrepStr = row.Cell(10).GetString().Trim();
+                        var endPrepStr = row.Cell(11).GetString().Trim();
 
                         // Validasi customer
                         if (!customersByCode.ContainsKey(custCode))
@@ -1583,6 +1593,8 @@ namespace DeliveryControl.Controllers
                             Range = string.IsNullOrWhiteSpace(range) ? customer.Range : range,
                             SKID = skid ?? customer.SKID,
                             Area = string.IsNullOrWhiteSpace(area) ? enterDockStr : area,
+                            StartPrepareTime = ParsePrepTime(startPrepStr) != 0 ? ParsePrepTime(startPrepStr) : customer.StartPrepareTime,
+                            StdPrepareTime = ParsePrepTime(endPrepStr) != 0 ? ParsePrepTime(endPrepStr) : customer.StdPrepareTime,
                             TotalTargetQuantity = targetQty,
                             ScheduledDate = etd?.Date ?? DateTime.Today,
                             Status = "Scheduled",
@@ -1660,7 +1672,7 @@ namespace DeliveryControl.Controllers
             var worksheet = workbook.Worksheets.Add("Delivery Schedules");
 
             // Headers
-            string[] headers = { "SCH NO", "DATE", "CUSTOMER", "ROUTE", "CYCLE", "DOCK IN", "PICKUP", "ETD", "QTY TARGET", "QTY ACTUAL", "STATUS" };
+            string[] headers = { "SCH NO", "DATE", "CUSTOMER", "ROUTE", "CYCLE", "DOCK IN", "PICKUP", "ETD", "START PREP", "END PREP", "QTY TARGET", "QTY ACTUAL", "STATUS" };
             for (int i = 0; i < headers.Length; i++)
             {
                 var cell = worksheet.Cell(1, i + 1);
@@ -1681,9 +1693,11 @@ namespace DeliveryControl.Controllers
                 worksheet.Cell(row, 6).Value = item.EnterDockTime?.ToString("HH:mm") ?? "-";
                 worksheet.Cell(row, 7).Value = item.PickupTime?.ToString("HH:mm") ?? "-";
                 worksheet.Cell(row, 8).Value = item.ETD?.ToString("HH:mm") ?? "-";
-                worksheet.Cell(row, 9).Value = (double)item.TotalTargetQuantity;
-                worksheet.Cell(row, 10).Value = (double)item.TotalActualQuantity;
-                worksheet.Cell(row, 11).Value = item.Status;
+                worksheet.Cell(row, 9).Value = FormatPrepTime(item.StartPrepareTime);
+                worksheet.Cell(row, 10).Value = FormatPrepTime(item.StdPrepareTime);
+                worksheet.Cell(row, 11).Value = (double)item.TotalTargetQuantity;
+                worksheet.Cell(row, 12).Value = (double)item.TotalActualQuantity;
+                worksheet.Cell(row, 13).Value = item.Status;
                 row++;
             }
 
@@ -1738,6 +1752,46 @@ namespace DeliveryControl.Controllers
                 .ToListAsync();
 
             return PartialView("_HistoryScheduleTablePartial", schedules);
+        }
+        private int ParsePrepTime(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return 0;
+            value = value.Trim();
+            if (value.Contains(":"))
+            {
+                // Try format HH:mm or H:mm
+                var parts = value.Split(':');
+                if (parts.Length >= 2 && int.TryParse(parts[0], out int hours) && int.TryParse(parts[1], out int mins))
+                {
+                    return (hours * 60) + mins;
+                }
+                
+                if (TimeSpan.TryParse(value, out var ts))
+                {
+                    return (int)ts.TotalMinutes;
+                }
+            }
+            
+            // Try numeric
+            if (double.TryParse(value, out double numericVal))
+            {
+                // If it's a fractional number like 0.8263888 (Excel's way of representing time)
+                if (numericVal < 1 && numericVal > 0)
+                {
+                    return (int)Math.Round(numericVal * 24 * 60);
+                }
+                return (int)Math.Round(numericVal);
+            }
+            
+            return 0;
+        }
+
+        private string FormatPrepTime(int totalMinutes)
+        {
+            if (totalMinutes <= 0) return "00:00";
+            int hours = totalMinutes / 60;
+            int minutes = totalMinutes % 60;
+            return $"{hours:D2}:{minutes:D2}";
         }
     }
 }
