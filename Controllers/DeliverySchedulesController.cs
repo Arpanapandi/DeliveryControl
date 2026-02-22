@@ -46,11 +46,8 @@ namespace DeliveryControl.Controllers
 
             // Urutkan: yang belum complete di atas, yang sudah Complete selalu di bawah
             var schedules = rawSchedules
-                .OrderBy(s =>
-                {
-                    var displayStatus = (s.DriverStatus ?? s.Status) ?? "Scheduled";
-                    return displayStatus == "Completed" ? 2 : 1;
-                })
+                .OrderBy(s => (s.Status == "In Progress" || s.PreparationStatus == "In Progress" || (s.ActualStartTime.HasValue && !s.ActualEndTime.HasValue) || (s.ActualEnterDockTime.HasValue && !s.ActualEndTime.HasValue)) ? 0 : 
+                             (s.Status == "Completed" || s.ActualEndTime.HasValue) ? 2 : 1)
                 .ThenBy(s => s.ScheduledDate)
                 .ThenBy(s => s.PickupTime ?? s.ETD ?? s.ScheduledDate)
                 .ToList();
@@ -528,14 +525,28 @@ namespace DeliveryControl.Controllers
             var totalItems = await schedules.CountAsync();
             int pageSize = 20;
 
-            var items = await schedules
-                .OrderBy(s => s.Status == "Completed" ? 1 : 0) // Priority: Not Completed first
+            var rawResults = await schedules.ToListAsync();
+            var items = rawResults
+                .OrderBy(s =>
+                {
+                    // In Progress (truk di jalan / sedang berlangsung) → paling atas
+                    if (s.Status == "In Progress" || s.PreparationStatus == "In Progress" || (s.ActualStartTime.HasValue && !s.ActualEndTime.HasValue) || (s.ActualEnterDockTime.HasValue && !s.ActualEndTime.HasValue))
+                        return 0;
+                    // Completed (selesai delivery) → paling bawah
+                    if (s.Status == "Completed" || s.ActualEndTime.HasValue)
+                        return 2;
+                    // Cancelled → paling bawah sekali
+                    if (s.Status == "Cancelled")
+                        return 3;
+                    // Scheduled / Prepared (menunggu) → tengah
+                    return 1;
+                })
                 .ThenBy(s => s.ScheduledDate)
-                .ThenBy(s => s.ETD)
+                .ThenBy(s => s.ETD ?? s.PickupTime ?? s.EnterDockTime ?? DateTime.MaxValue)
                 .ThenBy(s => s.ScheduleId)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
-                .ToListAsync();
+                .ToList();
 
             ViewBag.CurrentPage = pageNumber;
             ViewBag.TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
@@ -717,18 +728,37 @@ namespace DeliveryControl.Controllers
                     sequenceNumber++;
 
                     // Parse waktu berdasarkan tanggal jadwal (Pickup dianggap sebagai hari H)
+                    // Parse waktu berdasarkan tanggal jadwal (H0)
                     var pickupTime = ParseTimeToDateTime(customer.Pickup, model.ScheduledDate);
                     var enterDockTime = ParseTimeToDateTime(customer.Docking, model.ScheduledDate);
                     var etdTime = ParseTimeToDateTime(customer.ETD, model.ScheduledDate);
+                    
+                    // Gunakan StartPrepare sebagai anchor untuk menentukan H+1
+                    // Jika jam milestone < jam mulai persiapan, maka itu adalah besok harinya
+                    var startPrepMinutes = customer.StartPrepareTime;
+                    var startPrepTime = model.ScheduledDate.Date.AddMinutes(startPrepMinutes);
 
-                    // Jika jam masuk dock lebih besar dari jam pickup, anggap masuk dock di H-1 (malam sebelumnya)
-                    if (enterDockTime.HasValue && pickupTime.HasValue && enterDockTime.Value.TimeOfDay > pickupTime.Value.TimeOfDay)
+                    if (enterDockTime.HasValue && enterDockTime.Value < startPrepTime)
                     {
-                        enterDockTime = enterDockTime.Value.AddDays(-1);
+                        enterDockTime = enterDockTime.Value.AddDays(1);
                     }
 
-                    // Jika ETD secara jam lebih kecil dari pickup (mis. pickup 23:00, ETD 01:00), anggap ETD H+1
-                    if (etdTime.HasValue && pickupTime.HasValue && etdTime.Value.TimeOfDay < pickupTime.Value.TimeOfDay)
+                    if (pickupTime.HasValue && pickupTime.Value < startPrepTime)
+                    {
+                        pickupTime = pickupTime.Value.AddDays(1);
+                    }
+
+                    if (etdTime.HasValue && etdTime.Value < startPrepTime)
+                    {
+                        etdTime = etdTime.Value.AddDays(1);
+                    }
+
+                    // Double Checks: Pastikan urutan logis tetap terjaga (Dock -> Pickup -> ETD)
+                    if (pickupTime.HasValue && enterDockTime.HasValue && pickupTime.Value < enterDockTime.Value)
+                    {
+                        pickupTime = pickupTime.Value.AddDays(1);
+                    }
+                    if (etdTime.HasValue && pickupTime.HasValue && etdTime.Value < pickupTime.Value)
                     {
                         etdTime = etdTime.Value.AddDays(1);
                     }
@@ -1417,7 +1447,7 @@ namespace DeliveryControl.Controllers
             }
             catch (Exception ex)
             {
-                TempData["ErrorMessage"] = $"❌ Error saat bulk delete: {ex.Message}";
+                TempData["ErrorMessage"] = $"Error saat bulk delete: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -1587,9 +1617,6 @@ namespace DeliveryControl.Controllers
                             CustomerId = customerId,
                             Route = string.IsNullOrWhiteSpace(route) ? customer.Route : route,
                             Cycle = string.IsNullOrWhiteSpace(cycle) ? customer.Cycle : cycle,
-                            EnterDockTime = ParseTimeToDateTime(customer.Docking, scheduledDate),
-                            PickupTime = pickupTime ?? ParseTimeToDateTime(customer.Pickup, scheduledDate),
-                            ETD = etd ?? ParseTimeToDateTime(customer.ETD, scheduledDate),
                             Range = string.IsNullOrWhiteSpace(range) ? customer.Range : range,
                             SKID = skid ?? customer.SKID,
                             Area = string.IsNullOrWhiteSpace(area) ? enterDockStr : area,
@@ -1601,6 +1628,33 @@ namespace DeliveryControl.Controllers
                             CreatedDate = DateTime.Now,
                             CreatedBy = User.Identity?.Name ?? "System"
                         };
+
+                        var eDockTime = ParseTimeToDateTime(customer.Docking, scheduledDate);
+                        var pTime = pickupTime ?? ParseTimeToDateTime(customer.Pickup, scheduledDate);
+                        var eTime = etd ?? ParseTimeToDateTime(customer.ETD, scheduledDate);
+
+                        // Gunakan StartPrepare sebagai anchor untuk menentukan H+1
+                        var sPrepMinutes = schedule.StartPrepareTime;
+                        var sPrepTime = schedule.ScheduledDate.Date.AddMinutes(sPrepMinutes);
+
+                        if (eDockTime.HasValue && eDockTime.Value < sPrepTime)
+                            eDockTime = eDockTime.Value.AddDays(1);
+
+                        if (pTime.HasValue && pTime.Value < sPrepTime)
+                            pTime = pTime.Value.AddDays(1);
+
+                        if (eTime.HasValue && eTime.Value < sPrepTime)
+                            eTime = eTime.Value.AddDays(1);
+
+                        // Double checks for logic consistency
+                        if (pTime.HasValue && eDockTime.HasValue && pTime.Value < eDockTime.Value)
+                            pTime = pTime.Value.AddDays(1);
+                        if (eTime.HasValue && pTime.HasValue && eTime.Value < pTime.Value)
+                            eTime = eTime.Value.AddDays(1);
+
+                        schedule.EnterDockTime = eDockTime;
+                        schedule.PickupTime = pTime;
+                        schedule.ETD = eTime;
 
                         schedules.Add(schedule);
                     }
@@ -1746,12 +1800,24 @@ namespace DeliveryControl.Controllers
                 query = query.Where(d => d.Status == status);
             }
 
-            var schedules = await query
-                .OrderBy(s => s.ScheduledDate)
+            var results = await query.ToListAsync();
+            var sortedSchedules = results
+                .OrderBy(s =>
+                {
+                    if (s.Status == "In Progress" || s.PreparationStatus == "In Progress" || (s.ActualStartTime.HasValue && !s.ActualEndTime.HasValue) || (s.ActualEnterDockTime.HasValue && !s.ActualEndTime.HasValue))
+                        return 0;
+                    if (s.Status == "Completed" || s.ActualEndTime.HasValue)
+                        return 2;
+                    if (s.Status == "Cancelled")
+                        return 3;
+                    return 1;
+                })
+                .ThenBy(s => s.ScheduledDate)
                 .ThenBy(s => s.ETD ?? s.PickupTime ?? s.EnterDockTime ?? DateTime.MaxValue)
-                .ToListAsync();
+                .ThenBy(s => s.ScheduleId)
+                .ToList();
 
-            return PartialView("_HistoryScheduleTablePartial", schedules);
+            return PartialView("_HistoryScheduleTablePartial", sortedSchedules);
         }
         private int ParsePrepTime(string value)
         {

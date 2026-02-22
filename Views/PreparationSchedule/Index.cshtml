@@ -16,9 +16,13 @@
         </div>
         <div class="col-12 col-xl-8">
             <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-xl-end align-items-center">
-                <!-- Date Filter -->
-                <form method="get" class="d-flex align-items-center gap-2 me-md-2 flex-grow-1 flex-md-grow-0" style="min-width: 150px;">
-                    <div class="input-group input-group-sm">
+                <!-- Search Bar & Date Filter -->
+                <form method="get" id="filterForm" class="d-flex align-items-center gap-2 me-md-2 flex-grow-1 flex-md-grow-0" style="min-width: 500px;">
+                    <div class="input-group input-group-sm flex-grow-1">
+                        <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-search"></i></span>
+                        <input type="text" id="searchInput" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Cari Manifest/Customer/Cycle/VIN..." />
+                    </div>
+                    <div class="input-group input-group-sm" style="width: 160px;">
                         <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-calendar3"></i></span>
                         <input type="date" name="filterDate" class="form-control form-control-sm bg-dark text-white border-secondary" 
                                value="@ViewBag.FilterDate" onchange="this.form.submit()" />
@@ -400,6 +404,23 @@
             };
 
             start();
+
+            // ============================================
+            // REAL-TIME SEARCH FILTERING
+            // ============================================
+            $('#searchInput').on('keyup', function() {
+                var value = $(this).val().toLowerCase();
+                
+                // Filter Desktop Table
+                $('table tbody tr').filter(function() {
+                    $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1);
+                });
+
+                // Filter Mobile Cards
+                $('.cyber-mobile-card').filter(function() {
+                    $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1);
+                });
+            });
         });
     </script>
 }

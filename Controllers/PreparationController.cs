@@ -48,13 +48,13 @@ namespace DeliveryControl.Controllers
             var allSchedules = await _context.DeliverySchedules
                 .Include(s => s.Customer)
                 .Include(s => s.DeliveryItems)
+                    .ThenInclude(di => di.Item)
                 .Where(s => s.Status != "Cancelled")
                 .ToListAsync();
             
-            // Filter berdasarkan tanggal Enter Dock (jika ada) ATAU ScheduledDate
+            // Filter berdasarkan TANGGAL OPERASIONAL (ScheduledDate)
             var schedulesForToday = allSchedules
-                .Where(s => (s.EnterDockTime.HasValue && s.EnterDockTime.Value.Date == enterDockDate.Date) || 
-                            (!s.EnterDockTime.HasValue && s.ScheduledDate.Date == enterDockDate.Date))
+                .Where(s => s.ScheduledDate.Date == enterDockDate.Date)
                 .ToList();
             
             // Self-Correct Status for Old Data (In-Memory Fix)
@@ -118,9 +118,9 @@ namespace DeliveryControl.Controllers
             
             ViewBag.Customers = customers;
 
-            // Data cycle untuk dropdown filter cycle (berdasarkan tanggal enter dock terpilih)
+            // Data cycle untuk dropdown filter cycle (berdasarkan tanggal operasional terpilih)
             var availableCycles = allSchedules
-                .Where(s => s.EnterDockTime.HasValue && s.EnterDockTime.Value.Date == enterDockDate.Date)
+                .Where(s => s.ScheduledDate.Date == enterDockDate.Date)
                 .Select(s => s.Cycle)
                 .Where(cy => !string.IsNullOrWhiteSpace(cy))
                 .Distinct()
@@ -129,11 +129,9 @@ namespace DeliveryControl.Controllers
 
             ViewBag.Cycles = availableCycles;
 
-            // Grouping Logic: Schedule Date + Cycle + Route + Area (Dock)
-            // Group multiple manifests (schedules) into one trip card based on shared attributes
             var groupedSchedules = schedulesForToday
                 .GroupBy(s => new {
-                    Date = s.PickupTime?.Date ?? s.ScheduledDate.Date,
+                    Date = s.ScheduledDate.Date,
                     Manifest = (s.ScheduleNumber ?? "").Contains("/")
                         ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper()
                         : (s.ScheduleNumber ?? "").Trim().ToUpper(), // Group by Base Manifest (before /)
@@ -151,17 +149,29 @@ namespace DeliveryControl.Controllers
                         ? string.Join(", ", uniqueCustomers)
                         : (uniqueCustomers.FirstOrDefault() ?? "-");
 
-                    // Status Logic for the Group
-                    // Yellow: Scheduled (Default)
-                    // Orange: In Progress (Scan in progress)
-                    // Blue: Prepared (Ready to Dock in clicked) / Scan done
-                    // Green: Completed (Konfirmasi masuk dock clicked)
+                    // Status Logic for the Group (User Explicit Workflow)
+                    // Yellow: Scheduled (Kuning) - No scan yet
+                    // Orange: In Progress (Oren) - Scan started
+                    // Blue: Prepared (Biru) - Scan 100% complete
+                    // Green: Completed (Hijau) - Enter Dock clicked
                     
+                    var isAllPrepared = g.All(x => x.PreparationStatus == "Prepared");
+                    var hasAnyEnterDock = g.Any(x => x.ActualEnterDockTime.HasValue);
+                    var hasAnyScanProgress = g.Any(x => x.PreparationStatus == "In Progress" || x.PreparationStatus == "Prepared");
+
                     var groupStatus = "Scheduled";
-                    if (g.All(x => x.Status == "Completed")) groupStatus = "Completed";
-                    else if (g.Any(x => x.Status == "In Progress" || x.ActualEnterDockTime.HasValue)) groupStatus = "In Progress";
-                    else if (g.Any(x => x.PreparationStatus == "Prepared")) groupStatus = "Prepared";
-                    else if (g.Any(x => x.PreparationStatus == "In Progress")) groupStatus = "In Progress";
+                    if (hasAnyEnterDock)
+                    {
+                        groupStatus = "Completed"; // Hijau
+                    }
+                    else if (isAllPrepared)
+                    {
+                        groupStatus = "Prepared"; // Biru
+                    }
+                    else if (hasAnyScanProgress)
+                    {
+                        groupStatus = "In Progress"; // Oren
+                    }
 
                     return new DeliveryControl.Models.ViewModels.DriverTripViewModel
                     {
@@ -260,10 +270,16 @@ namespace DeliveryControl.Controllers
                     schedule.DriverStatus = "In Progress"; 
                 }
 
-                if (schedule.PreparationStatus != "Prepared")
+                // Saat Enter Dock, selalu set PreparationStatus = Prepared
+                // agar card muncul di Driver Portal (filter: PreparationStatus == "Prepared")
+                schedule.PreparationStatus = "Prepared";
+                
+                // Set Status = In Progress agar card aktif di Driver Portal
+                if (schedule.Status != "Completed")
                 {
-                    schedule.PreparationStatus = "In Progress";
+                    schedule.Status = "In Progress";
                 }
+                
                 schedule.UpdatedDate = DateTime.Now;
                 schedule.UpdatedBy = User.Identity?.Name ?? "Preparation";
                 
@@ -364,6 +380,7 @@ namespace DeliveryControl.Controllers
             var manifestPrefix = (repSchedule.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper();
             var schedules = await _context.DeliverySchedules
                 .Include(s => s.Customer)
+                .Include(s => s.DeliveryItems)
                 .Where(s => s.ScheduledDate.Date == repSchedule.ScheduledDate.Date &&
                             s.Cycle == repSchedule.Cycle &&
                             s.Route == repSchedule.Route &&
@@ -377,9 +394,12 @@ namespace DeliveryControl.Controllers
                 if (s.PreparationStatus != "Prepared")
                 {
                     s.PreparationStatus = "Prepared";
+                    s.Status = "In Progress"; // MUST be In Progress for Driver Portal visibility
                 }
                 
-                if (!s.ReadyToDockTime.HasValue)
+                // Only record ReadyToDockTime when kanban is 100% scanned
+                var allItemsDone = s.DeliveryItems.Any() && s.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity);
+                if (!s.ReadyToDockTime.HasValue && allItemsDone)
                 {
                     s.ReadyToDockTime = now;
                 }
@@ -415,6 +435,7 @@ namespace DeliveryControl.Controllers
             var manifestPrefix = (repSchedule.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper();
             var schedules = await _context.DeliverySchedules
                 .Include(s => s.Customer)
+                .Include(s => s.DeliveryItems)
                 .Where(s => s.ScheduledDate.Date == repSchedule.ScheduledDate.Date &&
                             s.Cycle == repSchedule.Cycle &&
                             s.Route == repSchedule.Route &&
@@ -430,12 +451,7 @@ namespace DeliveryControl.Controllers
                 s.Status = "In Progress"; // Corrected: Must be In Progress to show PICKUP button on dashboard
                 s.PreparationStatus = "Prepared";
                 
-                // Ensure ReadyToDockTime (Act Prep) is recorded if not already set by scan
-                if (!s.ReadyToDockTime.HasValue)
-                {
-                    s.ReadyToDockTime = now;
-                }
-                
+
                 s.UpdatedDate = now;
                 s.UpdatedBy = User.Identity?.Name ?? "Preparation";
                 

@@ -47,20 +47,41 @@ namespace DeliveryControl.Controllers
             ViewData["SelectedCycle"] = normalizedCycle;
             ViewData["DayName"] = scheduleDate.ToString("dddd, dd MMMM yyyy", new CultureInfo("id-ID"));
 
-            // Ambil kandidat schedule dari tiga hari (kemarin, hari ini, besok) untuk cover cross-day schedules
+            // Ambil kandidat schedule dari empat hari (kemarin, hari ini, besok, lusa) untuk cover cross-day schedules
             var rawSchedules = await _context.DeliverySchedules
                 .AsNoTracking()
                 .Include(s => s.Customer)
                 .Where(s => s.ScheduledDate.Date >= yesterday.Date && s.ScheduledDate.Date <= tomorrow.Date)
                 .ToListAsync();
 
-            // Filter berdasarkan PICKUP DATE
-            var schedulesForSelectedDate = rawSchedules
-                .Where(s => s.PickupTime.HasValue && s.PickupTime.Value.Date == scheduleDate.Date)
-                .Where(s => s.Status != "Cancelled")
-                // Only show if Prepared in preparation workflow or already being handled by driver
-                .Where(s => s.PreparationStatus == "Prepared" || s.Status == "Completed" || s.Status == "In Progress")
-                .ToList();
+            // Filter berdasarkan PICKUP DATE (atau ScheduledDate jika tidak ada PickupTime)
+            // Untuk default (tanpa filter), tampilkan hari ini DAN besok agar jadwal cross-day terlihat
+            List<DeliverySchedule> schedulesForSelectedDate;
+            
+            if (selectedDate == null)
+            {
+                // Default: Tampilkan jadwal hari ini dan besok
+                schedulesForSelectedDate = rawSchedules
+                    .Where(s => {
+                        var pickupDate = s.PickupTime.HasValue ? s.PickupTime.Value.Date : s.ScheduledDate.Date;
+                        return pickupDate == DateTime.Today || pickupDate == DateTime.Today.AddDays(1);
+                    })
+                    .Where(s => s.Status != "Cancelled")
+                    .Where(s => s.PreparationStatus == "Prepared" || s.Status == "Completed" || s.Status == "In Progress" || s.ActualEnterDockTime.HasValue)
+                    .ToList();
+            }
+            else
+            {
+                // Filter eksplisit: Tampilkan jadwal dengan PickupTime pada tanggal yang dipilih
+                schedulesForSelectedDate = rawSchedules
+                    .Where(s => {
+                        var pickupDate = s.PickupTime.HasValue ? s.PickupTime.Value.Date : s.ScheduledDate.Date;
+                        return pickupDate == scheduleDate.Date;
+                    })
+                    .Where(s => s.Status != "Cancelled")
+                    .Where(s => s.PreparationStatus == "Prepared" || s.Status == "Completed" || s.Status == "In Progress" || s.ActualEnterDockTime.HasValue)
+                    .ToList();
+            }
 
             // Filter by customer jika ada
             if (customerId.HasValue && customerId.Value > 0)
@@ -294,7 +315,8 @@ namespace DeliveryControl.Controllers
                 }
 
                 TempData["SuccessMessage"] = $"✅ Kedatangan berhasil dikonfirmasi untuk {groupSchedules.Count} Manifest pada {arrivalTime:HH:mm}!";
-                return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
+                // Tidak pass selectedDate agar Driver Portal pakai default (hari ini + besok)
+                return RedirectToAction(nameof(Index));
             }
             catch (Exception ex)
             {
@@ -402,7 +424,8 @@ namespace DeliveryControl.Controllers
                 }
 
                 TempData["SuccessMessage"] = $"✅ Keberangkatan berhasil dikonfirmasi untuk {groupSchedules.Count} Manifest! Durasi: {durationText}";
-                return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
+                // Tidak pass selectedDate agar Driver Portal pakai default (hari ini + besok)
+                return RedirectToAction(nameof(Index));
             }
             catch (Exception ex)
             {
@@ -454,7 +477,8 @@ namespace DeliveryControl.Controllers
             {
                 TempData["ErrorMessage"] = "Gagal memproses quick arrival: " + ex.Message;
             }
-            return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
+            // Tidak pass selectedDate agar Driver Portal pakai default (hari ini + besok)
+            return RedirectToAction(nameof(Index));
         }
 
         [HttpPost]
@@ -467,13 +491,13 @@ namespace DeliveryControl.Controllers
             if (!baseSchedule.ActualStartTime.HasValue)
             {
                 TempData["ErrorMessage"] = "Konfirmasi kedatangan terlebih dahulu!";
-                return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
+                return RedirectToAction(nameof(Index));
             }
 
             if (baseSchedule.ActualEndTime.HasValue)
             {
                 TempData["ErrorMessage"] = "Schedule ini sudah dikonfirmasi keberangkatan!";
-                return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
+                return RedirectToAction(nameof(Index));
             }
 
             try 
@@ -502,7 +526,8 @@ namespace DeliveryControl.Controllers
             {
                 TempData["ErrorMessage"] = "Gagal memproses quick departure: " + ex.Message;
             }
-            return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
+            // Tidak pass selectedDate agar Driver Portal pakai default (hari ini + besok)
+            return RedirectToAction(nameof(Index));
         }
     }
 }

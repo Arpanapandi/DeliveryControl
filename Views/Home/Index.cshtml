@@ -47,12 +47,12 @@
 @* VERSION: 2.0 - Delay Pickup dipindah ke kolom WAKTU ACTUAL *@
 <script>
     // Debug information - tampilkan di console secara clean
-    console.group("🚀 DASHBOARD v2.0 - MONITORING STARTED");
-    console.log("📅 Total Schedules Today:", @(ViewBag.TodaySchedules ?? 0));
-    console.log("✅ Completed:", @(ViewBag.CompletedCount ?? 0));
-    console.log("🚛 In Progress:", @(ViewBag.InProgressCount ?? 0));
-    console.log("⚠️ DELAY PICKUP:", @(ViewBag.DelayPickupCount ?? 0));
-    console.log("⏳ DELAY DOCK IN:", @(ViewBag.NotArrivedCount ?? 0));
+    console.group("DASHBOARD v2.0 - MONITORING STARTED");
+    console.log("Total Schedules Today:", @(ViewBag.TodaySchedules ?? 0));
+    console.log("Completed:", @(ViewBag.CompletedCount ?? 0));
+    console.log("In Progress:", @(ViewBag.InProgressCount ?? 0));
+    console.log("DELAY PICKUP:", @(ViewBag.DelayPickupCount ?? 0));
+    console.log("DELAY DOCK IN:", @(ViewBag.NotArrivedCount ?? 0));
     console.groupEnd();
 </script>
 
@@ -117,6 +117,8 @@
     var inProgressPct = SafePercent(inProgress, totalToday);
     var delayPickupPct = SafePercent(delayPickup, totalToday);
     var notArrivedPct = SafePercent(notArrived, totalToday);
+    var delayPrepare = (int?)ViewBag.DelayPrepareCount ?? 0;
+    var delayPreparePct = SafePercent(delayPrepare, totalToday);
 }
 <div class="row g-4 mb-4">
     <div class="col-xl col-md-4 col-sm-6">
@@ -198,7 +200,7 @@
     </div>
 
     <div class="col-xl col-md-4 col-sm-6">
-        <div class="cyber-card stat-card stat-card-red h-100 filter-card" data-filter="delayprepare" onclick="filterSchedules('delayprepare')" style="cursor: pointer; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); animation: pulse-card 2s ease-in-out infinite;">
+        <div class="cyber-card stat-card stat-card-red h-100 filter-card" data-filter="notarrived" onclick="filterSchedules('notarrived')" style="cursor: pointer; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); animation: pulse-card 2s ease-in-out infinite;">
             <div class="card-body p-4">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
@@ -245,7 +247,7 @@
                     </div>
                 </div>
                 <div class="progress mt-3" style="height: 4px; background: rgba(255, 255, 255, 0.3);">
-                    <div class="progress-bar" role="progressbar" style="width: @notArrivedPct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%; background: white;"></div>
+                    <div class="progress-bar" role="progressbar" style="width: @delayPreparePct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%; background: white;"></div>
                 </div>
             </div>
         </div>
@@ -301,7 +303,7 @@
                                 <tr style="font-size: 0.9rem;">
                                     <th class="text-center" style="width: 120px; background-color: #212529;"><i class="bi bi-building"></i> CUSTOMER</th>
                                     <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-arrow-repeat"></i> CYCLE</th>
-                                    <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-box-seam"></i> QTY PREP</th>
+                                    <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-box-seam"></i> KBN PREP</th>
                                     <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-hourglass"></i> START PREP</th>
                                     <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-hourglass-bottom"></i> END PREP</th>
                                     <th class="text-center" style="width: 140px; background-color: #212529;"><i class="bi bi-stopwatch"></i> ACT PREPARE</th>
@@ -1035,7 +1037,7 @@
     // SIGNALR REAL-TIME UPDATE CONFIGURATION
     // ============================================
     
-    console.log("🚀 Initializing SignalR connection...");
+    console.log("Initializing SignalR connection...");
     
     // Build SignalR connection
     const connection = new signalR.HubConnectionBuilder()
@@ -1090,8 +1092,8 @@
                 
                 // Hitung display text untuk card completed (X / Y)
                 var completedDisplay = data.completedCount;
-                if (data.shouldBeDeliveredCount && data.shouldBeDeliveredCount > 0) {
-                    completedDisplay = data.completedCount + ' / ' + data.shouldBeDeliveredCount;
+                if (data.todaySchedules && data.todaySchedules > 0) {
+                    completedDisplay = data.completedCount + ' / ' + data.todaySchedules;
                 }
 
                 // Update card values immediately for speed
@@ -1105,7 +1107,7 @@
                 }
             },
             error: function(err) {
-                console.error("❌ Failed to update statistics:", err);
+                console.error("Failed to update statistics:", err);
                 statisticsRetryCount++;
                 
                 // Retry dengan exponential backoff
@@ -1114,7 +1116,7 @@
                     console.log(`🔄 Retrying statistics update in ${retryDelay}ms (attempt ${statisticsRetryCount}/${maxStatisticsRetries})`);
                     safeSetTimeout(updateStatistics, retryDelay);
                 } else {
-                    console.error("❌ Max retries reached for statistics update");
+                    console.error("Max retries reached for statistics update");
                     statisticsRetryCount = 0; // Reset untuk next cycle
                 }
             }
@@ -1139,10 +1141,10 @@
                 $('#table-container tbody').html(html);
                 // Re-apply current filter after update
                 filterSchedules(currentFilter);
-                console.log("✅ Table update complete");
+                console.log("Table update complete");
             },
             error: function(err) {
-                console.error("❌ Failed to update table:", err);
+                console.error("Failed to update table:", err);
                 console.error("Error details:", err.responseText);
                 tableRetryCount++;
                 
@@ -1152,7 +1154,7 @@
                     console.log(`🔄 Retrying table update in ${retryDelay}ms (attempt ${tableRetryCount}/${maxTableRetries})`);
                     safeSetTimeout(updateTableData, retryDelay);
                 } else {
-                    console.error("❌ Max retries reached for table update");
+                    console.error("Max retries reached for table update");
                     tableRetryCount = 0; // Reset untuk next cycle
                 }
             }
@@ -1169,7 +1171,7 @@
 
     // SignalR event handlers
     connection.on("connected", function(connectionId) {
-        console.log("✅ SignalR Connected! Connection ID:", connectionId);
+        console.log("SignalR Connected! Connection ID:", connectionId);
         isConnected = true;
         reconnectAttempts = 0;
         
@@ -1179,13 +1181,13 @@
 
     // Listen for Stock updates (often related to preparation)
     connection.on("updateStock", function() {
-        console.log("📦 Stock update received! Refreshing dashboard...");
+        console.log("Stock update received! Refreshing dashboard...");
         Promise.all([updateStatistics(), updateTableData()]);
     });
 
     connection.on("deliveryUpdated", function(data) {
         const timestamp = new Date().toLocaleTimeString();
-        console.log(`🔔 [${timestamp}] Delivery Update Received:`, data);
+        console.log(`[${timestamp}] Delivery Update Received:`, data);
         
         // Update connection indicator to show work in progress
         updateStatusBadge('reconnecting', 'Updating...');
@@ -1208,13 +1210,13 @@
 
     // Connection lifecycle events
     connection.onreconnecting((error) => {
-        console.warn("⚠️ SignalR reconnecting...", error);
+        console.warn("SignalR reconnecting...", error);
         isConnected = false;
         updateStatusBadge('reconnecting', 'Reconnecting...');
     });
 
     connection.onreconnected((connectionId) => {
-        console.log("✅ SignalR reconnected! Connection ID:", connectionId);
+        console.log("SignalR reconnected! Connection ID:", connectionId);
         isConnected = true;
         reconnectAttempts = 0;
         updateStatusBadge('live', 'Live');
@@ -1225,7 +1227,7 @@
     });
 
     connection.onclose((error) => {
-        console.error("❌ SignalR connection closed:", error);
+        console.error("SignalR connection closed:", error);
         isConnected = false;
         updateStatusBadge('disconnected', 'Disconnected');
         
@@ -1424,7 +1426,7 @@
     // Periodic refresh fallback sudah di-handle oleh polling fallback
     // Tidak perlu interval tambahan karena polling fallback sudah menangani ini
 
-    console.log("✅ SignalR initialization complete!");
+    console.log("SignalR initialization complete!");
 
     // ============================================
     // AUTO-SCROLL VERTICAL TABLE

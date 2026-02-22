@@ -263,192 +263,238 @@
     }
     else
     {
-        <div class="gallery-grid">
-            @foreach (var trip in Model)
-            {
-                var firstSch = trip.Schedules.FirstOrDefault();
-                if (firstSch == null) continue;
+        var activeTrips    = Model.Where(t => t.OverallStatus != "Completed").ToList();
+        var completedTrips = Model.Where(t => t.OverallStatus == "Completed").ToList();
 
-                var isCompleted = trip.OverallStatus == "Completed";
-                var isPrepared = trip.OverallStatus == "Prepared";
-                var isInProgress = trip.OverallStatus == "In Progress";
-                var isScheduled = trip.OverallStatus == "Scheduled";
-                
-                // Determine CSS classes based on Group Status
-                var headerClass = "header-scheduled";
-                var borderClass = "border-warning";
-
-                if (isInProgress) 
-                { 
-                    headerClass = "header-preparing"; 
-                    borderClass = "border-orange";
-                }
-                else if (isPrepared)
+        @* ── AKTIF ── *@
+        @if (activeTrips.Any())
+        {
+            <div class="d-flex align-items-center mb-3 gap-2">
+                <i class="bi bi-lightning-charge-fill text-warning fs-5"></i>
+                <span class="fw-bold text-white-50 small" style="letter-spacing: 1px;">BUTUH AKSI PREPARATION</span>
+                <span class="badge bg-warning text-dark ms-1">@activeTrips.Count</span>
+            </div>
+            <div class="gallery-grid mb-5">
+                @foreach (var trip in activeTrips)
                 {
-                    headerClass = "header-prepared";
-                    borderClass = "border-info";
-                }
-                else if (isCompleted) 
-                { 
-                    headerClass = "header-completed"; 
-                    borderClass = "border-success";
-                }
+                    var firstSch = trip.Schedules.FirstOrDefault();
+                    if (firstSch == null) continue;
 
-                <div class="prep-card @borderClass" 
-                     id="card-@trip.RepresentativeScheduleId" 
-                     data-schedule-number="@if(firstSch != null) {<text>@firstSch.ScheduleNumber</text>}"
-                     data-date="@(trip.PickupTime?.ToString("yyyy-MM-dd") ?? (firstSch?.ScheduledDate.ToString("yyyy-MM-dd"))) ">
-                    
-                    <div class="prep-card-header @headerClass">
-                        <div class="dropdown">
-                            <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 2px 8px;">
-                                <i class="bi bi-list-check me-1"></i> MANIFESTS (@trip.Schedules.Count())
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 180px; z-index: 1050;">
-                                @foreach (var m in trip.Schedules.OrderBy(x => x.ScheduleNumber))
-                                {
-                                    <li><span class="dropdown-item-text py-1 px-3" style="font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.05);">@m.ScheduleNumber</span></li>
-                                }
-                            </ul>
-                        </div>
-                        <span class="badge-status ms-2">@(trip.OverallStatus == "Completed" ? "PREPARED" : trip.OverallStatus.ToUpper())</span>
-                    </div>
-                    
-                    <div class="prep-card-body">
-                        <div class="customer-name mb-1">
-                            <i class="bi bi-building"></i> @trip.CustomerName
-                        </div>
+                    var isCompleted  = trip.OverallStatus == "Completed";
+                    var isPrepared   = trip.OverallStatus == "Prepared";
+                    var isInProgress = trip.OverallStatus == "In Progress";
+                    var isScheduled  = trip.OverallStatus == "Scheduled";
 
-                        <!-- DELIVERY BANNER -->
-                        @if (trip.PickupTime.HasValue)
-                        {
-                            var pickupDate = trip.PickupTime.Value.Date;
-                            var isToday = pickupDate == DateTime.Today;
-                            var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
-                            var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
-                            var badgeColor = isToday ? "bg-success" : (isTomorrow ? "bg-info" : "bg-secondary");
-                            
-                            <div class="delivery-banner">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <small class="text-white-50">
-                                        <i class="bi bi-calendar-check me-1"></i> <strong>Tanggal Delivery:</strong>
-                                    </small>
-                                    <span class="badge @badgeColor">
-                                        @dateLabel - @trip.PickupTime.Value.ToString("HH:mm")
-                                    </span>
-                                </div>
+                    var headerClass = "header-scheduled";
+                    var borderClass = "border-warning";
+                    if (isInProgress) { headerClass = "header-preparing"; borderClass = "border-orange"; }
+                    else if (isPrepared) { headerClass = "header-prepared"; borderClass = "border-info"; }
+                    else if (isCompleted) { headerClass = "header-completed"; borderClass = "border-success"; }
+
+                    <div class="prep-card @borderClass"
+                         id="card-@trip.RepresentativeScheduleId"
+                         data-schedule-number="@if(firstSch != null){<text>@firstSch.ScheduleNumber</text>}"
+                         data-date="@(trip.PickupTime?.ToString("yyyy-MM-dd") ?? (firstSch?.ScheduledDate.ToString("yyyy-MM-dd"))) ">
+
+                        <div class="prep-card-header @headerClass">
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 2px 8px;">
+                                    <i class="bi bi-list-check me-1"></i> MANIFESTS (@trip.Schedules.Count())
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 220px; z-index: 1050;">
+                                    @foreach (var m in trip.Schedules.OrderBy(x => x.ScheduleNumber))
+                                    {
+                                        double mKanbanTarget = 0; double mKanbanActual = 0;
+                                        if (m.DeliveryItems != null)
+                                        {
+                                            foreach (var di in m.DeliveryItems)
+                                            {
+                                                var qpc = di.Item?.QtyLot ?? 1;
+                                                if (qpc > 0) { mKanbanTarget += Math.Ceiling((double)di.Quantity / qpc); mKanbanActual += (double)(di.ActualQuantity ?? 0) / qpc; }
+                                            }
+                                        }
+                                        var isMComplete = mKanbanActual >= mKanbanTarget && mKanbanTarget > 0;
+                                        <li>
+                                            <div class="dropdown-item-text py-2 px-3 d-flex justify-content-between align-items-center" style="font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                                <span class="fw-bold @(isMComplete ? "text-success" : "")">@m.ScheduleNumber</span>
+                                                <span class="badge @(isMComplete ? "bg-success" : (mKanbanActual > 0 ? "bg-warning text-dark" : "bg-secondary")) ms-2" style="font-family: 'Courier New', monospace;">
+                                                    @mKanbanActual.ToString("0.##")/@mKanbanTarget.ToString("0.##")
+                                                </span>
+                                            </div>
+                                        </li>
+                                    }
+                                </ul>
                             </div>
-                        }
-
-                        <div class="mb-3">
-                            <div class="cycle-label">Cycle:</div>
-                            <div class="cycle-value">@trip.Cycle</div>
+                            <span class="badge-status ms-2">@(trip.OverallStatus == "Completed" ? "PREPARED" : trip.OverallStatus.ToUpper())</span>
                         </div>
 
-                        <div class="detail-row">
-                            <div class="detail-label">Route:</div>
-                            <div class="detail-value text-info fw-bold">@trip.Route</div>
-                        </div>
-
-                        <div class="detail-row">
-                            <div class="detail-label">Area:</div>
-                            <div class="detail-value"><i class="bi bi-geo-alt-fill icon-spacing"></i>@trip.Area</div>
-                        </div>
-                        
-                        <hr class="border-secondary opacity-25">
-
-                        <div class="row">
-                            <div class="col-6">
-                                <div class="detail-row mb-0">
-                                    <div class="detail-label"><i class="bi bi-box-arrow-in-right icon-spacing"></i>Enter Dock:</div>
-                                    <div class="detail-value">@(trip.Schedules.Any(s => s.ActualEnterDockTime.HasValue) ? trip.Schedules.First(s => s.ActualEnterDockTime.HasValue).ActualEnterDockTime?.ToString("HH:mm") : (trip.Schedules.FirstOrDefault()?.EnterDockTime?.ToString("HH:mm") ?? "-"))</div>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="detail-row mb-0">
-                                    <div class="detail-label"><i class="bi bi-truck icon-spacing"></i>Pickup Time:</div>
-                                    <div class="detail-value">@(trip.PickupTime?.ToString("HH:mm") ?? "-")</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- ITEMS & PROGRESS SECTION (Aggregate from ALL schedules in group) -->
-                        <div class="card-items-list">
-                            @foreach (var item in trip.Schedules.SelectMany(s => s.DeliveryItems))
+                        <div class="prep-card-body">
+                            <div class="customer-name mb-1"><i class="bi bi-building"></i> @trip.CustomerName</div>
+                            @if (trip.PickupTime.HasValue)
                             {
-                                var percent = (item.Quantity > 0) ? ((double)(item.ActualQuantity ?? 0) / (double)item.Quantity * 100) : 0;
-                                <div class="card-item-progress" data-vin="@(item.Item?.VIN ?? "")">
-                                    <div class="item-info">
-                                        <div class="d-flex flex-column">
-                                            @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber) && !string.IsNullOrEmpty(item.Item?.VIN))
-                                            {
-                                                <span class="item-vin" style="font-size: 0.9rem;">@item.Item.CustomerPartNumber/@item.Item.VIN</span>
-                                            }
-                                            else if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
-                                            {
-                                                <span class="item-vin" style="font-size: 0.9rem;">@item.Item.CustomerPartNumber</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="item-vin">@(item.Item?.VIN ?? "-")</span>
-                                            }
-                                        </div>
-                                        <span class="item-progress-val @(percent >= 100 ? "text-success" : "text-info")">
-                                            @((item.ActualQuantity ?? 0).ToString("G29")) / @item.Quantity.ToString("G29")
-                                        </span>
-                                    </div>
-                                    <div class="progress progress-mini">
-                                        <div class="progress-bar @(percent >= 100 ? "bg-success" : "bg-info")" 
-                                             role="progressbar" style="width: @percent%"></div>
+                                var pickupDate = trip.PickupTime.Value.Date;
+                                var isToday = pickupDate == DateTime.Today;
+                                var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
+                                var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
+                                var badgeColor = isToday ? "bg-success" : (isTomorrow ? "bg-info" : "bg-secondary");
+                                <div class="delivery-banner">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small class="text-white-50"><i class="bi bi-calendar-check me-1"></i> <strong>Tanggal Delivery:</strong></small>
+                                        <span class="badge @badgeColor">@dateLabel - @trip.PickupTime.Value.ToString("HH:mm")</span>
                                     </div>
                                 </div>
                             }
+                            <div class="mb-3"><div class="cycle-label">Cycle:</div><div class="cycle-value">@trip.Cycle</div></div>
+                            <div class="detail-row"><div class="detail-label">Route:</div><div class="detail-value text-info fw-bold">@trip.Route</div></div>
+                            <div class="detail-row"><div class="detail-label">Area:</div><div class="detail-value"><i class="bi bi-geo-alt-fill icon-spacing"></i>@trip.Area</div></div>
+                            <hr class="border-secondary opacity-25">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="detail-row mb-0">
+                                        <div class="detail-label"><i class="bi bi-box-arrow-in-right icon-spacing"></i>Enter Dock:</div>
+                                        <div class="detail-value">@(trip.Schedules.Any(s => s.ActualEnterDockTime.HasValue) ? trip.Schedules.First(s => s.ActualEnterDockTime.HasValue).ActualEnterDockTime?.ToString("HH:mm") : (trip.Schedules.FirstOrDefault()?.EnterDockTime?.ToString("HH:mm") ?? "-"))</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="detail-row mb-0">
+                                        <div class="detail-label"><i class="bi bi-truck icon-spacing"></i>Pickup Time:</div>
+                                        <div class="detail-value">@(trip.PickupTime?.ToString("HH:mm") ?? "-")</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="prep-card-footer">
+                            @if (trip.OverallStatus == "Scheduled")
+                            {
+                                <div class="text-center text-white-50"><small><i class="bi bi-clock me-1"></i> WAITING FOR SCAN</small></div>
+                            }
+                            else if (trip.OverallStatus == "In Progress")
+                            {
+                                <div class="text-center text-orange"><small><i class="bi bi-person-walking me-1"></i> PREPARATION IN PROGRESS</small></div>
+                            }
+                            else if (trip.OverallStatus == "Prepared")
+                            {
+                                <form asp-action="QuickEnterDock" method="post">
+                                    <input type="hidden" name="id" value="@trip.RepresentativeScheduleId" />
+                                    <button type="submit" class="btn btn-info w-100 fw-bold py-3 text-white"><i class="bi bi-check-circle-fill me-2"></i> ENTER DOCK</button>
+                                </form>
+                            }
                         </div>
                     </div>
+                }
+            </div>
+        }
 
-                    <div class="prep-card-footer">
-                        @if (trip.OverallStatus == "Scheduled")
-                        {
-                            <div class="text-center text-white-50">
-                                <small><i class="bi bi-clock me-1"></i> WAITING FOR SCAN</small>
-                            </div>
-                        }
-                        else if (trip.OverallStatus == "In Progress")
-                        {
-                            <div class="text-center text-orange">
-                                <small><i class="bi bi-person-walking me-1"></i> PREPARATION IN PROGRESS</small>
-                            </div>
-                        }
-                        else if (trip.OverallStatus == "Prepared")
-                        {
-                            <form asp-action="QuickEnterDock" method="post">
-                                <input type="hidden" name="id" value="@trip.RepresentativeScheduleId" />
-                                <button type="submit" class="btn btn-info w-100 fw-bold py-3 text-white">
-                                    <i class="bi bi-check-circle-fill me-2"></i> ENTER DOCK
+        @* ── COMPLETED ── *@
+        @if (completedTrips.Any())
+        {
+            <div class="d-flex align-items-center mb-3 gap-2" style="border-top: 2px solid rgba(16,185,129,0.35); padding-top: 1.5rem;">
+                <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                <span class="fw-bold text-success small" style="letter-spacing: 1px;">SUDAH SELESAI / TIDAK PERLU AKSI</span>
+                <span class="badge bg-success ms-1">@completedTrips.Count</span>
+            </div>
+            <div class="gallery-grid" style="opacity: 0.72;">
+                @foreach (var trip in completedTrips)
+                {
+                    var firstSch = trip.Schedules.FirstOrDefault();
+                    if (firstSch == null) continue;
+
+                    <div class="prep-card border-success"
+                         id="card-@trip.RepresentativeScheduleId"
+                         data-schedule-number="@if(firstSch != null){<text>@firstSch.ScheduleNumber</text>}"
+                         data-date="@(trip.PickupTime?.ToString("yyyy-MM-dd") ?? (firstSch?.ScheduledDate.ToString("yyyy-MM-dd"))) ">
+
+                        <div class="prep-card-header header-completed">
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 2px 8px;">
+                                    <i class="bi bi-list-check me-1"></i> MANIFESTS (@trip.Schedules.Count())
                                 </button>
-                            </form>
-                        }
-                        else if (trip.OverallStatus == "Completed")
-                        {
+                                <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 220px; z-index: 1050;">
+                                    @foreach (var m in trip.Schedules.OrderBy(x => x.ScheduleNumber))
+                                    {
+                                        double mKanbanTarget = 0; double mKanbanActual = 0;
+                                        if (m.DeliveryItems != null)
+                                        {
+                                            foreach (var di in m.DeliveryItems)
+                                            {
+                                                var qpc = di.Item?.QtyLot ?? 1;
+                                                if (qpc > 0) { mKanbanTarget += Math.Ceiling((double)di.Quantity / qpc); mKanbanActual += (double)(di.ActualQuantity ?? 0) / qpc; }
+                                            }
+                                        }
+                                        var isMComplete = mKanbanActual >= mKanbanTarget && mKanbanTarget > 0;
+                                        <li>
+                                            <div class="dropdown-item-text py-2 px-3 d-flex justify-content-between align-items-center" style="font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                                <span class="fw-bold text-success">@m.ScheduleNumber</span>
+                                                <span class="badge bg-success ms-2" style="font-family: 'Courier New', monospace;">
+                                                    @mKanbanActual.ToString("0.##")/@mKanbanTarget.ToString("0.##")
+                                                </span>
+                                            </div>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                            <span class="badge-status ms-2">PREPARED</span>
+                        </div>
+
+                        <div class="prep-card-body">
+                            <div class="customer-name mb-1"><i class="bi bi-building"></i> @trip.CustomerName</div>
+                            @if (trip.PickupTime.HasValue)
+                            {
+                                var pickupDate = trip.PickupTime.Value.Date;
+                                var isToday = pickupDate == DateTime.Today;
+                                var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
+                                var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
+                                var badgeColor = isToday ? "bg-success" : (isTomorrow ? "bg-info" : "bg-secondary");
+                                <div class="delivery-banner">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small class="text-white-50"><i class="bi bi-calendar-check me-1"></i> <strong>Tanggal Delivery:</strong></small>
+                                        <span class="badge @badgeColor">@dateLabel - @trip.PickupTime.Value.ToString("HH:mm")</span>
+                                    </div>
+                                </div>
+                            }
+                            <div class="mb-3"><div class="cycle-label">Cycle:</div><div class="cycle-value">@trip.Cycle</div></div>
+                            <div class="detail-row"><div class="detail-label">Route:</div><div class="detail-value text-info fw-bold">@trip.Route</div></div>
+                            <div class="detail-row"><div class="detail-label">Area:</div><div class="detail-value"><i class="bi bi-geo-alt-fill icon-spacing"></i>@trip.Area</div></div>
+                            <hr class="border-secondary opacity-25">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="detail-row mb-0">
+                                        <div class="detail-label"><i class="bi bi-box-arrow-in-right icon-spacing"></i>Enter Dock:</div>
+                                        <div class="detail-value">@(trip.Schedules.Any(s => s.ActualEnterDockTime.HasValue) ? trip.Schedules.First(s => s.ActualEnterDockTime.HasValue).ActualEnterDockTime?.ToString("HH:mm") : (trip.Schedules.FirstOrDefault()?.EnterDockTime?.ToString("HH:mm") ?? "-"))</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="detail-row mb-0">
+                                        <div class="detail-label"><i class="bi bi-truck icon-spacing"></i>Pickup Time:</div>
+                                        <div class="detail-value">@(trip.PickupTime?.ToString("HH:mm") ?? "-")</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="prep-card-footer">
                             <div class="text-center">
                                 <span class="badge bg-success w-100 py-3" style="font-size: 0.9rem; border-radius: 8px;">
                                     @{
-                                        var compTime = trip.Schedules.FirstOrDefault(s => s.ActualEnterDockTime.HasValue)?.ActualEnterDockTime 
+                                        var compTime = trip.Schedules.FirstOrDefault(s => s.ActualEnterDockTime.HasValue)?.ActualEnterDockTime
                                                       ?? trip.Schedules.FirstOrDefault(s => s.ReadyToDockTime.HasValue)?.ReadyToDockTime;
                                     }
-                                    <i class="bi bi-check-circle-fill me-2"></i> COMPLETED@(compTime.HasValue ? ": " + compTime.Value.ToString("HH:mm") : "")
+                                    <i class="bi bi-check-circle-fill me-2"></i> PREPARED@(compTime.HasValue ? ": " + compTime.Value.ToString("HH:mm") : "")
                                 </span>
                             </div>
-                        }
+                        </div>
                     </div>
-                </div>
-            }
-        </div>
+                }
+            </div>
+        }
     }
+
+
 </div>
 
 @section Scripts {
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+    <script src="~/lib/signalr.min.js"></script>
     <script>
         // SignalR Connection
         var connection = new signalR.HubConnectionBuilder().withUrl("/deliveryHub").build();
@@ -505,7 +551,7 @@
                 if (status === "Completed") {
                     header.classList.add('header-completed');
                     card.classList.add('border-success');
-                    if(badge) badge.innerText = "COMPLETED";
+                    if(badge) badge.innerText = "PREPARED";
                 } else if (prepStatus === "Prepared") {
                     header.classList.add('header-prepared');
                     card.classList.add('border-info');
@@ -521,38 +567,10 @@
                 }
             }
 
-            // Update Item Progress Bars
-            if (data.items || data.Items) {
-                var items = data.items || data.Items;
-                items.forEach(item => {
-                    var vin = item.vin || item.VIN;
-                    var actual = item.actual || item.Actual;
-                    var target = item.target || item.Target;
-                    var percent = item.percent || item.Percent;
-                    
-                    // Find the progress row for this VIN inside the card
-                    var row = card.querySelector(`.card-item-progress[data-vin='${vin}']`);
-                    if (row) {
-                        // Update text
-                        var textEl = row.querySelector('.item-progress-val');
-                        if (textEl) {
-                            textEl.innerText = `${actual} / ${target}`;
-                            if (percent >= 100) textEl.className = 'item-progress-val text-success';
-                            else textEl.className = 'item-progress-val text-info';
-                        }
-                        
-                        // Update Bar
-                        var bar = row.querySelector('.progress-bar');
-                        if (bar) {
-                            bar.style.width = `${percent}%`;
-                            if (percent >= 100) {
-                                bar.className = 'progress-bar bg-success';
-                            } else {
-                                bar.className = 'progress-bar bg-info';
-                            }
-                        }
-                    }
-                });
+            // Note: Individual Item Progress update removed for performance and cleaner UI.
+            // Full reload is safer when Kanban agregat updates via SignalR.
+            if ((data.items || data.Items) && action === "preparation") {
+                // location.reload(); // Uncomment if real-time item aggregation update is needed
             }
         }
 

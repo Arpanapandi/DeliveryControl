@@ -56,9 +56,7 @@
     Manifest = (s.ScheduleNumber ?? "").Contains("/") 
                ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper() 
                : (s.ScheduleNumber ?? "").Trim().ToUpper()
-})
-.OrderBy(g => g.All(s => s.ActualEndTime.HasValue) ? 1 : 0)
-.ThenBy(g => g.First().PickupTime))
+}))
 {
     var schedules = group.ToList();
     var item = schedules.First();
@@ -89,15 +87,23 @@
     }
 
     // Determine representative status
-    // (Logic: If any is In Progress, whole group is In Progress. If all Completed, whole group is Completed)
     string displayStatus = "Scheduled";
     if (schedules.All(s => s.ActualEndTime.HasValue)) displayStatus = "Completed";
     else if (schedules.Any(s => s.ActualStartTime.HasValue) || schedules.Any(s => s.ActualEnterDockTime.HasValue)) displayStatus = "In Progress";
     else if (schedules.All(s => s.PreparationStatus == "Prepared")) displayStatus = "Prepared";
+    else if (schedules.Any(s => s.PreparationStatus == "In Progress")) displayStatus = "Preparing"; // Sedang scan
+    else if (schedules.Any(s => s.PreparationStatus == "Prepared")) displayStatus = "Preparing"; // Sebagian sudah siap, grup belum selesai
     else displayStatus = (item.DriverStatus ?? item.Status) ?? "Scheduled";
 
     var isCompleted = displayStatus.Equals("Completed", StringComparison.OrdinalIgnoreCase);
+    var isPrepared = displayStatus.Equals("Prepared", StringComparison.OrdinalIgnoreCase);
+    var isPreparing = displayStatus.Equals("In Progress", StringComparison.OrdinalIgnoreCase);
+    var isScanning = displayStatus.Equals("Preparing", StringComparison.OrdinalIgnoreCase);
     var normalizedStatus = displayStatus.ToLower().Replace(" ", "");
+
+    var groupMaxReadyTime = schedules.All(s => s.ReadyToDockTime.HasValue) 
+        ? schedules.Max(s => s.ReadyToDockTime) 
+        : (DateTime?)null;
 
     // Insert separator row only once per today/tomorrow transition if necessary
     // (This part might need more complex logic with grouping, but for now we keep it simple)
@@ -161,33 +167,46 @@
     var isTruckArrivedAtGate = !item.ActualEnterDockTime.HasValue && item.ActualStartTime.HasValue && !isCompleted;
     var isWaitingForTruckAtGate = !item.ActualEnterDockTime.HasValue && !item.ActualStartTime.HasValue && !isCompleted;
 
-    // 2. Delay Preparation (Kerja telat/lambat) - Based on Clock Time
+    // 2. Delay Preparation (Kerja telat/lambat) - Based on Clock Time & Dock In Time
     var isDelayPrepare = false;
     var delayPrepDiff = 0;
-    if (!isCompleted && item.PreparationStatus != "Prepared")
+    
+    var stdPMinutes = item.StdPrepareTime > 0 ? item.StdPrepareTime : (item.Customer?.StdPrepareTime ?? 0);
+    var planEndTime = item.ScheduledDate.Date.AddMinutes(stdPMinutes);
+    var dockInTimeTarget = item.EnterDockTime;
+
+    if (!isCompleted && !isPrepared)
     {
-        var stdPMinutes = item.StdPrepareTime > 0 ? item.StdPrepareTime : (item.Customer?.StdPrepareTime ?? 0);
-        var planEndTime = item.ScheduledDate.Date.AddMinutes(stdPMinutes);
-        
-        if (DateTime.Now > planEndTime)
+        var now = DateTime.Now;
+        // Delay jika melewati target End Prep ATAU melewati jadwal masuk truk (Dock In)
+        if (now > planEndTime || (dockInTimeTarget.HasValue && now > dockInTimeTarget.Value))
         {
             isDelayPrepare = true;
-            delayPrepDiff = (int)(DateTime.Now - planEndTime).TotalMinutes;
+            var effectiveTarget = (dockInTimeTarget.HasValue && dockInTimeTarget.Value < planEndTime) ? dockInTimeTarget.Value : planEndTime;
+            delayPrepDiff = (int)(now - effectiveTarget).TotalMinutes;
         }
     }
-    else if (item.PreparationStatus == "Prepared" && item.ReadyToDockTime.HasValue)
+    else if ((isPrepared || isCompleted) && groupMaxReadyTime.HasValue)
     {
-        var stdPMinutes = item.StdPrepareTime > 0 ? item.StdPrepareTime : (item.Customer?.StdPrepareTime ?? 0);
-        var planEndTime = item.ScheduledDate.Date.AddMinutes(stdPMinutes);
-        
-        if (item.ReadyToDockTime.Value > planEndTime)
+        var readyTime = groupMaxReadyTime.Value;
+        var effectiveTarget = (dockInTimeTarget.HasValue && dockInTimeTarget.Value < planEndTime) ? dockInTimeTarget.Value : planEndTime;
+        if (readyTime > effectiveTarget)
         {
             isDelayPrepare = true;
-            delayPrepDiff = (int)(item.ReadyToDockTime.Value - planEndTime).TotalMinutes;
+            delayPrepDiff = (int)(readyTime - effectiveTarget).TotalMinutes;
         }
+    }
+    // Early prepare (selesai sebelum target)
+    var isPrepareEarly = false;
+    var prepareEarlyMinutes = 0;
+    if ((isPrepared || isCompleted) && groupMaxReadyTime.HasValue && !isDelayPrepare)
+    {
+        var effectiveTarget = (dockInTimeTarget.HasValue && dockInTimeTarget.Value < planEndTime) ? dockInTimeTarget.Value : planEndTime;
+        var diff = effectiveTarget - groupMaxReadyTime.Value;
+        if (diff.TotalMinutes > 0) { isPrepareEarly = true; prepareEarlyMinutes = (int)diff.TotalMinutes; }
     }
 
-    <tr class="schedule-row" 
+    <tr class="schedule-row @(isCompleted ? "opacity-75" : "")" 
         data-status="@normalizedStatus" 
         data-arrived="@(item.ActualStartTime.HasValue ? "true" : "false")" 
         data-delaypickup="@(isDelayPickup ? "true" : "false")" 
@@ -203,10 +222,12 @@
         </td>
         <td class="text-center align-middle">
             <div class="d-flex flex-column align-items-center">
-                <div class="fw-bold" style="font-size: 1.3rem; color: @(groupTotalActual >= groupTotalTarget ? "#10b981" : "#ffa500")">
-                    @totalKanbanActual.ToString("0.##") / @totalKanbanTarget.ToString("0.##")
+                <div class="kanban-badge-container">
+                    <span class="badge @(totalKanbanActual >= totalKanbanTarget && totalKanbanTarget > 0 ? "bg-success" : "bg-cyan-cyber") px-3 py-2" style="font-size: 1.1rem; min-width: 80px; border-radius: 6px; @(totalKanbanActual < totalKanbanTarget ? "background-color: #00d1ff; color: #000;" : "")">
+                        @totalKanbanActual.ToString("0.##") / @totalKanbanTarget.ToString("0.##")
+                    </span>
                 </div>
-                <div class="text-muted small fw-bold" style="margin-top: -4px; letter-spacing: 1px;">KANBAN</div>
+                <div class="text-muted small fw-bold mt-1" style="letter-spacing: 1px; font-size: 0.7rem;">KANBAN</div>
                 
                 <div class="progress w-100 mt-1" style="height: 6px; max-width: 80px; background: rgba(255,255,255,0.1); border-radius: 3px;">
                     @{
@@ -237,15 +258,28 @@
             }</div>
         </td>
         <td class="text-center align-middle">
-            @if (item.PreparationStatus == "Prepared")
+            @if (groupMaxReadyTime.HasValue)
             {
+                @* ReadyToDockTime sudah tercatat → tampilkan selalu, apapun statusnya *@
                 <div class="d-flex flex-column align-items-center">
                     <div class="d-inline-block">
-                        <strong class="text-white">@((item.ReadyToDockTime ?? item.UpdatedDate ?? DateTime.Now).ToString("HH:mm"))</strong>
+                        <strong class="text-white">@groupMaxReadyTime.Value.ToString("HH:mm")</strong>
                         @if (isDelayPrepare)
                         {
                             <span class="badge bg-danger ms-1" style="font-size: 0.65rem;">
-                                <i class="bi bi-exclamation-triangle-fill"></i> Delay Prep +@delayPrepDiff m
+                                <i class="bi bi-exclamation-triangle-fill"></i> Delay +@delayPrepDiff m
+                            </span>
+                        }
+                        else if (isPrepareEarly)
+                        {
+                            <span class="badge bg-success ms-1" style="font-size: 0.65rem;">
+                                <i class="bi bi-check-circle-fill"></i> On Time -@prepareEarlyMinutes m
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success ms-1" style="font-size: 0.65rem;">
+                                <i class="bi bi-check-circle-fill"></i> On Time
                             </span>
                         }
                     </div>
@@ -260,7 +294,7 @@
                     <div class="text-danger blink-text small fw-bold">+@delayPrepDiff m</div>
                 </div>
             }
-            else if (item.PreparationStatus == "In Progress")
+            else if (isPreparing || isScanning)
             {
                 <div class="text-center">
                     <span class="badge bg-info text-dark" style="font-size: 0.7rem; padding: 0.3rem 0.6rem;">
@@ -403,6 +437,16 @@
                     </div>
                 </div>
             }
+            else if (item.ActualEnterDockTime.HasValue && isCompleted && item.ActualStartTime.HasValue)
+            {
+                @* Completed: show actual arrival time recorded at Enter Dock *@
+                <div class="d-flex flex-column align-items-center">
+                    <div class="d-inline-block">
+                        <i class="bi bi-truck" style="color: #10b981;"></i>
+                        <strong style="color: #10b981;">@item.ActualStartTime.Value.ToString("HH:mm")</strong>
+                    </div>
+                </div>
+            }
             else if (item.ActualEnterDockTime.HasValue && !isCompleted)
             {
                 <div class="d-flex flex-column align-items-center">
@@ -453,6 +497,7 @@
                 "completed" => "bg-success",
                 "inprogress" => "bg-warning text-dark",
                 "prepared" => "bg-info text-white",
+                "preparing" => "bg-warning text-dark",
                 "delaypickup" => "bg-danger",
                 "notarrived" => "bg-secondary",
                 _ => "bg-secondary"
@@ -462,6 +507,7 @@
                 "completed" => "bi-check-circle-fill",
                 "inprogress" => "bi-arrow-repeat",
                 "prepared" => "bi-check2-all",
+                "preparing" => "bi-upc-scan",
                 "delaypickup" => "bi-exclamation-triangle-fill",
                 "notarrived" => "bi-hourglass-split",
                 _ => "bi-clock"

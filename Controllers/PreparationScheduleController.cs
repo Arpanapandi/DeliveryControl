@@ -72,10 +72,20 @@ namespace DeliveryControl.Controllers
             int pageSize = 20;
 
             var schedules = rawSchedules
-                .OrderBy(s => (s.Status == "In Progress" || s.PreparationStatus == "In Progress") ? 0 : 
-                             (s.PreparationStatus == "Prepared") ? 1 :
-                             (s.Status == "Scheduled" || s.Status == "Waiting" || string.IsNullOrEmpty(s.Status)) ? 2 : 
-                             3) // Completed or anything else goes to bottom
+                .OrderBy(s =>
+                {
+                    // Completed scan 100% (Prepared) → paling bawah dari scheduled, walau Status-nya masih "In Progress"
+                    if (s.PreparationStatus == "Prepared")
+                        return 2;
+                    // Selesai delivery (ActualEndTime terisi) → paling bawah sekali
+                    if (s.Status == "Completed" || s.ActualEndTime.HasValue)
+                        return 3;
+                    // Preparing / Sedang Scan (belum 100%) → paling atas
+                    if (s.PreparationStatus == "In Progress" || s.Status == "In Progress")
+                        return 0;
+                    // Scheduled / Waiting → default tengah
+                    return 1;
+                })
                 .ThenBy(s => s.ScheduledDate)
                 .ThenBy(s => s.ScheduleNumber)
                 .ThenBy(s => s.ScheduleId)
@@ -313,11 +323,35 @@ namespace DeliveryControl.Controllers
                     var enterDockTime = ParseTimeToDateTime(customer.Docking, model.ScheduledDate);
                     var etdTime = ParseTimeToDateTime(customer.ETD, model.ScheduledDate);
 
-                    if (enterDockTime.HasValue && pickupTime.HasValue && enterDockTime.Value.TimeOfDay > pickupTime.Value.TimeOfDay)
-                        enterDockTime = enterDockTime.Value.AddDays(-1);
+                    // Gunakan StartPrepare sebagai anchor untuk menentukan H+1
+                    // Jika jam milestone < jam mulai persiapan, maka itu adalah besok harinya
+                    var startPrepMinutes = customer.StartPrepareTime;
+                    var startPrepTime = model.ScheduledDate.Date.AddMinutes(startPrepMinutes);
 
-                    if (etdTime.HasValue && pickupTime.HasValue && etdTime.Value.TimeOfDay < pickupTime.Value.TimeOfDay)
+                    if (enterDockTime.HasValue && enterDockTime.Value < startPrepTime)
+                    {
+                        enterDockTime = enterDockTime.Value.AddDays(1);
+                    }
+
+                    if (pickupTime.HasValue && pickupTime.Value < startPrepTime)
+                    {
+                        pickupTime = pickupTime.Value.AddDays(1);
+                    }
+
+                    if (etdTime.HasValue && etdTime.Value < startPrepTime)
+                    {
                         etdTime = etdTime.Value.AddDays(1);
+                    }
+
+                    // Double Checks: Pastikan urutan logis tetap terjaga (Dock -> Pickup -> ETD)
+                    if (pickupTime.HasValue && enterDockTime.HasValue && pickupTime.Value < enterDockTime.Value)
+                    {
+                        pickupTime = pickupTime.Value.AddDays(1);
+                    }
+                    if (etdTime.HasValue && pickupTime.HasValue && etdTime.Value < pickupTime.Value)
+                    {
+                        etdTime = etdTime.Value.AddDays(1);
+                    }
                     
                     var schedule = new DeliverySchedule
                     {
@@ -412,9 +446,9 @@ namespace DeliveryControl.Controllers
 
                 // Instructions
                 worksheet.Cell(4, 2).Value = "CATATAN PENGISIAN:";
-                worksheet.Cell(5, 2).Value = "â€¢ Kolom DOCK berisi Kode Lokasi Dock.";
-                worksheet.Cell(6, 2).Value = "â€¢ Kolom NAMA CUSTOMER dan PART NO / VIN Wajib diisi.";
-                worksheet.Cell(7, 2).Value = "â€¢ Qty/Lot dan Kanban otomatis terisi dari Master Item.";
+                worksheet.Cell(5, 2).Value = "- Kolom DOCK berisi Kode Lokasi Dock.";
+                worksheet.Cell(6, 2).Value = "- Kolom NAMA CUSTOMER dan PART NO / VIN Wajib diisi.";
+                worksheet.Cell(7, 2).Value = "- Qty/Lot dan Kanban otomatis terisi dari Master Item.";
 
                 using (var stream = new MemoryStream())
                 {
@@ -740,12 +774,37 @@ namespace DeliveryControl.Controllers
                                 Route = !string.IsNullOrEmpty(rowData.Customer.Route) ? rowData.Customer.Route : (colMap.Route != -1 ? GetSafeString(rowData.Row.Cell(colMap.Route)) : ""),
                                 Cycle = !string.IsNullOrEmpty(rowData.Customer.Cycle) ? rowData.Customer.Cycle : (colMap.Cycle != -1 ? GetSafeString(rowData.Row.Cell(colMap.Cycle)) : ""),
                                 Area = !string.IsNullOrEmpty(rowData.Customer.Area) ? rowData.Customer.Area : rowData.DockLocation, 
-                                EnterDockTime = ParseTimeToDateTime(rowData.Customer.Docking, scheduledDate),
-                                PickupTime = (colMap.Pickup != -1 ? GetSafeTime(rowData.Row.Cell(colMap.Pickup), scheduledDate) : null) ?? ParseTimeToDateTime(rowData.Customer.Pickup, scheduledDate),
-                                ETD = (colMap.Etd != -1 ? GetSafeTime(rowData.Row.Cell(colMap.Etd), scheduledDate) : null) ?? ParseTimeToDateTime(rowData.Customer.ETD, scheduledDate),
+                                StartPrepareTime = rowData.Customer.StartPrepareTime,
+                                StdPrepareTime = rowData.Customer.StdPrepareTime,
                                 Range = rowData.Customer.Range,
                                 SKID = rowData.Customer.SKID
                             };
+
+                            var enterDockTime = ParseTimeToDateTime(rowData.Customer.Docking, scheduledDate);
+                            var pickupTime = (colMap.Pickup != -1 ? GetSafeTime(rowData.Row.Cell(colMap.Pickup), scheduledDate) : null) ?? ParseTimeToDateTime(rowData.Customer.Pickup, scheduledDate);
+                            var etdTime = (colMap.Etd != -1 ? GetSafeTime(rowData.Row.Cell(colMap.Etd), scheduledDate) : null) ?? ParseTimeToDateTime(rowData.Customer.ETD, scheduledDate);
+
+                            // Gunakan StartPrepare sebagai anchor untuk menentukan H+1
+                            var startPrepTime = scheduledDate.Date.AddMinutes(rowData.Customer.StartPrepareTime);
+
+                            if (enterDockTime.HasValue && enterDockTime.Value < startPrepTime)
+                                enterDockTime = enterDockTime.Value.AddDays(1);
+
+                            if (pickupTime.HasValue && pickupTime.Value < startPrepTime)
+                                pickupTime = pickupTime.Value.AddDays(1);
+
+                            if (etdTime.HasValue && etdTime.Value < startPrepTime)
+                                etdTime = etdTime.Value.AddDays(1);
+
+                            // Double checks for logic consistency
+                            if (pickupTime.HasValue && enterDockTime.HasValue && pickupTime.Value < enterDockTime.Value)
+                                pickupTime = pickupTime.Value.AddDays(1);
+                            if (etdTime.HasValue && pickupTime.HasValue && etdTime.Value < pickupTime.Value)
+                                etdTime = etdTime.Value.AddDays(1);
+
+                            schedule.EnterDockTime = enterDockTime;
+                            schedule.PickupTime = pickupTime;
+                            schedule.ETD = etdTime;
 
                             // Add the specific item (matched in Phase 1)
                             var deliveryItem = new DeliveryItem {
@@ -785,12 +844,12 @@ namespace DeliveryControl.Controllers
 
                 if (successCount > 0)
                 {
-                    TempData["SuccessMessage"] = $"âœ… Berhasil import {successCount} schedule dengan Items!";
+                    TempData["SuccessMessage"] = $"Berhasil import {successCount} schedule dengan Items!";
                 }
                 
                 if (errorCount > 0)
                 {
-                     TempData["ErrorMessage"] = $"âš ï¸ {errorCount} baris gagal. Contoh: {string.Join(", ", errorSamples)}";
+                     TempData["ErrorMessage"] = $"{errorCount} baris gagal. Contoh: {string.Join(", ", errorSamples)}";
                 }
             }
             catch (Exception ex)

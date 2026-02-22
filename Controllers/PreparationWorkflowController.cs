@@ -135,6 +135,7 @@ namespace DeliveryControl.Controllers
                 }
 
         DeliverySchedule? schedule = null;
+        var today = DateTime.Today;
 
         if (!string.IsNullOrEmpty(kanban))
         {
@@ -153,8 +154,9 @@ namespace DeliveryControl.Controllers
                 schedule = await _context.DeliverySchedules
                     .Include(s => s.Customer)
                     .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
-                    .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
-                                 s.DeliveryItems.Any(di => di.ItemId == targetItem.ItemId))
+                    .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") &&
+                                 s.ScheduledDate.Date >= today &&
+                                 s.DeliveryItems.Any(di => di.ItemId == targetItem.ItemId && (di.ActualQuantity ?? 0) < di.Quantity))
                     .OrderBy(s => s.ScheduledDate)
                     .ThenBy(s => s.ScheduleNumber)
                     .FirstOrDefaultAsync();
@@ -231,8 +233,9 @@ namespace DeliveryControl.Controllers
             schedule = await _context.DeliverySchedules
                 .Include(s => s.Customer)
                 .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
-                .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
-                             s.DeliveryItems.Any(di => di.ItemId == targetItem.ItemId))
+                .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") &&
+                             s.ScheduledDate.Date >= today &&
+                             s.DeliveryItems.Any(di => di.ItemId == targetItem.ItemId && (di.ActualQuantity ?? 0) < di.Quantity))
                 .OrderBy(s => s.ScheduledDate)
                 .ThenBy(s => s.ScheduleNumber)
                 .FirstOrDefaultAsync();
@@ -337,11 +340,13 @@ namespace DeliveryControl.Controllers
                     return Json(new { success = false, message = $"KANBAN tidak sesuai dengan produk!" });
                 }
 
+                var today = DateTime.Today;
                 var schedule = await _context.DeliverySchedules
                     .Include(s => s.Customer)
                     .Include(s => s.DeliveryItems).ThenInclude(di => di.Item)
-                    .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") && 
-                                 s.DeliveryItems.Any(di => di.ItemId == item.ItemId))
+                    .Where(s => (s.Status == "Scheduled" || s.Status == "In Progress") &&
+                                 s.ScheduledDate.Date >= today &&
+                                 s.DeliveryItems.Any(di => di.ItemId == item.ItemId && (di.ActualQuantity ?? 0) < di.Quantity))
                     .OrderBy(s => s.ScheduledDate)
                     .ThenBy(s => s.ScheduleNumber)
                     .FirstOrDefaultAsync();
@@ -408,7 +413,8 @@ namespace DeliveryControl.Controllers
                         if (schedule.PreparationStatus != "Prepared")
                         {
                             schedule.PreparationStatus = "Prepared";
-                            schedule.ReadyToDockTime = DateTime.Now;
+                            // NOTE: ReadyToDockTime is NOT set here.
+                            // It is set at the GROUP level below, only when ALL schedules in the manifest are done.
                         }
                     }
                 }
@@ -424,19 +430,37 @@ namespace DeliveryControl.Controllers
                                 s.Status != "Cancelled")
                     .ToListAsync();
 
+                bool isGroupReady = false;
+                string groupManifest = (schedule.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper();
+
                 if (groupSchedules.All(gs => gs.DeliveryItems.All(di => (di.ActualQuantity ?? 0) >= di.Quantity)))
                 {
+                    isGroupReady = true;
                     var scanTime = DateTime.Now;
                     foreach (var gs in groupSchedules)
                     {
-                        if (gs.PreparationStatus != "Prepared")
+                        // Mark all as Prepared and In Progress
+                        gs.PreparationStatus = "Prepared";
+                        gs.Status = "In Progress"; // MUST be In Progress for Driver Portal visibility
+                        gs.UpdatedDate = scanTime;
+
+                        // Set ReadyToDockTime for ALL in group (not just unset ones)
+                        if (!gs.ReadyToDockTime.HasValue)
                         {
-                            gs.PreparationStatus = "Prepared";
-                            if (!gs.ReadyToDockTime.HasValue)
-                            {
-                                gs.ReadyToDockTime = scanTime;
-                            }
-                            gs.UpdatedDate = scanTime;
+                            gs.ReadyToDockTime = scanTime;
+                        }
+                    }
+                }
+                else
+                {
+                    // Even if not fully prepared, ensure all members of the group are "In Progress" 
+                    // so the card appears in the Driver Portal as soon as preparation starts.
+                    foreach (var gs in groupSchedules)
+                    {
+                        if (gs.Status == "Scheduled")
+                        {
+                            gs.Status = "In Progress";
+                            gs.UpdatedDate = DateTime.Now;
                         }
                     }
                 }
@@ -444,14 +468,16 @@ namespace DeliveryControl.Controllers
                 _context.PreparationRecords.Add(record);
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
-                
+
+                // --- BROADCAST: Send all SignalR notifications AFTER data is fully committed ---
                 var totalTarget = schedule.DeliveryItems.Sum(di => di.Quantity);
                 var totalActual = schedule.DeliveryItems.Sum(di => di.ActualQuantity ?? 0);
                 var totalPercent = totalTarget > 0 ? ((double)totalActual / (double)totalTarget * 100) : 0;
 
                 var broadcastData = new {
-                    action = "preparation",
+                    action = isGroupReady ? "readyToDock" : "preparation",
                     scheduleNumber = schedule.ScheduleNumber,
+                    manifest = groupManifest,
                     status = schedule.Status,
                     preparationStatus = schedule.PreparationStatus,
                     totalPercent = totalPercent,

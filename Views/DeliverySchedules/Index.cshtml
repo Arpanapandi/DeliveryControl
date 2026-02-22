@@ -94,7 +94,7 @@
                                     <input type="checkbox" id="selectAll" class="form-check-input" title="Pilih Semua">
                                 </th>
                             }
-                            <th class="text-center align-middle" style="width: 185px; background-color: #212529;">No Schedule</th>
+
                             <th class="text-center align-middle" style="width: 85px; background-color: #212529;">CUST</th>
                             <th class="text-center align-middle" style="width: 80px; background-color: #212529;">ROUTE</th>
                             <th class="text-center align-middle" style="width: 60px; background-color: #212529;">CYCLE</th>
@@ -189,28 +189,28 @@
                     },
                     success: function(html) {
                         $('#historyTableBody').html(html);
-                        console.log("✅ History table updated via SignalR");
+                        console.log("History table updated via SignalR");
                         // Reset select all if it was checked
                         $('#selectAll').prop('checked', false);
                         updateBulkDeleteButton();
                     },
                     error: function(err) {
-                        console.error("❌ Failed to update history table:", err);
+                        console.error("Failed to update history table:", err);
                     }
                 });
             }
 
             connection.on("connected", function(id) {
-                console.log("✅ SignalR Connected for History!");
+                console.log("SignalR Connected for History!");
             });
 
             connection.on("updateStock", function() {
-                console.log("📦 Stock update received on History page! Refreshing...");
+                console.log("Stock update received on History page! Refreshing...");
                 updateTableData();
             });
 
             connection.on("deliveryUpdated", function(data) {
-                console.log("🔔 Delivery update received on History page:", data);
+                console.log("Delivery update received on History page:", data);
                 updateTableData();
             });
 

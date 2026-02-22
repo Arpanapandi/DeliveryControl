@@ -268,23 +268,23 @@ else
 
                                 <hr />
 
-                                <!-- Pickup Time -->
-                                @if (trip.PickupTime.HasValue)
-                                {
-                                    <div class="mb-2">
-                                        <small class="text-muted"><i class="bi bi-clock"></i> Pickup Time (Target):</small>
-                                        <div><strong>@trip.PickupTime.Value.ToString("HH:mm")</strong></div>
-                                    </div>
-                                }
-
-                                <!-- ETD -->
-                                @if (trip.ETD.HasValue)
-                                {
-                                    <div class="mb-2">
-                                        <small class="text-muted"><i class="bi bi-arrow-right-circle"></i> ETD (Target):</small>
-                                        <div><strong>@trip.ETD.Value.ToString("HH:mm")</strong></div>
-                                    </div>
-                                }
+                                <!-- Pickup Time + ETD horizontal -->
+                                <div class="row text-center mb-2">
+                                    @if (trip.PickupTime.HasValue)
+                                    {
+                                        <div class="col-6 border-end">
+                                            <small class="text-muted"><i class="bi bi-truck" style="color:#f59e0b;"></i> Pickup Time:</small>
+                                            <div><strong>@trip.PickupTime.Value.ToString("HH:mm")</strong></div>
+                                        </div>
+                                    }
+                                    @if (trip.ETD.HasValue)
+                                    {
+                                        <div class="col-6">
+                                            <small class="text-muted"><i class="bi bi-sign-turn-right" style="color:#f59e0b;"></i> ETD:</small>
+                                            <div><strong>@trip.ETD.Value.ToString("HH:mm")</strong></div>
+                                        </div>
+                                    }
+                                </div>
 
                                 <hr />
 

@@ -4,7 +4,7 @@ $connectionString = "Server=10.14.149.34;Database=PPIC_DeliveryControl;User Id=u
 try {
     $conn = New-Object System.Data.SqlClient.SqlConnection $connectionString
     $conn.Open()
-    Write-Host "✅ Connection Successful!" -ForegroundColor Green
+    Write-Host "Connection Successful!" -ForegroundColor Green
 
     $cmd = $conn.CreateCommand()
     $cmd.CommandText = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME"

@@ -1,125 +1,114 @@
 @model IEnumerable<DeliveryControl.Models.DeliverySchedule>
 
-@foreach (var item in Model)
+@foreach (var group in Model.GroupBy(s => new { 
+    s.CustomerId, 
+    s.Area, 
+    s.Cycle, 
+    Date = s.ScheduledDate.Date,
+    Manifest = (s.ScheduleNumber ?? "").Contains("/") 
+               ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper() 
+               : (s.ScheduleNumber ?? "").Trim().ToUpper()
+}))
 {
-    // Calculate actual range
-    var actualRange = "";
-    if (item.ActualStartTime.HasValue && item.ActualEndTime.HasValue)
+    var schedules = group.ToList();
+    var firstItem = group.First();
+    var isPrepared = schedules.All(s => s.PreparationStatus == "Prepared");
+    var groupMaxReadyTime = schedules.Max(s => s.ReadyToDockTime);
+    
+    // Aggregates for Kanban
+    double totalKbnTarget = 0;
+    double totalKbnActual = 0;
+    foreach (var s in schedules)
     {
-        var duration = item.ActualEndTime.Value - item.ActualStartTime.Value;
+        if (s.DeliveryItems != null)
+        {
+            foreach (var di in s.DeliveryItems)
+            {
+                var qpc = di.Item?.QtyLot ?? 1;
+                if (qpc > 0)
+                {
+                    totalKbnTarget += Math.Ceiling((double)di.Quantity / qpc);
+                    totalKbnActual += (double)(di.ActualQuantity ?? 0) / qpc;
+                }
+            }
+        }
+    }
+
+    // Time Aggregates (Representative times)
+    var pickupTime = schedules.Min(s => s.PickupTime);
+    var actPickupTime = schedules.Max(s => s.ActualStartTime);
+    var enterDockTime = schedules.Min(s => s.EnterDockTime);
+    var actEnterDockTime = schedules.Max(s => s.ActualEnterDockTime);
+    var etdTime = schedules.Max(s => s.ETD);
+    var actDeliveryTime = schedules.Max(s => s.ActualEndTime);
+
+    // Calculate actual range for the group
+    var actualRange = "";
+    if (actPickupTime.HasValue && actDeliveryTime.HasValue)
+    {
+        var duration = actDeliveryTime.Value - actPickupTime.Value;
         actualRange = duration.TotalHours >= 1 
             ? $"{(int)duration.TotalHours}j {duration.Minutes}m"
             : $"{(int)duration.TotalMinutes}m";
     }
 
-    // Check if late for enter dock
-    var isEnterDockLate = false;
-    var enterDockDelayMinutes = 0;
-    var isEnterDockEarly = false;
-    var enterDockEarlyMinutes = 0;
-    var estimatedDockTime = item.EnterDockTime?.AddMinutes(15);
-    var actualEstimatedDockTime = item.ActualEnterDockTime?.AddMinutes(15);
-    if (item.ActualEnterDockTime.HasValue && item.EnterDockTime.HasValue)
-    {
-        var delay = item.ActualEnterDockTime.Value - item.EnterDockTime.Value;
-        if (delay.TotalMinutes > 0)
-        {
-            isEnterDockLate = true;
-            enterDockDelayMinutes = (int)delay.TotalMinutes;
-        }
-        else if (delay.TotalMinutes < 0)
-        {
-            isEnterDockEarly = true;
-            enterDockEarlyMinutes = (int)Math.Abs(delay.TotalMinutes);
-        }
-    }
+    // Delays
+    var isPickupLate = actPickupTime.HasValue && pickupTime.HasValue && actPickupTime.Value > pickupTime.Value;
+    var pickupDelayMinutes = isPickupLate ? (int)(actPickupTime!.Value - pickupTime!.Value).TotalMinutes : 0;
+    
+    var isDeliveryLate = actDeliveryTime.HasValue && etdTime.HasValue && actDeliveryTime.Value > etdTime.Value;
+    var deliveryDelayMinutes = isDeliveryLate ? (int)(actDeliveryTime!.Value - etdTime!.Value).TotalMinutes : 0;
 
-    // Check if late for pickup
-    var isPickupLate = false;
-    var pickupDelayMinutes = 0;
-    if (item.ActualStartTime.HasValue && item.PickupTime.HasValue)
-    {
-        var delay = item.ActualStartTime.Value - item.PickupTime.Value;
-        if (delay.TotalMinutes > 0)
-        {
-            isPickupLate = true;
-            pickupDelayMinutes = (int)delay.TotalMinutes;
-        }
-    }
-
-    // Check if late for delivery (ETD)
-    var isDeliveryLate = false;
-    var deliveryDelayMinutes = 0;
-    if (item.ActualEndTime.HasValue && item.ETD.HasValue)
-    {
-        var delay = item.ActualEndTime.Value - item.ETD.Value;
-        if (delay.TotalMinutes > 0)
-        {
-            isDeliveryLate = true;
-            deliveryDelayMinutes = (int)delay.TotalMinutes;
-        }
-    }
+    var isEnterDockLate = actEnterDockTime.HasValue && enterDockTime.HasValue && actEnterDockTime.Value > enterDockTime.Value;
+    var enterDockDelayMinutes = isEnterDockLate ? (int)(actEnterDockTime!.Value - enterDockTime!.Value).TotalMinutes : 0;
 
     <tr>
         @if (Context.Session.GetString("Role") == "Admin")
         {
             <td class="text-center align-middle">
-                <input type="checkbox" class="form-check-input row-checkbox" value="@item.ScheduleId">
+                @foreach(var s in schedules)
+                {
+                    <input type="checkbox" class="form-check-input row-checkbox mb-1" value="@s.ScheduleId" title="@s.ScheduleNumber">
+                }
             </td>
         }
+
         <td class="text-center align-middle">
-            <small><strong>@item.ScheduleNumber</strong></small>
+            <div class="fw-bold">@firstItem.Customer.CustomerCode</div>
         </td>
         <td class="text-center align-middle">
-            <div class="fw-bold">@item.Customer.CustomerCode</div>
+            <small>@(firstItem.Route ?? "-")</small>
         </td>
         <td class="text-center align-middle">
-            <small>@(item.Route ?? "-")</small>
+            <small>@(firstItem.Cycle ?? "-")</small>
         </td>
         <td class="text-center align-middle">
-            <small>@(item.Cycle ?? "-")</small>
-        </td>
-        <td class="text-center align-middle">
-            @{
-                double kbnTarget = 0;
-                double kbnActual = 0;
-                if (item.DeliveryItems != null)
-                {
-                    foreach(var di in item.DeliveryItems)
-                    {
-                        var qpc = di.Item?.QtyLot ?? 1;
-                        if (qpc > 0)
-                        {
-                            kbnTarget += Math.Ceiling((double)di.Quantity / qpc);
-                            kbnActual += (double)(di.ActualQuantity ?? 0) / qpc;
-                        }
-                    }
-                }
-            }
-            <div class="@(item.TotalActualQuantity >= item.TotalTargetQuantity && item.TotalTargetQuantity > 0 ? "text-success" : (item.TotalActualQuantity > 0 ? "text-warning" : "")) fw-bold">
-                @kbnActual.ToString("0.##")/@kbnTarget.ToString("0.##")
+            <div class="@(totalKbnActual >= totalKbnTarget && totalKbnTarget > 0 ? "text-success" : (totalKbnActual > 0 ? "text-warning" : "")) fw-bold">
+                @totalKbnActual.ToString("0.##")/@totalKbnTarget.ToString("0.##")
             </div>
         </td>
         <td class="text-center align-middle">
             <div>@{
-                var startP = item.StartPrepareTime > 0 ? item.StartPrepareTime : (item.Customer?.StartPrepareTime ?? 0);
+                var startP = firstItem.StartPrepareTime > 0 ? firstItem.StartPrepareTime : (firstItem.Customer?.StartPrepareTime ?? 0);
                 @($"{startP / 60:D2}:{startP % 60:D2}")
             }</div>
         </td>
         <td class="text-center align-middle">
             <div>@{
-                var stdP = item.StdPrepareTime > 0 ? item.StdPrepareTime : (item.Customer?.StdPrepareTime ?? 0);
+                var stdP = firstItem.StdPrepareTime > 0 ? firstItem.StdPrepareTime : (firstItem.Customer?.StdPrepareTime ?? 0);
                 @($"{stdP / 60:D2}:{stdP % 60:D2}")
             }</div>
         </td>
         <td class="text-center align-middle">
-            @if (item.ReadyToDockTime.HasValue)
+            @if (isPrepared && groupMaxReadyTime.HasValue)
             {
                 <div class="fw-bold">
-                    @item.ReadyToDockTime.Value.ToString("HH:mm")
+                    @groupMaxReadyTime.Value.ToString("HH:mm")
                 </div>
-                <div class="fw-bold @(item.ActPrepareTime > item.Customer?.StdPrepareTime ? "text-danger" : "text-success")" style="font-size: 0.75rem;">
-                    @Math.Round(item.ActPrepareTime ?? 0)m
+                var planEndTime = firstItem.ScheduledDate.Date.AddMinutes(stdP);
+                var delayMin = (int)(groupMaxReadyTime.Value - planEndTime).TotalMinutes;
+                <div class="fw-bold @(delayMin > 0 ? "text-danger" : "text-success")" style="font-size: 0.75rem;">
+                    @Math.Round((groupMaxReadyTime.Value - firstItem.ScheduledDate.Date).TotalMinutes)m
                 </div>
             }
             else
@@ -128,9 +117,9 @@
             }
         </td>
         <td class="text-center align-middle">
-            @if (item.EnterDockTime.HasValue)
+            @if (enterDockTime.HasValue)
             {
-                <strong>@item.EnterDockTime.Value.ToString("HH:mm")</strong>
+                <strong>@enterDockTime.Value.ToString("HH:mm")</strong>
             }
             else
             {
@@ -138,31 +127,22 @@
             }
         </td>
         <td class="text-center align-middle">
-            @if (item.ActualEnterDockTime.HasValue)
+            @if (actEnterDockTime.HasValue)
             {
                 <div>
-                    <strong class="@(isEnterDockLate ? "text-danger" : (isEnterDockEarly ? "text-success" : "text-success"))">
-                        @item.ActualEnterDockTime.Value.ToString("HH:mm")
+                    <strong class="@(isEnterDockLate ? "text-danger" : "text-success")">
+                        @actEnterDockTime.Value.ToString("HH:mm")
                     </strong>
                 </div>
                 @if (isEnterDockLate)
                 {
-                    <small class="text-danger d-block">
-                        <i class="bi bi-exclamation-triangle-fill"></i>
-                        <strong>Terlambat +@enterDockDelayMinutes m</strong>
-                    </small>
-                }
-                else if (isEnterDockEarly)
-                {
-                    <small class="text-success d-block">
-                        <i class="bi bi-check-circle-fill"></i> On Time -@enterDockEarlyMinutes m
+                    <small class="text-danger d-block" style="font-size: 0.7rem;">
+                        <strong>+@enterDockDelayMinutes m</strong>
                     </small>
                 }
                 else
                 {
-                    <small class="text-success d-block">
-                        <i class="bi bi-check-circle-fill"></i> On Time
-                    </small>
+                    <small class="text-success d-block" style="font-size: 0.7rem;">On Time</small>
                 }
             }
             else
@@ -171,16 +151,9 @@
             }
         </td>
         <td class="text-center align-middle">
-            @if (estimatedDockTime.HasValue)
+            @if (enterDockTime.HasValue)
             {
-                <strong>@estimatedDockTime.Value.ToString("HH:mm")</strong>
-                <div class="text-muted" style="font-size: 0.75rem;">(+15m)</div>
-            }
-            else if (item.EnterDockTime.HasValue)
-            {
-                <div>
-                    <strong>@item.EnterDockTime.Value.AddMinutes(15).ToString("HH:mm")</strong>
-                </div>
+                <strong>@enterDockTime.Value.AddMinutes(15).ToString("HH:mm")</strong>
                 <div class="text-muted" style="font-size: 0.75rem;">(+15m)</div>
             }
             else
@@ -189,16 +162,9 @@
             }
         </td>
         <td class="text-center align-middle">
-            @if (actualEstimatedDockTime.HasValue)
+            @if (actEnterDockTime.HasValue)
             {
-                <strong>@actualEstimatedDockTime.Value.ToString("HH:mm")</strong>
-                <div class="text-muted" style="font-size: 0.75rem;">(+15m)</div>
-            }
-            else if (item.ActualEnterDockTime.HasValue)
-            {
-                <div>
-                    <strong>@item.ActualEnterDockTime.Value.AddMinutes(15).ToString("HH:mm")</strong>
-                </div>
+                <strong>@actEnterDockTime.Value.AddMinutes(15).ToString("HH:mm")</strong>
                 <div class="text-muted" style="font-size: 0.75rem;">(+15m)</div>
             }
             else
@@ -207,9 +173,9 @@
             }
         </td>
         <td class="text-center align-middle">
-            @if (item.PickupTime.HasValue)
+            @if (pickupTime.HasValue)
             {
-                <strong>@item.PickupTime.Value.ToString("HH:mm")</strong>
+                <strong>@pickupTime.Value.ToString("HH:mm")</strong>
             }
             else
             {
@@ -217,25 +183,22 @@
             }
         </td>
         <td class="text-center align-middle">
-            @if (item.ActualStartTime.HasValue)
+            @if (actPickupTime.HasValue)
             {
                 <div>
-                    <strong style="color: white !important;">
-                        @item.ActualStartTime.Value.ToString("HH:mm")
+                    <strong class="@(isPickupLate ? "text-danger" : "text-success")">
+                        @actPickupTime.Value.ToString("HH:mm")
                     </strong>
                 </div>
                 @if (isPickupLate)
                 {
-                    <small class="text-danger d-block">
-                        <i class="bi bi-exclamation-triangle-fill"></i>
-                        <strong>Terlambat +@pickupDelayMinutes m</strong>
+                    <small class="text-danger d-block" style="font-size: 0.7rem;">
+                        <strong>+@pickupDelayMinutes m</strong>
                     </small>
                 }
                 else
                 {
-                    <small class="text-success d-block">
-                        <i class="bi bi-check-circle-fill"></i> On Time
-                    </small>
+                    <small class="text-success d-block" style="font-size: 0.7rem;">On Time</small>
                 }
             }
             else
@@ -244,9 +207,9 @@
             }
         </td>
         <td class="text-center align-middle">
-            @if (item.ETD.HasValue)
+            @if (etdTime.HasValue)
             {
-                <strong>@item.ETD.Value.ToString("HH:mm")</strong>
+                <strong>@etdTime.Value.ToString("HH:mm")</strong>
             }
             else
             {
@@ -254,25 +217,22 @@
             }
         </td>
         <td class="text-center align-middle">
-            @if (item.ActualEndTime.HasValue)
+            @if (actDeliveryTime.HasValue)
             {
                 <div>
                     <strong class="@(isDeliveryLate ? "text-danger" : "text-success")">
-                        @item.ActualEndTime.Value.ToString("HH:mm")
+                        @actDeliveryTime.Value.ToString("HH:mm")
                     </strong>
                 </div>
                 @if (isDeliveryLate)
                 {
-                    <small class="text-danger d-block">
-                        <i class="bi bi-exclamation-triangle-fill"></i>
-                        <strong>Terlambat +@deliveryDelayMinutes m</strong>
+                    <small class="text-danger d-block" style="font-size: 0.7rem;">
+                        <strong>+@deliveryDelayMinutes m</strong>
                     </small>
                 }
                 else
                 {
-                    <small class="text-success d-block">
-                        <i class="bi bi-check-circle-fill"></i> On Time
-                    </small>
+                    <small class="text-success d-block" style="font-size: 0.7rem;">On Time</small>
                 }
             }
             else
@@ -281,7 +241,7 @@
             }
         </td>
         <td class="text-center align-middle">
-            <small>@(item.Range ?? "-")</small>
+            <small>@(firstItem.Range ?? "-")</small>
         </td>
         <td class="text-center align-middle">
             @if (!string.IsNullOrWhiteSpace(actualRange))
@@ -295,16 +255,13 @@
         </td>
         <td class="text-center align-middle">
             <div class="btn-group-vertical btn-group-sm" role="group">
-                <a asp-action="Details" asp-route-id="@item.ScheduleId" class="btn btn-info btn-sm px-2 py-1" title="Detail" style="font-size: 0.75rem;">
+                <a asp-action="Details" asp-route-id="@firstItem.ScheduleId" class="btn btn-info btn-sm px-2 py-1" title="Detail Utama">
                     <i class="bi bi-eye"></i>
                 </a>
                 @if (Context.Session.GetString("Role") == "Admin")
                 {
-                    <a asp-action="Edit" asp-route-id="@item.ScheduleId" class="btn btn-warning btn-sm px-2 py-1" title="Edit" style="font-size: 0.75rem;">
+                    <a asp-action="Edit" asp-route-id="@firstItem.ScheduleId" class="btn btn-warning btn-sm px-2 py-1" title="Edit Utama">
                         <i class="bi bi-pencil"></i>
-                    </a>
-                    <a asp-action="Delete" asp-route-id="@item.ScheduleId" class="btn btn-danger btn-sm px-2 py-1" title="Hapus" style="font-size: 0.75rem;">
-                        <i class="bi bi-trash"></i>
                     </a>
                 }
             </div>
