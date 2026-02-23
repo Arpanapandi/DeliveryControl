@@ -164,7 +164,7 @@ namespace DeliveryControl.Controllers
             {
                 var worksheet = workbook.Worksheets.Add("Template Mapping");
 
-                var headers = new[] { "NAMA CUSTOMER", "PART NO (EKSTERNAL)", "VIN (INTERNAL)" };
+                var headers = new[] { "DOCK", "PART NO (EKSTERNAL)", "VIN (INTERNAL)" };
                 for (int i = 0; i < headers.Length; i++)
                 {
                     worksheet.Cell(1, i + 1).Value = headers[i];
@@ -253,7 +253,7 @@ namespace DeliveryControl.Controllers
                             return -1;
                         }
 
-                        int colCust = FindCol("NAMA CUSTOMER", "KODE CUSTOMER", "CUSTOMER", "CUST");
+                        int colCust = FindCol("DOCK", "KODE CUSTOMER", "CUSTOMER", "CUST", "NAMA CUSTOMER");
                         int colPart = FindCol("PART NO EKSTERNAL", "PART NO EXTERNAL", "PART NO", "EXT");
                         int colVin  = FindCol("VIN INTERNAL", "VIN", "INTERNAL");
                         
@@ -294,7 +294,12 @@ namespace DeliveryControl.Controllers
                                 // Update
                                 existingMapping.VIN = vin;
                                 existingMapping.UpdatedDate = DateTime.Now;
-                                _context.Update(existingMapping);
+                                
+                                // Hanya update state jika data memang sudah ada di DB (bukan baru di-add di loop ini)
+                                if (existingMapping.MappingId > 0)
+                                {
+                                    _context.Update(existingMapping);
+                                }
                                 updatedCount++;
                             }
                             else

@@ -263,15 +263,8 @@ namespace DeliveryControl.Controllers
             {
                 schedule.ActualEnterDockTime = enterDockTime;
                 
-                // Jika Driver belum confirm arrival, otomatis set Arrival = Enter Dock
-                if (!schedule.ActualStartTime.HasValue)
-                {
-                    schedule.ActualStartTime = enterDockTime;
-                    schedule.DriverStatus = "In Progress"; 
-                }
-
                 // Saat Enter Dock, selalu set PreparationStatus = Prepared
-                // agar card muncul di Driver Portal (filter: PreparationStatus == "Prepared")
+                // agar card muncul di Driver Portal (filter: ActualEnterDockTime.HasValue)
                 schedule.PreparationStatus = "Prepared";
                 
                 // Set Status = In Progress agar card aktif di Driver Portal
@@ -454,12 +447,6 @@ namespace DeliveryControl.Controllers
 
                 s.UpdatedDate = now;
                 s.UpdatedBy = User.Identity?.Name ?? "Preparation";
-                
-                if (!s.ActualStartTime.HasValue)
-                {
-                    s.ActualStartTime = now;
-                    s.DriverStatus = "In Progress";
-                }
             }
 
             await _context.SaveChangesAsync();

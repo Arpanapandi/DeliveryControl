@@ -4,6 +4,7 @@ using DeliveryControl.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
 using DeliveryControl.Hubs;
+using DeliveryControl.Helpers;
 
 namespace DeliveryControl.Controllers
 {
@@ -87,10 +88,14 @@ namespace DeliveryControl.Controllers
                 label = (label ?? "").Trim();
                 kanban = (kanban ?? "").Trim();
 
-                // 1. Find ALL Items by Tag (Internal)
+                // 1. Find ALL Items by Tag (Internal) - Supporting Flexible LB Prefix/Suffix
+                var normalizedTag = VinHelper.Normalize(tag);
                 var items = await _context.Items
-                    .Where(i => i.VIN == tag || i.ItemCode == tag)
+                    .Where(i => i.VIN.Contains(normalizedTag) || i.ItemCode.Contains(normalizedTag))
                     .ToListAsync();
+                
+                // Filter in-memory for exact flexible match
+                items = items.Where(i => VinHelper.IsMatch(i.VIN, tag) || VinHelper.IsMatch(i.ItemCode, tag)).ToList();
                 
                 if (!items.Any())
                 {
@@ -311,8 +316,12 @@ namespace DeliveryControl.Controllers
                 record.CreatedBy = HttpContext.Session.GetString("FullName") ?? "Operator";
 
                 // 1. Identification & Item Lookup
-                var item = await _context.Items
-                    .FirstOrDefaultAsync(i => i.VIN == record.Tag || i.ItemCode == record.Tag);
+                var normalizedSaveTag = VinHelper.Normalize(record.Tag);
+                var itemsMatch = await _context.Items
+                    .Where(i => i.VIN.Contains(normalizedSaveTag) || i.ItemCode.Contains(normalizedSaveTag))
+                    .ToListAsync();
+                
+                var item = itemsMatch.FirstOrDefault(i => VinHelper.IsMatch(i.VIN, record.Tag) || VinHelper.IsMatch(i.ItemCode, record.Tag));
                 
                 if (item == null)
                 {

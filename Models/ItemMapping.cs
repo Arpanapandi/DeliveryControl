@@ -15,6 +15,7 @@ namespace DeliveryControl.Models
 
         [Required]
         [StringLength(100)]
+        [Display(Name = "DOCK")]
         public string Customer { get; set; } = string.Empty;
 
         [Required]

@@ -7,6 +7,7 @@ using ClosedXML.Excel; // Required for Excel
 using Microsoft.AspNetCore.SignalR;
 using DeliveryControl.Hubs;
 using System.IO;
+using DeliveryControl.Helpers;
 
 namespace DeliveryControl.Controllers
 {
@@ -637,36 +638,36 @@ namespace DeliveryControl.Controllers
                             string? finalVin = null;
                             ItemMapping? itemMap = null;
 
-                            // PRIORITAS 1: Cari di Master Items berdasarkan CustomerPartNumber (Direct Match)
-                            matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.CustomerPartNumber) == normalizedInput);
+                            // PRIORITAS 1: Cari di Master Items berdasarkan CustomerPartNumber (Flexible Match for VIN-like codes)
+                            matchedItem = allItems.FirstOrDefault(i => VinHelper.IsMatch(i.CustomerPartNumber, itemCode));
                             if (matchedItem != null) finalVin = matchedItem.VIN;
 
                             // PRIORITAS 2: Cari di ItemMappings berdasarkan CustomerPartNumber
                             if (matchedItem == null)
                             {
-                                itemMap = allMappings.FirstOrDefault(m => SafeNormalize(m.CustomerPartNumber) == normalizedInput);
+                                itemMap = allMappings.FirstOrDefault(m => VinHelper.IsMatch(m.CustomerPartNumber, itemCode));
                                 if (itemMap != null)
                                 {
                                     finalVin = itemMap.VIN;
-                                    matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == SafeNormalize(finalVin));
+                                    matchedItem = allItems.FirstOrDefault(i => VinHelper.IsMatch(i.VIN, finalVin));
                                 }
                             }
 
-                            // PRIORITAS 3: Cari di Master Items berdasarkan VIN (Direct Match)
+                            // PRIORITAS 3: Cari di Master Items berdasarkan VIN (Flexible Match)
                             if (matchedItem == null)
                             {
-                                matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == normalizedInput);
+                                matchedItem = allItems.FirstOrDefault(i => VinHelper.IsMatch(i.VIN, itemCode));
                                 if (matchedItem != null) finalVin = matchedItem.VIN;
                             }
 
                             // PRIORITAS 4: Cari di ItemMappings berdasarkan VIN
                             if (matchedItem == null)
                             {
-                                var itemMapByVin = allMappings.FirstOrDefault(m => SafeNormalize(m.VIN) == normalizedInput);
+                                var itemMapByVin = allMappings.FirstOrDefault(m => VinHelper.IsMatch(m.VIN, itemCode));
                                 if (itemMapByVin != null)
                                 {
                                     finalVin = itemMapByVin.VIN;
-                                    matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == SafeNormalize(finalVin));
+                                    matchedItem = allItems.FirstOrDefault(i => VinHelper.IsMatch(i.VIN, finalVin));
                                     itemMap = itemMapByVin;
                                 }
                             }
@@ -674,7 +675,7 @@ namespace DeliveryControl.Controllers
                             // PRIORITAS 5: Legacy/ItemCode Match
                             if (matchedItem == null)
                             {
-                                matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.ItemCode) == normalizedInput);
+                                matchedItem = allItems.FirstOrDefault(i => VinHelper.IsMatch(i.ItemCode, itemCode));
                                 if (matchedItem != null) finalVin = matchedItem.VIN;
                             }
 

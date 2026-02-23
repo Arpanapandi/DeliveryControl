@@ -66,10 +66,10 @@
         @if (Context.Session.GetString("Role") == "Admin")
         {
             <td class="text-center align-middle">
-                @foreach(var s in schedules)
-                {
-                    <input type="checkbox" class="form-check-input row-checkbox mb-1" value="@s.ScheduleId" title="@s.ScheduleNumber">
+                @{
+                    var allIds = string.Join(",", schedules.Select(s => s.ScheduleId));
                 }
+                <input type="checkbox" class="form-check-input row-checkbox" value="@allIds" title="@(firstItem.ScheduleNumber?.Split('/')[0])">
             </td>
         }
 

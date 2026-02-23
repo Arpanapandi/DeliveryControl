@@ -31,8 +31,8 @@ namespace DeliveryControl.Controllers
         public async Task<IActionResult> Index(DateTime? selectedDate, int? customerId, string? status, string? route, string? cycle)
         {
             var scheduleDate = selectedDate ?? DateTime.Today;
-            var yesterday = scheduleDate.AddDays(-1);
-            var tomorrow = scheduleDate.AddDays(1);
+            var windowStart = scheduleDate.AddDays(-7); // Mundur 7 hari untuk cover delay/cross-day
+            var windowEnd = scheduleDate.AddDays(3);    // Maju 3 hari untuk planning ke depan
             var now = DateTime.Now;
             
             // Normalize filter - trim dan pastikan tidak null
@@ -47,11 +47,11 @@ namespace DeliveryControl.Controllers
             ViewData["SelectedCycle"] = normalizedCycle;
             ViewData["DayName"] = scheduleDate.ToString("dddd, dd MMMM yyyy", new CultureInfo("id-ID"));
 
-            // Ambil kandidat schedule dari empat hari (kemarin, hari ini, besok, lusa) untuk cover cross-day schedules
+            // Ambil kandidat schedule dari window waktu yang lebih luas
             var rawSchedules = await _context.DeliverySchedules
                 .AsNoTracking()
                 .Include(s => s.Customer)
-                .Where(s => s.ScheduledDate.Date >= yesterday.Date && s.ScheduledDate.Date <= tomorrow.Date)
+                .Where(s => s.ScheduledDate.Date >= windowStart.Date && s.ScheduledDate.Date <= windowEnd.Date)
                 .ToListAsync();
 
             // Filter berdasarkan PICKUP DATE (atau ScheduledDate jika tidak ada PickupTime)
@@ -60,15 +60,14 @@ namespace DeliveryControl.Controllers
             
             if (selectedDate == null)
             {
-                // Default: Tampilkan jadwal hari ini dan besok
+                // Default: Tampilkan jadwal yang AKTIF (sudah arrived tapi belum selesai) 
+                // ATAU yang sudah Completed
                 schedulesForSelectedDate = rawSchedules
-                    .Where(s => {
-                        var pickupDate = s.PickupTime.HasValue ? s.PickupTime.Value.Date : s.ScheduledDate.Date;
-                        return pickupDate == DateTime.Today || pickupDate == DateTime.Today.AddDays(1);
-                    })
                     .Where(s => s.Status != "Cancelled")
-                    .Where(s => s.PreparationStatus == "Prepared" || s.Status == "Completed" || s.Status == "In Progress" || s.ActualEnterDockTime.HasValue)
+                    .Where(s => s.ActualEnterDockTime.HasValue || s.Status == "Completed")
                     .ToList();
+                
+                ViewData["SelectedDate"] = null; // Menandakan view default (Hari ini + Besok + Aktif)
             }
             else
             {
@@ -79,8 +78,10 @@ namespace DeliveryControl.Controllers
                         return pickupDate == scheduleDate.Date;
                     })
                     .Where(s => s.Status != "Cancelled")
-                    .Where(s => s.PreparationStatus == "Prepared" || s.Status == "Completed" || s.Status == "In Progress" || s.ActualEnterDockTime.HasValue)
+                    .Where(s => s.ActualEnterDockTime.HasValue || s.Status == "Completed")
                     .ToList();
+                
+                ViewData["SelectedDate"] = scheduleDate.ToString("yyyy-MM-dd");
             }
 
             // Filter by customer jika ada
@@ -207,12 +208,14 @@ namespace DeliveryControl.Controllers
         }
 
         // GET: Driver/Arrival/5 - Halaman konfirmasi kedatangan
-        public async Task<IActionResult> Arrival(int? id)
+        public async Task<IActionResult> Arrival(int? id, string? returnDate)
         {
             if (id == null)
             {
                 return NotFound();
             }
+
+            ViewData["ReturnDate"] = returnDate;
 
             var schedule = await _context.DeliverySchedules
                 .Include(s => s.Customer)
@@ -264,7 +267,7 @@ namespace DeliveryControl.Controllers
         // POST: Driver/Arrival/5 - Konfirmasi kedatangan
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Arrival(int id, DateTime arrivalTime, string? notes)
+        public async Task<IActionResult> Arrival(int id, DateTime arrivalTime, string? notes, string? returnDate)
         {
             var baseSchedule = await _context.DeliverySchedules.Include(s => s.Customer).FirstOrDefaultAsync(s => s.ScheduleId == id);
             if (baseSchedule == null) return NotFound();
@@ -276,6 +279,7 @@ namespace DeliveryControl.Controllers
                 foreach (var schedule in groupSchedules)
                 {
                     schedule.ActualStartTime = arrivalTime;
+                    schedule.ActualPickupTime = arrivalTime; // Record pickup time at arrival as requested
                     schedule.DriverStatus = "In Progress";
                     schedule.UpdatedDate = DateTime.Now;
                     schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
@@ -300,10 +304,7 @@ namespace DeliveryControl.Controllers
                     User.Identity?.Name ?? "Driver"
                 );
 
-                // Broadcast update via SignalR (Send for one, or all? Front-end expects one update usually)
-                // Sending for representative is enough if FE reloads, but for real-time card update we might need more.
-                // However, Index reloads every 60s or on action. RedirectToAction Index will reload page.
-                // Realtime update on Dashboard needs to know all changed.
+                // Broadcast update via SignalR
                 foreach(var s in groupSchedules) {
                     await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
                     {
@@ -315,23 +316,29 @@ namespace DeliveryControl.Controllers
                 }
 
                 TempData["SuccessMessage"] = $"✅ Kedatangan berhasil dikonfirmasi untuk {groupSchedules.Count} Manifest pada {arrivalTime:HH:mm}!";
-                // Tidak pass selectedDate agar Driver Portal pakai default (hari ini + besok)
+                
+                if (!string.IsNullOrEmpty(returnDate))
+                {
+                    return RedirectToAction(nameof(Index), new { selectedDate = returnDate });
+                }
                 return RedirectToAction(nameof(Index));
             }
             catch (Exception ex)
             {
                 TempData["ErrorMessage"] = $"❌ Error: {ex.Message}";
-                return RedirectToAction(nameof(Arrival), new { id });
+                return RedirectToAction(nameof(Arrival), new { id, returnDate });
             }
         }
 
         // GET: Driver/Departure/5 - Halaman konfirmasi keberangkatan
-        public async Task<IActionResult> Departure(int? id)
+        public async Task<IActionResult> Departure(int? id, string? returnDate)
         {
             if (id == null)
             {
                 return NotFound();
             }
+
+            ViewData["ReturnDate"] = returnDate;
         
             var schedule = await _context.DeliverySchedules
                 .Include(s => s.Customer)
@@ -361,7 +368,7 @@ namespace DeliveryControl.Controllers
         // POST: Driver/Departure/5 - Konfirmasi keberangkatan
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Departure(int id, DateTime departureTime, string? notes)
+        public async Task<IActionResult> Departure(int id, DateTime departureTime, string? notes, string? returnDate)
         {
             var baseSchedule = await _context.DeliverySchedules.Include(s => s.Customer).FirstOrDefaultAsync(s => s.ScheduleId == id);
             if (baseSchedule == null) return NotFound();
@@ -370,13 +377,13 @@ namespace DeliveryControl.Controllers
             if (!baseSchedule.ActualStartTime.HasValue)
             {
                 TempData["ErrorMessage"] = "⚠️ Konfirmasi kedatangan terlebih dahulu!";
-                return RedirectToAction(nameof(Arrival), new { id });
+                return RedirectToAction(nameof(Arrival), new { id, returnDate });
             }
 
             if (departureTime < baseSchedule.ActualStartTime.Value)
             {
                 TempData["ErrorMessage"] = "⚠️ Waktu keberangkatan tidak boleh lebih awal dari waktu kedatangan!";
-                return RedirectToAction(nameof(Departure), new { id });
+                return RedirectToAction(nameof(Departure), new { id, returnDate });
             }
 
             try
@@ -424,13 +431,17 @@ namespace DeliveryControl.Controllers
                 }
 
                 TempData["SuccessMessage"] = $"✅ Keberangkatan berhasil dikonfirmasi untuk {groupSchedules.Count} Manifest! Durasi: {durationText}";
-                // Tidak pass selectedDate agar Driver Portal pakai default (hari ini + besok)
+                
+                if (!string.IsNullOrEmpty(returnDate))
+                {
+                    return RedirectToAction(nameof(Index), new { selectedDate = returnDate });
+                }
                 return RedirectToAction(nameof(Index));
             }
             catch (Exception ex)
             {
                 TempData["ErrorMessage"] = $"❌ Error: {ex.Message}";
-                return RedirectToAction(nameof(Departure), new { id });
+                return RedirectToAction(nameof(Departure), new { id, returnDate });
             }
         }
 
@@ -438,7 +449,7 @@ namespace DeliveryControl.Controllers
         
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> QuickArrival(int id)
+        public async Task<IActionResult> QuickArrival(int id, string? returnDate)
         {
             var baseSchedule = await _context.DeliverySchedules.Include(s => s.Customer).FirstOrDefaultAsync(s => s.ScheduleId == id);
             if (baseSchedule == null) return NotFound();
@@ -446,6 +457,10 @@ namespace DeliveryControl.Controllers
             if (baseSchedule.ActualStartTime.HasValue)
             {
                 TempData["ErrorMessage"] = "Schedule ini sudah dikonfirmasi kedatangan!";
+                if (!string.IsNullOrEmpty(returnDate))
+                {
+                    return RedirectToAction(nameof(Index), new { selectedDate = returnDate });
+                }
                 return RedirectToAction(nameof(Index), new { selectedDate = baseSchedule.ScheduledDate });
             }
 
@@ -457,6 +472,7 @@ namespace DeliveryControl.Controllers
                 foreach (var schedule in groupSchedules)
                 {
                     schedule.ActualStartTime = arrivalTime;
+                    schedule.ActualPickupTime = arrivalTime; // Record pickup time at arrival as requested
                     schedule.DriverStatus = "In Progress";
                     schedule.UpdatedDate = arrivalTime;
                     schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
@@ -478,12 +494,16 @@ namespace DeliveryControl.Controllers
                 TempData["ErrorMessage"] = "Gagal memproses quick arrival: " + ex.Message;
             }
             // Tidak pass selectedDate agar Driver Portal pakai default (hari ini + besok)
+            if (!string.IsNullOrEmpty(returnDate))
+            {
+                return RedirectToAction(nameof(Index), new { selectedDate = returnDate });
+            }
             return RedirectToAction(nameof(Index));
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> QuickDeparture(int id)
+        public async Task<IActionResult> QuickDeparture(int id, string? returnDate)
         {
             var baseSchedule = await _context.DeliverySchedules.Include(s => s.Customer).FirstOrDefaultAsync(s => s.ScheduleId == id);
             if (baseSchedule == null) return NotFound();
@@ -491,18 +511,37 @@ namespace DeliveryControl.Controllers
             if (!baseSchedule.ActualStartTime.HasValue)
             {
                 TempData["ErrorMessage"] = "Konfirmasi kedatangan terlebih dahulu!";
+                if (!string.IsNullOrEmpty(returnDate))
+                {
+                    return RedirectToAction(nameof(Index), new { selectedDate = returnDate });
+                }
                 return RedirectToAction(nameof(Index));
             }
 
             if (baseSchedule.ActualEndTime.HasValue)
             {
                 TempData["ErrorMessage"] = "Schedule ini sudah dikonfirmasi keberangkatan!";
+                if (!string.IsNullOrEmpty(returnDate))
+                {
+                    return RedirectToAction(nameof(Index), new { selectedDate = returnDate });
+                }
                 return RedirectToAction(nameof(Index));
             }
 
             try 
             {
                 var departureTime = DateTime.Now;
+                
+                if (departureTime < baseSchedule.ActualStartTime.Value)
+                {
+                    TempData["ErrorMessage"] = "⚠️ Tidak bisa Quick Departure: Waktu sekarang lebih awal dari waktu kedatangan yang tercatat!";
+                    if (!string.IsNullOrEmpty(returnDate))
+                    {
+                        return RedirectToAction(nameof(Index), new { selectedDate = returnDate });
+                    }
+                    return RedirectToAction(nameof(Index));
+                }
+
                 var groupSchedules = await GetSchedulesInGroup(baseSchedule);
 
                 foreach (var schedule in groupSchedules)
@@ -526,7 +565,11 @@ namespace DeliveryControl.Controllers
             {
                 TempData["ErrorMessage"] = "Gagal memproses quick departure: " + ex.Message;
             }
-            // Tidak pass selectedDate agar Driver Portal pakai default (hari ini + besok)
+            
+            if (!string.IsNullOrEmpty(returnDate))
+            {
+                return RedirectToAction(nameof(Index), new { selectedDate = returnDate });
+            }
             return RedirectToAction(nameof(Index));
         }
     }

@@ -3,6 +3,7 @@ using DeliveryControl.Data;
 using DeliveryControl.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
+using DeliveryControl.Helpers;
 
 namespace DeliveryControl.Controllers
 {
@@ -35,8 +36,12 @@ namespace DeliveryControl.Controllers
 
             // Lookup by VIN (Tag input) - as requested by user
             // User inputs Tag which maps to VIN
-            var item = await _context.Items
-                .FirstOrDefaultAsync(i => i.VIN == tag);
+            var normalizedTag = VinHelper.Normalize(tag);
+            var itemCandidates = await _context.Items
+                .Where(i => i.VIN.Contains(normalizedTag))
+                .ToListAsync();
+
+            var item = itemCandidates.FirstOrDefault(i => VinHelper.IsMatch(i.VIN, tag));
 
             if (item == null)
             {
@@ -98,8 +103,12 @@ namespace DeliveryControl.Controllers
                 // Note: Label duplicate check removed as per user request to allow redundant scans.
 
                 // 2. Lookup Item Master - Using VIN as Tag
-                Item? item = await _context.Items
-                    .FirstOrDefaultAsync(i => i.VIN == record.Tag);
+                var normalizedSaveTag = VinHelper.Normalize(record.Tag);
+                var itemSaveCandidates = await _context.Items
+                    .Where(i => i.VIN.Contains(normalizedSaveTag))
+                    .ToListAsync();
+
+                Item? item = itemSaveCandidates.FirstOrDefault(i => VinHelper.IsMatch(i.VIN, record.Tag));
                 
                 if (item != null)
                 {
