@@ -60,19 +60,11 @@ namespace DeliveryControl.Controllers
             
             if (selectedDate == null)
             {
-                // Default: Tampilkan jadwal yang AKTID (sudah arrived tapi belum selesai) 
-                // DITAMBAH jadwal hari ini dan besok yang belum arrived
+                // Default: Tampilkan jadwal yang AKTIF (sudah arrived tapi belum selesai) 
+                // ATAU yang sudah Completed
                 schedulesForSelectedDate = rawSchedules
                     .Where(s => s.Status != "Cancelled")
-                    .Where(s => 
-                        // Kasus 1: Sudah arrived tapi belum berangkat (sedang proses) - Tampilkan semua tanpa liat tanggal
-                        (s.ActualEnterDockTime.HasValue && !s.ActualEndTime.HasValue) ||
-                        // Kasus 2: Belum arrived tapi jadwalnya Hari Ini atau Besok
-                        (!s.ActualEnterDockTime.HasValue && (
-                            (s.PickupTime.HasValue ? s.PickupTime.Value.Date : s.ScheduledDate.Date) == DateTime.Today || 
-                            (s.PickupTime.HasValue ? s.PickupTime.Value.Date : s.ScheduledDate.Date) == DateTime.Today.AddDays(1)
-                        ))
-                    )
+                    .Where(s => s.ActualEnterDockTime.HasValue || s.Status == "Completed")
                     .ToList();
                 
                 ViewData["SelectedDate"] = null; // Menandakan view default (Hari ini + Besok + Aktif)
@@ -86,6 +78,7 @@ namespace DeliveryControl.Controllers
                         return pickupDate == scheduleDate.Date;
                     })
                     .Where(s => s.Status != "Cancelled")
+                    .Where(s => s.ActualEnterDockTime.HasValue || s.Status == "Completed")
                     .ToList();
                 
                 ViewData["SelectedDate"] = scheduleDate.ToString("yyyy-MM-dd");
@@ -286,6 +279,7 @@ namespace DeliveryControl.Controllers
                 foreach (var schedule in groupSchedules)
                 {
                     schedule.ActualStartTime = arrivalTime;
+                    schedule.ActualPickupTime = arrivalTime; // Record pickup time at arrival as requested
                     schedule.DriverStatus = "In Progress";
                     schedule.UpdatedDate = DateTime.Now;
                     schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
@@ -478,6 +472,7 @@ namespace DeliveryControl.Controllers
                 foreach (var schedule in groupSchedules)
                 {
                     schedule.ActualStartTime = arrivalTime;
+                    schedule.ActualPickupTime = arrivalTime; // Record pickup time at arrival as requested
                     schedule.DriverStatus = "In Progress";
                     schedule.UpdatedDate = arrivalTime;
                     schedule.UpdatedBy = User.Identity?.Name ?? "Driver";
