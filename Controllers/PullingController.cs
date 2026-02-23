@@ -33,14 +33,26 @@ namespace DeliveryControl.Controllers
 
             tag = tag.Trim();
 
-            // Lookup by VIN (Tag input) - as requested by user
-            // User inputs Tag which maps to VIN
+            // Strict 'X' Suffix Validation
+            if (!tag.EndsWith("X", StringComparison.OrdinalIgnoreCase))
+            {
+                return Json(new { success = false, message = "FORMAT RAK SALAH: Gunakan Barcode Rak berakhiran 'X'!" });
+            }
+
+            // Stripped value for internal lookup
+            string rawCode = tag.Substring(0, tag.Length - 1);
+            string baseCode = GetBaseVin(rawCode);
+
+            // Lookup by 6-digit VIN or Rack
             var item = await _context.Items
-                .FirstOrDefaultAsync(i => i.VIN == tag);
+                .FirstOrDefaultAsync(i => 
+                    (i.VIN.Length >= 6 && i.VIN.Substring(0, 6) == baseCode) || 
+                    (i.ItemCode.Length >= 6 && i.ItemCode.Substring(0, 6) == baseCode) || 
+                    i.Rack == rawCode || i.VIN == rawCode);
 
             if (item == null)
             {
-                return Json(new { success = false, message = "VIN tidak ditemukan di Master Data" });
+                return Json(new { success = false, message = "Kode Rak/VIN tidak ditemukan di Master Data" });
             }
 
             // Calculate current stock for status
@@ -89,17 +101,34 @@ namespace DeliveryControl.Controllers
                 record.Tag = (record.Tag ?? "").Trim();
                 record.Label = (record.Label ?? "").Trim();
 
-                if (string.IsNullOrEmpty(record.Tag))
+                if (string.IsNullOrEmpty(record.Tag) || string.IsNullOrEmpty(record.Label))
                 {
-                    return Json(new { success = false, message = "Input TAG / VIN kosong!" });
+                    return Json(new { success = false, message = "Input TAG atau LABEL kosong!" });
                 }
 
-                // 1. Identification & Item Lookup
-                // Note: Label duplicate check removed as per user request to allow redundant scans.
+                // 1. Strict Format Validation
+                if (!record.Tag.EndsWith("X", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Json(new { success = false, message = "FORMAT RAK SALAH: Barcode Rak wajib berakhiran 'X'!" });
+                }
 
-                // 2. Lookup Item Master - Using VIN as Tag
+                if (record.Label.EndsWith("X", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Json(new { success = false, message = "MANIPULASI TERDETEKSI: Barcode Rak tidak boleh digunakan sebagai Label!" });
+                }
+
+                string baseTag = record.Tag.Substring(0, record.Tag.Length - 1);
+                string baseLabel = record.Label; // Standard label (must NOT have X)
+
+                // 2. Pattern Check: Label must contain the base Rack/VIN code to prevent wrong rack scan
+                if (!baseLabel.ToUpper().Contains(baseTag.ToUpper()))
+                {
+                    return Json(new { success = false, message = "RAK MISMATCH: Label box tidak sesuai dengan Rak ini!" });
+                }
+
+                // 3. Identification & Item Lookup - Using Stripped Tag
                 Item? item = await _context.Items
-                    .FirstOrDefaultAsync(i => i.VIN == record.Tag);
+                    .FirstOrDefaultAsync(i => i.VIN == baseTag || i.Rack == baseTag);
                 
                 if (item != null)
                 {
@@ -112,8 +141,7 @@ namespace DeliveryControl.Controllers
                 }
                 else
                 {
-                    // Item not found in master
-                    return Json(new { success = false, message = "VIN tidak ditemukan di Master Data" });
+                    return Json(new { success = false, message = "Kode Rak/VIN tidak ditemukan di Master Data" });
                 }
 
                 record.CreatedDate = DateTime.Now;
@@ -142,6 +170,13 @@ namespace DeliveryControl.Controllers
                 return Json(new { success = true, message = $"Data {item.ItemName} berhasil disimpan!", newStock = updatedStockCount });
             }
             return Json(new { success = false, message = "Data tidak valid." });
+        }
+        private string GetBaseVin(string? input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return "";
+            var normalized = input.Trim().ToUpper();
+            if (normalized.Length > 6) return normalized.Substring(0, 6);
+            return normalized;
         }
     }
 }

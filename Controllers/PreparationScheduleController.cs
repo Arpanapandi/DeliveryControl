@@ -633,11 +633,13 @@ namespace DeliveryControl.Controllers
 
                             // --- EXHAUSTIVE ITEM MATCHING ---
                             string normalizedInput = SafeNormalize(itemCode);
+                            string baseInput = GetBaseVin(normalizedInput);
                             Item? matchedItem = null;
                             string? finalVin = null;
                             ItemMapping? itemMap = null;
 
                             // PRIORITAS 1: Cari di Master Items berdasarkan CustomerPartNumber (Direct Match)
+                            // Jika input Excel adalah Part Number
                             matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.CustomerPartNumber) == normalizedInput);
                             if (matchedItem != null) finalVin = matchedItem.VIN;
 
@@ -648,25 +650,28 @@ namespace DeliveryControl.Controllers
                                 if (itemMap != null)
                                 {
                                     finalVin = itemMap.VIN;
-                                    matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == SafeNormalize(finalVin));
+                                    string baseMapVin = GetBaseVin(finalVin);
+                                    matchedItem = allItems.FirstOrDefault(i => GetBaseVin(i.VIN) == baseMapVin);
                                 }
                             }
 
-                            // PRIORITAS 3: Cari di Master Items berdasarkan VIN (Direct Match)
+                            // PRIORITAS 3: Cari di Master Items berdasarkan VIN (Base Match)
                             if (matchedItem == null)
                             {
-                                matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == normalizedInput);
+                                matchedItem = allItems.FirstOrDefault(i => GetBaseVin(i.VIN) == baseInput);
                                 if (matchedItem != null) finalVin = matchedItem.VIN;
                             }
 
                             // PRIORITAS 4: Cari di ItemMappings berdasarkan VIN
                             if (matchedItem == null)
                             {
+                                // Mapping dipertahankan aslinya (bisa ada LB), tapi pencarian ke Master tetap 6 digit
                                 var itemMapByVin = allMappings.FirstOrDefault(m => SafeNormalize(m.VIN) == normalizedInput);
                                 if (itemMapByVin != null)
                                 {
                                     finalVin = itemMapByVin.VIN;
-                                    matchedItem = allItems.FirstOrDefault(i => SafeNormalize(i.VIN) == SafeNormalize(finalVin));
+                                    string baseMapByVin = GetBaseVin(finalVin);
+                                    matchedItem = allItems.FirstOrDefault(i => GetBaseVin(i.VIN) == baseMapByVin);
                                     itemMap = itemMapByVin;
                                 }
                             }
@@ -683,21 +688,10 @@ namespace DeliveryControl.Controllers
 
                             if (matchedItem == null)
                             {
-                                // v11.0: AUTO-CREATE Master Item to ensure sync (Draft Mode)
-                                matchedItem = new Item
-                                {
-                                    ItemCode = targetVin, // Use VIN as Code
-                                    VIN = targetVin,
-                                    CustomerPartNumber = !string.IsNullOrEmpty(excelPartNo) ? excelPartNo : ((itemMap != null) ? itemMap.CustomerPartNumber : (targetVin != itemCode ? itemCode : null)),
-                                    Customer = customer.CustomerName,
-                                    ItemName = "Imported (" + itemCode + ")",
-                                    Description = "Auto-created from Schedule Import",
-                                    IsActive = true,
-                                    CreatedDate = DateTime.Now,
-                                    QtyLot = 1 // Default QPC
-                                };
-                                _context.Items.Add(matchedItem);
-                                allItems.Add(matchedItem); 
+                                // v15.0: REMOVED AUTO-CREATE per User Request. Items MUST exist in Master.
+                                if (errorSamples.Count < 5) 
+                                    errorSamples.Add($"Baris {row.RowNumber()}: Part/VIN '{itemCode}' tidak ditemukan di Master Items.");
+                                continue; // Skip this row
                             }
                             else 
                             {
@@ -894,6 +888,15 @@ namespace DeliveryControl.Controllers
             var match = System.Text.RegularExpressions.Regex.Match(raw, @"[0-9]+");
             if (match.Success && int.TryParse(match.Value, out int val)) return val;
             return 0;
+        }
+
+        private string GetBaseVin(string? input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return "";
+            var normalized = input.Trim().ToUpper();
+            // Take first 6 characters as the internal standard (e.g., TA1234LB -> TA1234)
+            if (normalized.Length > 6) return normalized.Substring(0, 6);
+            return normalized;
         }
 
         // Keep existing Helpers

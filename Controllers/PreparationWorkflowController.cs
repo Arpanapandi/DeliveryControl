@@ -87,17 +87,37 @@ namespace DeliveryControl.Controllers
                 label = (label ?? "").Trim();
                 kanban = (kanban ?? "").Trim();
 
-                // 1. Find ALL Items by Tag (Internal)
+                // Strict 'X' Suffix Validation
+                if (!tag.EndsWith("X", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Json(new { success = false, message = "FORMAT RAK SALAH: Barcode Rak harus berakhiran 'X'!" });
+                }
+
+                // Stripped values for internal lookup
+                string rawTag = tag.Substring(0, tag.Length - 1); // Remove 'X'
+                string baseTag = GetBaseVin(rawTag); // Normalize to 6 characters (e.g., TA1234LB -> TA1234)
+
+                // 1. Find ALL Items by Base Tag (Internal 6-Digit Match)
                 var items = await _context.Items
-                    .Where(i => i.VIN == tag || i.ItemCode == tag)
+                    .Where(i => i.VIN.Length >= 6 && i.VIN.Substring(0, 6) == baseTag || i.ItemCode.Length >= 6 && i.ItemCode.Substring(0, 6) == baseTag || i.Rack == rawTag)
                     .ToListAsync();
+                
+                // Extra check because EF Core Substring might behave differently across DBs, 
+                // but for SQLite/SQLServer this is generally handled. Let's make it robust by pulling and filtering if needed, 
+                // OR better yet, just normalize to 6 in memory if list is small.
+                if (!items.Any())
+                {
+                    items = (await _context.Items.AsNoTracking().ToListAsync())
+                        .Where(i => GetBaseVin(i.VIN) == baseTag || GetBaseVin(i.ItemCode) == baseTag || i.Rack == rawTag)
+                        .ToList();
+                }
                 
                 if (!items.Any())
                 {
                     // Fallback to pulling records
                     var pulling = await _context.PullingRecords
                         .OrderByDescending(p => p.CreatedDate)
-                        .FirstOrDefaultAsync(p => p.Tag == tag);
+                        .FirstOrDefaultAsync(p => p.Tag.StartsWith(baseTag) || p.Tag == tag); // Match with or without X
                     if (pulling != null)
                     {
                         var pItem = await _context.Items.FindAsync(pulling.ItemId);
@@ -105,7 +125,7 @@ namespace DeliveryControl.Controllers
                     }
                 }
 
-                if (!items.Any()) return Json(new { success = false, message = "TAG / VIN tidak terdaftar (Master)" });
+                if (!items.Any()) return Json(new { success = false, message = "Kode Rak/VIN tidak terdaftar di Master Data" });
 
                 // 2. Filter Items by active Schedules
                 var activeScheduleItemIds = await _context.DeliverySchedules
@@ -181,32 +201,35 @@ namespace DeliveryControl.Controllers
 
         if (!string.IsNullOrEmpty(label))
         {
-            string vin = (targetItem.VIN ?? "").ToUpper();
-            string partNo = (targetItem.CustomerPartNumber ?? "").ToUpper();
-            string labelUpper = label.ToUpper();
-            
-            if (!labelUpper.Contains(vin) && (string.IsNullOrEmpty(partNo) || !labelUpper.Contains(partNo)))
+            if (label.EndsWith("X", StringComparison.OrdinalIgnoreCase))
             {
-                // Fallback: Cek apakah kombinasi Tag & Label ini pernah di-scan di Pulling (Valid secara data historis)
-                bool existsInPulling = await _context.PullingRecords
-                    .AnyAsync(p => p.Tag == tag && p.Label == label);
+                return Json(new { 
+                    success = true, found = false, step = "label",
+                    message = "MANIPULASI TERDETEKSI: Barcode Rak tidak boleh sebagai Label!" 
+                });
+            }
 
-                if (!existsInPulling)
-                {
-                    return Json(new { 
-                        success = true, 
-                        found = false, 
-                        step = "label",
-                        item = new { 
-                            itemName = targetItem.ItemName, 
-                            vin = targetItem.VIN, 
-                            customerPartNumber = targetItem.CustomerPartNumber,
-                            qtyLot = targetItem.QtyLot ?? 0,
-                            currentStock = currentStock
-                        },
-                        message = "LABEL tidak sesuai dengan produk!" 
-                    });
-                }
+            string baseLabel = label; // Standard label (must NOT have X)
+
+            // Pattern Check: Label must contain the base Rack/VIN code to prevent wrong rack scan
+            if (!baseLabel.ToUpper().Contains(baseTag.ToUpper()))
+            {
+                return Json(new { 
+                    success = true, found = false, step = "label",
+                    message = "RAK MISMATCH: Label box tidak sesuai dengan Rak ini!" 
+                });
+            }
+
+            // Reference Check: Verify if this specific Tag + Label was scanned in Pulling
+            bool existsInPulling = await _context.PullingRecords
+                .AnyAsync(p => p.Tag == tag && p.Label == label);
+
+            if (!existsInPulling)
+            {
+                return Json(new { 
+                    success = true, found = false, step = "label",
+                    message = "LABEL BELUM SCAN PULLING: Belum masuk gudang!" 
+                });
             }
         }
 
@@ -298,6 +321,21 @@ namespace DeliveryControl.Controllers
                 record.Label = record.Label.Trim();
                 record.Kanban = record.Kanban.Trim();
 
+                // Strict Format Validation
+                if (!record.Tag.EndsWith("X", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Json(new { success = false, message = "FORMAT RAK SALAH: Barcode Rak wajib berakhiran 'X'!" });
+                }
+
+                if (record.Label.EndsWith("X", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Json(new { success = false, message = "MANIPULASI TERDETEKSI: Barcode Rak tidak boleh digunakan sebagai Label!" });
+                }
+
+                string rawTagSave = record.Tag.Substring(0, record.Tag.Length - 1);
+                string baseTagSave = GetBaseVin(rawTagSave);
+                string baseLabelSave = record.Label; // Standard label (must NOT have X)
+
                 // Double-Submission Prevention: Check if this exact scan was recorded in the last 10 seconds
                 var recentDuplicate = await _context.PreparationRecords
                     .AnyAsync(p => p.Tag == record.Tag && p.Label == record.Label && p.CreatedDate > DateTime.Now.AddSeconds(-10));
@@ -310,20 +348,21 @@ namespace DeliveryControl.Controllers
                 record.CreatedDate = DateTime.Now;
                 record.CreatedBy = HttpContext.Session.GetString("FullName") ?? "Operator";
 
-                // 1. Identification & Item Lookup
+                // 1. Identification & Item Lookup - Using 6-Digit Base Tag
                 var item = await _context.Items
-                    .FirstOrDefaultAsync(i => i.VIN == record.Tag || i.ItemCode == record.Tag);
+                    .FirstOrDefaultAsync(i => 
+                        (i.VIN.Length >= 6 && i.VIN.Substring(0, 6) == baseTagSave) || 
+                        (i.ItemCode.Length >= 6 && i.ItemCode.Substring(0, 6) == baseTagSave) || 
+                        i.Rack == rawTagSave || i.VIN == rawTagSave);
                 
                 if (item == null)
                 {
-                    var pulling = await _context.PullingRecords.OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.Tag == record.Tag);
-                    if (pulling != null)
-                    {
-                        item = await _context.Items.FindAsync(pulling.ItemId);
-                    }
+                   // Fallback for tricky lookups
+                   item = (await _context.Items.AsNoTracking().ToListAsync())
+                        .FirstOrDefault(i => GetBaseVin(i.VIN) == baseTagSave || GetBaseVin(i.ItemCode) == baseTagSave || i.Rack == rawTagSave);
                 }
-
-                if (item == null) return Json(new { success = false, message = "TAG / VIN tidak terdaftar (Master)" });
+                
+                if (item == null) return Json(new { success = false, message = "Kode Rak/VIN tidak terdaftar di Master Data" });
 
                 // 2. Final Schedule Matching (Strict Part Number Validation + FIFO)
                 string kanbanSaveUpper = record.Kanban.ToUpper();
@@ -363,32 +402,18 @@ namespace DeliveryControl.Controllers
                     return Json(new { success = false, message = $"QTY sudah CUKUP untuk jadwal ini" });
                 }
 
-                // --- VALIDASI 2: Cek Saldo Stok Riil (Per Label & FIFO) ---
-                var countPulled = await _context.PullingRecords.CountAsync(p => p.Tag == record.Tag && p.Label == record.Label);
-                var countPrepared = await _context.PreparationRecords.CountAsync(p => p.Tag == record.Tag && p.Label == record.Label);
-
-                var allPullings = await _context.PullingRecords.Where(p => p.Tag == record.Tag).OrderBy(p => p.CreatedDate).ToListAsync();
-                var allPreps = await _context.PreparationRecords.Where(p => p.Tag == record.Tag).ToListAsync();
-
-                var consumedPullingIds = new HashSet<int>();
-                foreach (var p in allPreps)
+                // --- VALIDASI 2: Cek Saldo Stok Riil (Per Tag & Label) ---
+                var existsInPullingRecord = await _context.PullingRecords.AnyAsync(p => p.Tag == record.Tag && p.Label == record.Label);
+                
+                if (!existsInPullingRecord)
                 {
-                    var pLabel = (p.Label ?? "").Trim().ToUpper();
-                    var match = allPullings.FirstOrDefault(pl => !consumedPullingIds.Contains(pl.PullingId) && (pl.Label ?? "").Trim().ToUpper() == pLabel);
-                    if (match != null) consumedPullingIds.Add(match.PullingId);
+                    return Json(new { success = false, message = "LABEL BELUM SCAN PULLING: Item ini belum masuk gudang!" });
                 }
 
-                if (countPulled <= countPrepared)
+                // Check Pattern Match one last time for safety
+                if (!baseLabelSave.ToUpper().Contains(baseTagSave.ToUpper()))
                 {
-                    var replacement = allPullings.FirstOrDefault(pl => !consumedPullingIds.Contains(pl.PullingId));
-                    if (replacement != null)
-                    {
-                        record.Label = replacement.Label; 
-                    }
-                    else
-                    {
-                        return Json(new { success = false, message = "STOCK tidak tersedia di Rak" });
-                    }
+                    return Json(new { success = false, message = "RAK MISMATCH: Label tidak sesuai dengan Rak ini!" });
                 }
 
                 record.Plant = item.Plant ?? "-";
@@ -619,6 +644,14 @@ namespace DeliveryControl.Controllers
                 .ThenBy(x => x.ScheduleNumber);
 
             return Json(result);
+        }
+        private string GetBaseVin(string? input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return "";
+            var normalized = input.Trim().ToUpper();
+            // Take first 6 characters as the internal standard (e.g., TA1234LB -> TA1234)
+            if (normalized.Length > 6) return normalized.Substring(0, 6);
+            return normalized;
         }
     }
 }

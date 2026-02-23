@@ -17,7 +17,6 @@ namespace DeliveryControl.Controllers
         }
 
         // GET: ItemMappings
-        // GET: ItemMappings
         public async Task<IActionResult> Index(string searchString, int pageNumber = 1)
         {
             var query = _context.ItemMappings.AsNoTracking().AsQueryable();
@@ -63,13 +62,14 @@ namespace DeliveryControl.Controllers
         {
             if (ModelState.IsValid)
             {
-                // Uniqueness Check: (Customer + PartNo) must be unique
+                // Uniqueness Check: (Customer + PartNo + VIN) must be unique
                 var exists = await _context.ItemMappings.AnyAsync(m => 
                     m.Customer.ToUpper() == itemMapping.Customer.ToUpper() && 
-                    m.CustomerPartNumber.ToUpper() == itemMapping.CustomerPartNumber.ToUpper());
+                    m.CustomerPartNumber.ToUpper() == itemMapping.CustomerPartNumber.ToUpper() &&
+                    m.VIN.ToUpper() == itemMapping.VIN.ToUpper());
                 
                 if (exists) {
-                    ModelState.AddModelError("", "Mapping untuk Customer dan Part No ini sudah ada!");
+                    ModelState.AddModelError("", "Mapping untuk DOCK, Part No, dan VIN ini sudah ada!");
                     return View(itemMapping);
                 }
 
@@ -106,6 +106,18 @@ namespace DeliveryControl.Controllers
                 {
                     var existing = await _context.ItemMappings.FindAsync(id);
                     if (existing == null) return NotFound();
+
+                    // Uniqueness Check: (Customer + PartNo + VIN) must be unique
+                    var exists = await _context.ItemMappings.AnyAsync(m => 
+                        m.MappingId != id &&
+                        m.Customer.ToUpper() == itemMapping.Customer.ToUpper() && 
+                        m.CustomerPartNumber.ToUpper() == itemMapping.CustomerPartNumber.ToUpper() &&
+                        m.VIN.ToUpper() == itemMapping.VIN.ToUpper());
+                    
+                    if (exists) {
+                        ModelState.AddModelError("", "Mapping untuk DOCK, Part No, dan VIN ini sudah ada!");
+                        return View(itemMapping);
+                    }
 
                     existing.Customer = itemMapping.Customer;
                     existing.CustomerPartNumber = itemMapping.CustomerPartNumber;
@@ -164,7 +176,7 @@ namespace DeliveryControl.Controllers
             {
                 var worksheet = workbook.Worksheets.Add("Template Mapping");
 
-                var headers = new[] { "NAMA CUSTOMER", "PART NO (EKSTERNAL)", "VIN (INTERNAL)" };
+                var headers = new[] { "DOCK", "PART NO (EKSTERNAL)", "VIN (INTERNAL)" };
                 for (int i = 0; i < headers.Length; i++)
                 {
                     worksheet.Cell(1, i + 1).Value = headers[i];
@@ -192,10 +204,10 @@ namespace DeliveryControl.Controllers
             }
         }
 
-        private string NormalizeHeader(string header)
+        private string NormalizeMappingHeader(string header)
         {
             if (string.IsNullOrEmpty(header)) return "";
-            return new string(header.ToUpper().Where(c => char.IsLetterOrDigit(c)).ToArray());
+            return System.Text.RegularExpressions.Regex.Replace(header, @"[^A-Z0-9]", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).ToUpper();
         }
 
         // Import Excel Mapping
@@ -212,20 +224,11 @@ namespace DeliveryControl.Controllers
             int createdCount = 0;
             int updatedCount = 0;
 
-
             try
             {
                 // 1. Load Existing Mappings (Performance: Memory Lookup)
                 var existingMappings = await _context.ItemMappings.AsNoTracking().ToListAsync();
                 
-                // 2. Load Master Items VINs for Validation
-                var masterVinsList = await _context.Items.AsNoTracking()
-                                       .Select(i => i.VIN)
-                                       .Where(v => v != null)
-                                       .Distinct()
-                                       .ToListAsync();
-                var masterVins = masterVinsList.ToHashSet();
-
                 using (var stream = new MemoryStream())
                 {
                     await file.CopyToAsync(stream);
@@ -247,79 +250,100 @@ namespace DeliveryControl.Controllers
                         {
                             foreach (var kw in keywords) {
                                 foreach (var h in headers) {
+                                    if (h.Key == kw) return h.Value;
+                                }
+                            }
+                            foreach (var kw in keywords) {
+                                foreach (var h in headers) {
                                     if (h.Key.Contains(kw)) return h.Value;
                                 }
                             }
                             return -1;
                         }
 
-                        int colCust = FindCol("NAMA CUSTOMER", "KODE CUSTOMER", "CUSTOMER", "CUST");
+                        int colCust = FindCol("DOCK", "NAMA CUSTOMER", "KODE CUSTOMER", "CUSTOMER", "CUST");
                         int colPart = FindCol("PART NO EKSTERNAL", "PART NO EXTERNAL", "PART NO", "EXT");
                         int colVin  = FindCol("VIN INTERNAL", "VIN", "INTERNAL");
                         
-                        // Validation
                         if (colCust == -1 || colPart == -1 || colVin == -1)
                         {
                             TempData["ErrorMessage"] = "Kolom Wajib (Customer, Part No, VIN) tidak ditemukan!";
                             return RedirectToAction(nameof(Index));
                         }
 
-                        // Lookup for Fast Update
+                        // Lookup for Fast Update - Unique Key: VIN | PART_NO | DOCK
                         var mappingLookup = existingMappings
-                            .GroupBy(m => $"{m.CustomerPartNumber.ToUpper()}|{m.Customer.ToUpper()}")
+                            .GroupBy(m => $"{NormalizeMappingHeader(m.VIN ?? "")}|{NormalizeMappingHeader(m.CustomerPartNumber ?? "")}|{NormalizeMappingHeader(m.Customer ?? "")}")
                             .ToDictionary(g => g.Key, g => g.First());
 
+                        int duplicateCount = 0;
+                        int totalProcessed = 0;
                         string lastVin = "";
                         string lastCust = "";
+                        var duplicateSamples = new List<string>();
 
                         foreach (var row in rows)
                         {
                             if (row.IsEmpty()) continue;
+                            totalProcessed++;
 
                             string cust = row.Cell(colCust).GetString().Trim();
                             string partNo = row.Cell(colPart).GetString().Trim();
                             string vin = row.Cell(colVin).GetString().Trim();
 
-                            // Fill Down
-                            if (string.IsNullOrEmpty(vin)) vin = lastVin; else lastVin = vin;
-                            if (string.IsNullOrEmpty(cust)) cust = lastCust; else lastCust = cust;
+                            if (string.IsNullOrEmpty(vin) && !string.IsNullOrEmpty(lastVin)) vin = lastVin; else lastVin = vin;
+                            if (string.IsNullOrEmpty(cust) && !string.IsNullOrEmpty(lastCust)) cust = lastCust; else lastCust = cust;
 
                             if (string.IsNullOrEmpty(partNo)) continue;
 
-                            // Create/Update Mapping
-                            string key = $"{partNo.ToUpper()}|{cust.ToUpper()}";
+                            string key = $"{NormalizeMappingHeader(vin)}|{NormalizeMappingHeader(partNo)}|{NormalizeMappingHeader(cust)}";
                             
                             if (mappingLookup.TryGetValue(key, out var existingMapping))
                             {
-                                // Update
-                                existingMapping.VIN = vin;
+                                existingMapping.VIN = vin ?? "";
                                 existingMapping.UpdatedDate = DateTime.Now;
-                                _context.Update(existingMapping);
-                                updatedCount++;
+                                
+                                if (existingMapping.MappingId > 0)
+                                {
+                                    var entry = _context.Entry(existingMapping);
+                                    if (entry.State == EntityState.Detached)
+                                    {
+                                        _context.Update(existingMapping);
+                                        updatedCount++;
+                                    }
+                                }
+                                else
+                                {
+                                    duplicateCount++;
+                                    if (duplicateSamples.Count < 5)
+                                    {
+                                        duplicateSamples.Add($"Row {row.RowNumber()}: {vin} | {partNo} | {cust}");
+                                    }
+                                }
                             }
                             else
                             {
-                                // Create
                                 var newMapping = new ItemMapping
                                 {
-                                    Customer = cust,
-                                    CustomerPartNumber = partNo,
-                                    VIN = vin,
-
+                                    Customer = cust ?? "",
+                                    CustomerPartNumber = partNo ?? "",
+                                    VIN = vin ?? "",
                                     CreatedDate = DateTime.Now
                                 };
                                 _context.ItemMappings.Add(newMapping);
-                                mappingLookup[key] = newMapping; // Add to lookup to prevent duplicates in same file
+                                mappingLookup[key] = newMapping;
                                 createdCount++;
                             }
-                            // successCount = createdCount + updatedCount; // This line is not needed here, total success is calculated at the end
                         }
                         await _context.SaveChangesAsync();
-                        TempData["SuccessMessage"] = $"Berhasil! {createdCount} mapping baru, {updatedCount} updated.";
+                        string msg = $"Impor Selesai! Total: {totalProcessed} baris. Baru: {createdCount}, Update: {updatedCount}, Duplikat diabaikan: {duplicateCount}.";
+                        if (duplicateSamples.Any())
+                        {
+                            msg += " Contoh duplikat: " + string.Join("; ", duplicateSamples);
+                        }
+                        TempData["SuccessMessage"] = msg;
                     }
                 }
-                // The success message is now set inside the using block, so this outer one is redundant.
- 
             }
             catch (Exception ex)
             {
@@ -336,18 +360,9 @@ namespace DeliveryControl.Controllers
         {
             try
             {
-                // USER REQUEST: Only delete Item Mapping data.
-                // SAFE NOW: This only deletes from ItemMappings table, Master Items are safe.
-                
                 _context.ItemMappings.RemoveRange(_context.ItemMappings);
                 await _context.SaveChangesAsync();
-                
                 TempData["SuccessMessage"] = "Berhasil menghapus seluruh data Master Item Mapping! Data Master Item (Stok) AMAN.";
-            }
-            catch (DbUpdateException)
-            {
-                // Catch Foreign Key violation
-                TempData["ErrorMessage"] = "Gagal menghapus! Beberapa Item sedang digunakan dalam transaksi/jadwal. Hapus data transaksi terlebih dahulu jika ingin mereset master item.";
             }
             catch (Exception ex)
             {

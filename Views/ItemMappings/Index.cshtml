@@ -1,14 +1,14 @@
 @model IEnumerable<DeliveryControl.Models.ItemMapping>
 
 @{
-    ViewData["Title"] = "Master Item Customer (Mapping)";
+    ViewData["Title"] = "Master Item Mapping (DOCK)";
 }
 
 <div class="row mb-4 align-items-center">
     <div class="col-md-5">
         <h2 class="mb-0">
-            <i class="bi bi-arrow-left-right"></i> Item Mapping Customer
-            <span class="badge bg-warning text-dark fs-6 ms-2">v1.2 (Fix Duplicate)</span>
+            <i class="bi bi-arrow-left-right"></i> Item Mapping DOCK
+            <span class="badge bg-warning text-dark fs-6 ms-2">v1.3 (VIN+PART+DOCK Unique)</span>
         </h2>
     </div>
     <div class="col-md-7 text-end">
@@ -76,7 +76,7 @@
         <form asp-action="Index" method="get" class="row g-3">
             <div class="col-md-10">
                 <input type="text" class="form-control" name="searchString" value="@ViewData["CurrentFilter"]" 
-                       placeholder="Cari Kode Customer, Part No, atau VIN..." />
+                       placeholder="Cari DOCK, Part No, atau VIN..." />
             </div>
             <div class="col-md-2">
                 <button type="submit" class="btn btn-primary w-100">
@@ -94,7 +94,7 @@
                 <thead>
                     <tr>
                         <th class="bg-dark-blue text-white text-center" style="width: 50px;">NO</th>
-                        <th class="bg-dark-blue text-white">NAMA CUSTOMER</th>
+                        <th class="bg-dark-blue text-white">DOCK</th>
                         <th class="bg-dark-blue text-white">PART NO (EKSTERNAL)</th>
                         <th class="bg-dark-blue text-white">VIN (INTERNAL)</th>
                         <th class="bg-dark-blue text-white text-center" style="width: 150px;">ACTIONS</th>
@@ -159,7 +159,7 @@
                     </div>
                     <div class="modal-body">
                         <div class="alert alert-info small">
-                            Format Excel: <strong>Kode Customer, Part No, VIN</strong> (Mulai baris ke-2).
+                            Format Excel: <strong>DOCK, Part No, VIN</strong> (Mulai baris ke-2).
                         </div>
                         <input type="file" name="file" class="form-control" accept=".xlsx,.xls" required />
                     </div>

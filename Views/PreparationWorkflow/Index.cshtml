@@ -296,7 +296,7 @@
                         <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">VIN (TAG MASTER) <span class="text-danger">*</span></label>
                         <div class="custom-cyber-input-group">
                             <div class="input-icon-left"><i class="bi bi-tag-fill"></i></div>
-                            <input type="text" class="form-control cyber-field" id="tagInput" placeholder="Scan VIN..." autofocus>
+                            <input type="text" class="form-control cyber-field scanner-input" id="tagInput" placeholder="Scan VIN..." inputmode="none" autofocus>
                             <button type="button" class="btn-scan-trigger" data-target="tagInput"><i class="bi bi-qr-code-scan"></i></button>
                         </div>
                     </div>
@@ -306,7 +306,7 @@
                         <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">LABEL CUSTOMER <span class="text-danger">*</span></label>
                         <div class="custom-cyber-input-group">
                             <div class="input-icon-left"><i class="bi bi-upc-scan"></i></div>
-                            <input type="text" class="form-control cyber-field" id="labelInput" placeholder="Scan Label..." disabled>
+                            <input type="text" class="form-control cyber-field scanner-input" id="labelInput" placeholder="Scan Label..." inputmode="none" disabled>
                             <button type="button" class="btn-scan-trigger" data-target="labelInput" disabled><i class="bi bi-qr-code-scan"></i></button>
                         </div>
                     </div>
@@ -316,7 +316,7 @@
                         <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">KANBAN CUSTOMER <span class="text-danger">*</span></label>
                         <div class="custom-cyber-input-group">
                             <div class="input-icon-left"><i class="bi bi-clipboard-check"></i></div>
-                            <input type="text" class="form-control cyber-field" id="kanbanInput" placeholder="Scan Kanban (Part No)..." disabled>
+                            <input type="text" class="form-control cyber-field scanner-input" id="kanbanInput" placeholder="Scan Kanban (Part No)..." inputmode="none" disabled>
                             <button type="button" class="btn-scan-trigger" data-target="kanbanInput" disabled><i class="bi bi-qr-code-scan"></i></button>
                         </div>
                     </div>
@@ -735,11 +735,27 @@
                 }
             });
 
-            // Visual feedback for focus
-            $('input').on('focus', function() {
+            // Visual feedback for focus and Smart Velocity Blocker
+            $('.scanner-input').on('focus', function() {
                 $(this).closest('.custom-cyber-input-group').addClass('selected-glow');
             }).on('blur', function() {
                 $(this).closest('.custom-cyber-input-group').removeClass('selected-glow');
+            }).on('keydown', function(e) {
+                // Allow control keys (Enter, Tab, Backspace, Delete)
+                if ([13, 9, 8, 46].indexOf(e.which) !== -1) return;
+
+                const now = Date.now();
+                const lastKeyTime = $(this).data('last-key-time') || now;
+                const diff = now - lastKeyTime;
+                $(this).data('last-key-time', now);
+
+                // If typing gap > 60ms, it's a human. 
+                // Scanners usually pulse characters at < 20ms.
+                if (diff > 60 && $(this).val().length > 0) {
+                    $(this).val(''); // Clear it!
+                    showScannerToast("AKSES DITOLAK: Gunakan Scanner!", "danger");
+                    e.preventDefault();
+                }
             });
 
             // --- FLOATING BUTTON & SCHEDULE MODAL LOGIC ---
