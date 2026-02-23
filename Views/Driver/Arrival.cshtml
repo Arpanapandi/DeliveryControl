@@ -28,6 +28,7 @@
                 <form asp-action="Arrival" method="post">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="id" value="@Model.ScheduleId" />
+                    <input type="hidden" name="returnDate" value="@ViewBag.ReturnDate" />
 
                     <!-- Info Schedule -->
                     <div class="alert alert-info">
@@ -128,7 +129,7 @@
 
                     <!-- Action Buttons -->
                     <div class="d-flex gap-2 justify-content-end">
-                        <a asp-action="Index" asp-route-selectedDate="@Model.ScheduledDate.ToString("yyyy-MM-dd")" class="btn btn-secondary">
+                        <a asp-action="Index" asp-route-selectedDate="@ViewData["ReturnDate"]" class="btn btn-secondary">
                             <i class="bi bi-x-circle"></i> Batal
                         </a>
                         <button type="submit" class="btn btn-warning btn-lg">

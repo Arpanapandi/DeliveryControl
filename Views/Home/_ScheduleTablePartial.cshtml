@@ -545,7 +545,7 @@
         }
         <td class="text-center align-middle">
             <span class="badge @statusBadgeClass" style="font-size: 0.75rem;">
-                <i class="bi @statusIcon"></i> @displayStatus
+                <i class="bi @statusIcon"></i> @(displayStatus == "Completed" ? "COMPLETED" : displayStatus.ToUpper())
             </span>
             @if (item.ActualEndTime.HasValue)
             {

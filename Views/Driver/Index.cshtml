@@ -2,7 +2,8 @@
 
 @{
     ViewData["Title"] = "Portal Driver - Konfirmasi Delivery";
-    var selectedDate = ViewData["SelectedDate"]?.ToString() ?? DateTime.Today.ToString("yyyy-MM-dd");
+    var selectedDateValue = ViewData["SelectedDate"]?.ToString();
+    var selectedDateDisplay = selectedDateValue ?? DateTime.Today.ToString("yyyy-MM-dd");
     var dayName = ViewData["DayName"]?.ToString() ?? "";
     var selectedStatus = ViewData["SelectedStatus"]?.ToString() ?? "";
 }
@@ -27,7 +28,7 @@
                        class="form-control" 
                        name="selectedDate" 
                        id="selectedDate"
-                       value="@selectedDate"
+                       value="@selectedDateDisplay"
                        onchange="this.form.submit()" />
             </div>
             <div class="col-md-3">
@@ -113,19 +114,19 @@
                             name="status"
                             value="Scheduled"
                             class="@scheduledClass">
-                        Scheduled
+                        SCHEDULED
                     </button>
                     <button type="submit"
                             name="status"
                             value="In Progress"
                             class="@inProgressClass">
-                        Ready To Pickup
+                        READY TO PICKUP
                     </button>
                     <button type="submit"
                             name="status"
                             value="Completed"
                             class="@completedClass">
-                        Completed
+                        COMPLETED
                     </button>
                 </div>
             </div>
@@ -152,7 +153,7 @@
 @if (!needAction.Any() && !completed.Any())
 {
     <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i> Tidak ada jadwal delivery untuk tanggal ini.
+        <i class="bi bi-info-circle"></i> Tidak ada jadwal pelayan/trip untuk tanggal ini.
     </div>
 }
 else
@@ -190,24 +191,11 @@ else
                     var hasDeparted = trip.HasDeparted;
                     
                     <div class="col-md-6 col-lg-4 mb-3">
-                        <div class="card h-100 @(hasDeparted ? "border-success" : hasArrived ? "border-info" : "border-warning")">
+                        <div class="card h-100 @(hasDeparted ? "border-success" : hasArrived ? "border-info" : "border-warning") shadow-sm">
                             <div class="card-header @statusBadge text-white">
                                 <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <strong>TRIP: @trip.Cycle - @trip.Route</strong>
-                                        <div class="dropdown mt-1">
-                                            <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 1px 6px;">
-                                                <i class="bi bi-list-check me-1"></i> MANIFESTS (@trip.Schedules.Count())
-                                            </button>
-                                            <ul class="dropdown-menu shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 180px; z-index: 1051;">
-                                                @foreach (var m in trip.Schedules.OrderBy(x => x.ScheduleNumber))
-                                                {
-                                                    <li><span class="dropdown-item-text py-1 px-3" style="font-size: 0.8rem; border-bottom: 1px solid rgba(0,0,0,0.05);">@m.ScheduleNumber</span></li>
-                                                }
-                                            </ul>
-                                        </div>
-                                    </div>
-                                    <span class="badge bg-white text-dark">@(displayStatus == "Completed" ? "DELIVERED" : (displayStatus == "In Progress" ? "Ready To Pickup" : displayStatus))</span>
+                                    <strong style="font-size: 1rem;">TRIP: @trip.Cycle - @trip.Route</strong>
+                                    <span class="badge bg-white text-dark shadow-sm">@(displayStatus == "Completed" ? "COMPLETED" : (displayStatus == "In Progress" ? "READY TO PICKUP" : displayStatus.ToUpper()))</span>
                                 </div>
                             </div>
                             <div class="card-body">
@@ -215,58 +203,36 @@ else
                                     <i class="bi bi-building"></i> @(trip.CustomerName)
                                 </h5>
                                 
-                                <!-- INFO TANGGAL DELIVERY/PICKUP -->
-                                @if (trip.PickupTime.HasValue)
-                                {
-                                    var pickupDate = trip.PickupTime.Value.Date;
-                                    var isToday = pickupDate == DateTime.Today;
-                                    var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
-                                    var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
-                                    var badgeColor = isToday ? "bg-success" : (isTomorrow ? "bg-info" : "bg-secondary");
-                                    
-                                    <div class="alert alert-primary py-2 mb-3">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <small class="mb-0">
-                                                <i class="bi bi-calendar-check"></i> <strong>Tanggal Delivery:</strong>
-                                            </small>
-                                            <span class="badge @badgeColor">
-                                                @dateLabel - @trip.PickupTime.Value.ToString("HH:mm")
-                                            </span>
-                                        </div>
-                                    </div>
-                                }
+
                                 
                                 <hr />
                                 
                                 <div class="mb-2">
-                                    <small class="text-muted">Cycle:</small>
-                                    <div class="fw-bold" style="font-size: 1.4rem;">
-                                        @trip.Cycle
-                                    </div>
+                                    <small class="text-muted"><i class="bi bi-building"></i> Customer:</small>
+                                    <div class="fw-bold">@trip.CustomerName</div>
                                 </div>
-
+                                <div class="mb-2">
+                                    <small class="text-muted"><i class="bi bi-arrow-repeat"></i> Cycle:</small>
+                                    <div class="fw-bold">@trip.Cycle</div>
+                                </div>
                                 @if (!string.IsNullOrWhiteSpace(trip.Route))
                                 {
                                     <div class="mb-2">
-                                        <small class="text-muted">Route:</small>
+                                        <small class="text-muted"><i class="bi bi-signpost"></i> Route:</small>
                                         <div>@trip.Route</div>
                                     </div>
                                 }
-
                                 @if (!string.IsNullOrWhiteSpace(trip.Area))
                                 {
                                     <div class="mb-2">
-                                        <small class="text-muted">Area:</small>
-                                        <div><i class="bi bi-geo-alt"></i> @trip.Area</div>
+                                        <small class="text-muted"><i class="bi bi-geo-alt"></i> Area:</small>
+                                        <div>@trip.Area</div>
                                     </div>
                                 }
-                                
-                                <div class="mb-2">
-                                    <small class="text-muted">Manifests:</small>
-                                    <div><strong>@trip.TotalSchedules</strong> Order items</div>
+                                <div class="mb-2 text-primary">
+                                    <small class="text-muted"><i class="bi bi-list-check"></i> Total Manifests:</small>
+                                    <strong>@trip.TotalSchedules</strong> Order
                                 </div>
-
-                                <hr />
 
                                 <!-- Pickup Time + ETD horizontal -->
                                 <div class="row text-center mb-2">
@@ -288,64 +254,69 @@ else
 
                                 <hr />
 
-                                <!-- Actual Arrival -->
-                                @if (hasArrived && trip.ActualStartTime.HasValue)
-                                {
-                                    <div class="alert alert-info py-2 mb-2">
-                                        <small><i class="bi bi-check-circle"></i> <strong>Kedatangan:</strong></small>
-                                        <div><strong>@trip.ActualStartTime.Value.ToString("HH:mm")</strong></div>
-                                    </div>
-                                }
-
-                                <!-- Actual Departure -->
-                                @if (hasDeparted && trip.ActualEndTime.HasValue)
-                                {
-                                    <div class="alert alert-success py-2 mb-2">
-                                        <small><i class="bi bi-check-circle-fill"></i> <strong>Keberangkatan:</strong></small>
-                                        <div><strong>@trip.ActualEndTime.Value.ToString("HH:mm")</strong></div>
-                                        @{
-                                            var startTime = trip.ActualStartTime ?? trip.ActualEndTime.Value;
-                                            var duration = trip.ActualEndTime.Value - startTime;
-                                            var durationText = duration.TotalHours >= 1 
-                                                ? $"{(int)duration.TotalHours}j {duration.Minutes}m"
-                                                : $"{(int)duration.TotalMinutes}m";
-                                        }
-                                        <small class="text-muted">Durasi: @durationText</small>
-                                    </div>
-                                }
+                                <!-- Execution Times -->
+                                <div class="row g-2 mt-2">
+                                    @if (hasArrived && trip.ActualStartTime.HasValue)
+                                    {
+                                        <div class="col-12">
+                                            <div class="p-2 bg-light border-start border-4 border-info rounded" style="font-size: 0.85rem;">
+                                                <i class="bi bi-geo-alt-fill text-info"></i> Tiba: <strong>@trip.ActualStartTime.Value.ToString("HH:mm")</strong>
+                                            </div>
+                                        </div>
+                                    }
+                                    @if (hasDeparted && trip.ActualEndTime.HasValue)
+                                    {
+                                        <div class="col-12">
+                                            <div class="p-2 bg-light border-start border-4 border-success rounded" style="font-size: 0.85rem;">
+                                                <i class="bi bi-check-circle-fill text-success"></i> Selesai: <strong>@trip.ActualEndTime.Value.ToString("HH:mm")</strong>
+                                                @{
+                                                    var startTime = trip.ActualStartTime ?? trip.ActualEndTime.Value;
+                                                    var duration = trip.ActualEndTime.Value - startTime;
+                                                    var durationText = duration.TotalHours >= 1 
+                                                        ? $"{(int)duration.TotalHours}j {duration.Minutes}m"
+                                                        : $"{(int)duration.TotalMinutes}m";
+                                                }
+                                                <div class="text-muted small ms-4">Durasi: @durationText</div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
                             </div>
                             <div class="card-footer">
-                                @if (!hasArrived)
+                                @if (!hasDeparted)
                                 {
-                                    <!-- Belum konfirmasi kedatangan -->
-                                    <div class="d-grid gap-2">
-                                        <a asp-action="Arrival" asp-route-id="@trip.RepresentativeScheduleId" class="btn btn-warning">
-                                            <i class="bi bi-geo-alt-fill"></i> Konfirmasi Kedatangan
-                                        </a>
-                                        <form asp-action="QuickArrival" asp-route-id="@trip.RepresentativeScheduleId" method="post" class="d-inline">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-outline-warning btn-sm w-100" 
-                                                    onclick="return confirm('Konfirmasi kedatangan (GROUP) SEKARANG?')">
-                                                <i class="bi bi-lightning-fill"></i> Quick - Tiba Sekarang
-                                            </button>
-                                        </form>
-                                    </div>
-                                }
-                                else if (!hasDeparted)
-                                {
-                                    <!-- Sudah tiba, belum berangkat -->
-                                    <div class="d-grid gap-2">
-                                        <a asp-action="Departure" asp-route-id="@trip.RepresentativeScheduleId" class="btn btn-info">
-                                            <i class="bi bi-arrow-right-circle-fill"></i> Konfirmasi Keberangkatan
-                                        </a>
-                                        <form asp-action="QuickDeparture" asp-route-id="@trip.RepresentativeScheduleId" method="post" class="d-inline">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-outline-info btn-sm w-100" 
-                                                    onclick="return confirm('Konfirmasi keberangkatan (GROUP) SEKARANG?')">
-                                                <i class="bi bi-lightning-fill"></i> Quick - Berangkat Sekarang
-                                            </button>
-                                        </form>
-                                    </div>
+                                    @if (!hasArrived)
+                                    {
+                                        <!-- Belum tiba, tampilkan tombol Kedatangan -->
+                                        <div class="d-grid gap-2">
+                                            <a asp-action="Arrival" asp-route-id="@trip.RepresentativeScheduleId" asp-route-returnDate="@selectedDateValue" class="btn btn-warning">
+                                                <i class="bi bi-geo-alt-fill text-dark"></i> Konfirmasi Kedatangan
+                                            </a>
+                                            <form asp-action="QuickArrival" asp-route-id="@trip.RepresentativeScheduleId" asp-route-returnDate="@selectedDateValue" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-warning btn-sm w-100" 
+                                                        onclick="return confirm('Konfirmasi kedatangan (GROUP) SEKARANG?')">
+                                                    <i class="bi bi-lightning-fill"></i> Quick - Tiba Sekarang
+                                                </button>
+                                            </form>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <!-- Sudah tiba (Enter Dock), tinggal berangkat -->
+                                        <div class="d-grid gap-2">
+                                            <a asp-action="Departure" asp-route-id="@trip.RepresentativeScheduleId" asp-route-returnDate="@selectedDateValue" class="btn btn-info">
+                                                <i class="bi bi-arrow-right-circle-fill"></i> Konfirmasi Keberangkatan
+                                            </a>
+                                            <form asp-action="QuickDeparture" asp-route-id="@trip.RepresentativeScheduleId" asp-route-returnDate="@selectedDateValue" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-info btn-sm w-100" 
+                                                        onclick="return confirm('Konfirmasi keberangkatan (GROUP) SEKARANG?')">
+                                                    <i class="bi bi-lightning-fill"></i> Quick - Berangkat Sekarang
+                                                </button>
+                                            </form>
+                                        </div>
+                                    }
                                 }
                                 else
                                 {
@@ -399,120 +370,33 @@ else
                     var hasDeparted = trip.HasDeparted;
                     
                     <div class="col-md-6 col-lg-4 mb-3">
-                        <div class="card h-100 @(hasDeparted ? "border-success" : hasArrived ? "border-info" : "border-warning")">
-                            <div class="card-header @statusBadge text-white">
+                        <div class="card h-100 border-success opacity-75 shadow-sm">
+                            <div class="card-header bg-success text-white">
                                 <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <strong>TRIP: @trip.Cycle - @trip.Route</strong>
-                                        <div class="dropdown mt-1">
-                                            <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 1px 6px;">
-                                                <i class="bi bi-list-check me-1"></i> MANIFESTS (@trip.Schedules.Count())
-                                            </button>
-                                            <ul class="dropdown-menu shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 180px; z-index: 1051;">
-                                                @foreach (var m in trip.Schedules.OrderBy(x => x.ScheduleNumber))
-                                                {
-                                                    <li><span class="dropdown-item-text py-1 px-3" style="font-size: 0.8rem; border-bottom: 1px solid rgba(0,0,0,0.05);">@m.ScheduleNumber</span></li>
-                                                }
-                                            </ul>
-                                        </div>
-                                    </div>
-                                    <span class="badge bg-white text-dark">@(displayStatus == "Completed" ? "DELIVERED" : (displayStatus == "In Progress" ? "Ready To Pickup" : displayStatus))</span>
+                                    <strong style="font-size: 1rem;">TRIP: @trip.Cycle - @trip.Route</strong>
+                                    <span class="badge bg-white text-dark shadow-sm">COMPLETED</span>
                                 </div>
                             </div>
                             <div class="card-body">
-                                <h5 class="card-title">
-                                    <i class="bi bi-building"></i> @(trip.CustomerName)
-                                </h5>
-                                
-                                <!-- INFO TANGGAL DELIVERY/PICKUP -->
-                                @if (trip.PickupTime.HasValue)
-                                {
-                                    var pickupDate = trip.PickupTime.Value.Date;
-                                    var isToday = pickupDate == DateTime.Today;
-                                    var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
-                                    var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
-                                    var badgeColor = isToday ? "bg-success" : (isTomorrow ? "bg-info" : "bg-secondary");
-                                    
-                                    <div class="alert alert-primary py-2 mb-3">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <small class="mb-0">
-                                                <i class="bi bi-calendar-check"></i> <strong>Tanggal Delivery:</strong>
-                                            </small>
-                                            <span class="badge @badgeColor">
-                                                @dateLabel - @trip.PickupTime.Value.ToString("HH:mm")
-                                            </span>
-                                        </div>
-                                    </div>
-                                }
-                                
-                                <hr />
-                                
                                 <div class="mb-2">
-                                    <small class="text-muted">Cycle:</small>
-                                    <div class="fw-bold" style="font-size: 1.4rem;">
-                                        @trip.Cycle
-                                    </div>
+                                    <small class="text-muted"><i class="bi bi-building"></i> Customer:</small>
+                                    <div class="fw-bold">@trip.CustomerName</div>
                                 </div>
-                                @if (!string.IsNullOrWhiteSpace(trip.Route))
-                                {
-                                    <div class="mb-2">
-                                        <small class="text-muted">Route:</small>
-                                        <div>@trip.Route</div>
-                                    </div>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(trip.Area))
-                                {
-                                    <div class="mb-2">
-                                        <small class="text-muted">Area:</small>
-                                        <div><i class="bi bi-geo-alt"></i> @trip.Area</div>
-                                    </div>
-                                }
-                                <div class="mb-2">
-                                    <small class="text-muted">Manifests:</small>
-                                    <div><strong>@trip.TotalSchedules</strong> Order items</div>
+                                <div class="mb-2 text-primary">
+                                    <small class="text-muted"><i class="bi bi-list-check"></i> Total Manifests:</small>
+                                    <strong>@trip.TotalSchedules</strong> Order
                                 </div>
-                                <hr />
-
-                                <!-- Pickup Time -->
-                                @if (trip.PickupTime.HasValue)
-                                {
-                                    <div class="mb-2">
-                                        <small class="text-muted"><i class="bi bi-clock"></i> Pickup Time (Target):</small>
-                                        <div><strong>@trip.PickupTime.Value.ToString("HH:mm")</strong></div>
-                                    </div>
-                                }
-
-                                <hr />
-
-                                <!-- Actual Arrival -->
-                                @if (hasArrived && trip.ActualStartTime.HasValue)
-                                {
-                                    <div class="alert alert-info py-2 mb-2">
-                                        <small><i class="bi bi-check-circle"></i> <strong>Kedatangan:</strong></small>
-                                        <div><strong>@trip.ActualStartTime.Value.ToString("HH:mm")</strong></div>
-                                    </div>
-                                }
-
-                                <!-- Actual Departure -->
-                                @if (hasDeparted && trip.ActualEndTime.HasValue)
-                                {
-                                    <div class="alert alert-success py-2 mb-2">
-                                        <small><i class="bi bi-check-circle-fill"></i> <strong>Keberangkatan:</strong></small>
-                                        <div><strong>@trip.ActualEndTime.Value.ToString("HH:mm")</strong></div>
-                                        @{
-                                            var startTime = trip.ActualStartTime ?? trip.ActualEndTime.Value;
-                                            var duration = trip.ActualEndTime.Value - startTime;
-                                            var durationText = duration.TotalHours >= 1 
-                                                ? $"{(int)duration.TotalHours}j {duration.Minutes}m"
-                                                : $"{(int)duration.TotalMinutes}m";
-                                        }
-                                        <small class="text-muted">Durasi: @durationText</small>
-                                    </div>
-                                }
+                                
+                                <div class="p-2 bg-light border-start border-4 border-success rounded mt-3" style="font-size: 0.85rem;">
+                                    <i class="bi bi-check-circle-fill text-success"></i> Selesai: <strong>@(trip.ActualEndTime?.ToString("HH:mm") ?? "-")</strong>
+                                </div>
                             </div>
                             <div class="card-footer">
-                                <!-- Group Selesai (Read Only) -->
-                                <button class="btn btn-outline-secondary w-100 disabled">Trip Completed</button>
+                                <div class="d-grid">
+                                    <button class="btn btn-success disabled">
+                                        <i class="bi bi-check-circle-fill"></i> Selesai
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

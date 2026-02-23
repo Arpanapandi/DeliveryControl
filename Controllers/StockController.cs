@@ -431,12 +431,19 @@ namespace DeliveryControl.Controllers
                 { "period", period }
             };
 
+            var recentPullingInRange = await _context.PullingRecords.AsNoTracking()
+                .Include(r => r.Item)
+                .Where(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= startDate && r.CreatedDate <= endDate)
+                .OrderByDescending(r => r.CreatedDate)
+                .ThenByDescending(r => r.PullingId)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
             return new StockDashboardViewModel
             {
                 PlantName = plant, StockDetails = pagedStockDetails, ShortageCount = shortageCount, NormalCount = normalCount, OverCount = overCount, SearchDate = searchDate,
-                RecentPulling = isFilteredByDate 
-                    ? inStockPieces.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PullingId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList() 
-                    : inStockPieces.OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PullingId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList(),
+                RecentPulling = recentPullingInRange,
                 RecentPreparation = isFilteredByDate 
                     ? allPreparationInRange.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PreparationId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList() 
                     : allPreparationInRange.OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PreparationId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList(),

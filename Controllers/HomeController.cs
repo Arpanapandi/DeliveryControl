@@ -42,17 +42,17 @@ namespace DeliveryControl.Controllers
                 .Where(s => s.ScheduledDate.Date == today)
                 .OrderBy(s =>
                 {
-                    // Prepared scan selesai (walau Status masih In Progress) → tengah bawah
-                    if (s.PreparationStatus == "Prepared")
-                        return 2;
                     // Selesai delivery → paling bawah
                     if (s.Status == "Completed" || s.ActualEndTime.HasValue)
                         return 3;
-                    // Preparing / In Progress → paling atas
+                    // Preparing / In Progress (truk masuk / jalan) → paling atas
                     if (s.PreparationStatus == "In Progress" || s.Status == "In Progress" || s.ActualStartTime.HasValue || s.ActualEnterDockTime.HasValue)
                         return 0;
+                    // Prepared scan selesai (siap kirim) → tengah atas
+                    if (s.PreparationStatus == "Prepared")
+                        return 1;
                     // Scheduled / Waiting
-                    return 1;
+                    return 2;
                 })
                 .ThenBy(s => s.PickupTime)
                 .ToList();
@@ -180,8 +180,13 @@ namespace DeliveryControl.Controllers
 
             var todaySchedules = allSchedules
                 .Where(s => s.ScheduledDate.Date == today)
-                .OrderBy(s => (s.Status == "In Progress" || s.PreparationStatus == "In Progress" || (s.ActualStartTime.HasValue && !s.ActualEndTime.HasValue) || (s.ActualEnterDockTime.HasValue && !s.ActualEndTime.HasValue)) ? 0 : 
-                             (s.Status == "Completed" || s.ActualEndTime.HasValue) ? 2 : 1)
+                .OrderBy(s =>
+                {
+                    if (s.Status == "Completed" || s.ActualEndTime.HasValue) return 3;
+                    if (s.PreparationStatus == "In Progress" || s.Status == "In Progress" || s.ActualStartTime.HasValue || s.ActualEnterDockTime.HasValue) return 0;
+                    if (s.PreparationStatus == "Prepared") return 1;
+                    return 2;
+                })
                 .ThenBy(s => s.PickupTime)
                 .ToList();
 

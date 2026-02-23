@@ -109,7 +109,8 @@
 
                     <!-- Action Buttons -->
                     <div class="d-flex gap-2 justify-content-end">
-                        <a asp-action="Index" asp-route-selectedDate="@Model.ScheduledDate.ToString("yyyy-MM-dd")" class="btn btn-secondary">
+                        <input type="hidden" name="returnDate" value="@ViewData["ReturnDate"]" />
+                        <a asp-action="Index" asp-route-selectedDate="@ViewData["ReturnDate"]" class="btn btn-secondary">
                             <i class="bi bi-x-circle"></i> Batal
                         </a>
                         <button type="submit" class="btn btn-info btn-lg text-white">
@@ -143,7 +144,7 @@
                     <strong>Keberangkatan:</strong> Waktu saat Anda meninggalkan lokasi customer
                 </p>
                 <p class="small mb-2">
-                    <strong>Status:</strong> Setelah konfirmasi, status akan berubah menjadi "DELIVERED"
+                    <strong>Status:</strong> Setelah konfirmasi, status akan berubah menjadi "COMPLETED"
                 </p>
                 <p class="small mb-0">
                     <strong>Durasi:</strong> Sistem akan menghitung durasi waktu tunggu/bongkar muat di customer

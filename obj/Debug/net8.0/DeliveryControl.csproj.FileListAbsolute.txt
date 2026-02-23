@@ -162,11 +162,6 @@ C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\DeliveryControl.RazorAssembl
 C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\DeliveryControl.sourcelink.json
 C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\staticwebassets.build.json
 C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\staticwebassets.development.json
-C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\staticwebassets\msbuild.DeliveryControl.Microsoft.AspNetCore.StaticWebAssets.props
-C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\staticwebassets\msbuild.build.DeliveryControl.props
-C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\staticwebassets\msbuild.buildMultiTargeting.DeliveryControl.props
-C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\staticwebassets\msbuild.buildTransitive.DeliveryControl.props
-C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\staticwebassets.pack.json
 C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\scopedcss\Views\Shared\_Layout.cshtml.rz.scp.css
 C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\scopedcss\bundle\DeliveryControl.styles.css
 C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\scopedcss\projectbundle\DeliveryControl.bundle.scp.css
@@ -176,3 +171,11 @@ C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\refint\DeliveryControl.dll
 C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\DeliveryControl.pdb
 C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\DeliveryControl.genruntimeconfig.cache
 C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\ref\DeliveryControl.dll
+C:\DeliveryControl\DeliveryControl\bin\Debug\net8.0\DeliveryControl.staticwebassets.endpoints.json
+C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\rpswa.dswa.cache.json
+C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\rjimswa.dswa.cache.json
+C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\rjsmrazor.dswa.cache.json
+C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\rjsmcshtml.dswa.cache.json
+C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\staticwebassets.build.json.cache
+C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\staticwebassets.build.endpoints.json
+C:\DeliveryControl\DeliveryControl\obj\Debug\net8.0\swae.build.ex.cache
