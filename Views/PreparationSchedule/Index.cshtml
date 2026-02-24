@@ -1,0 +1,459 @@
+@model IEnumerable<DeliveryControl.Models.DeliverySchedule>
+
+@{
+    ViewData["Title"] = "Jadwal Preparation";
+}
+
+<div class="container-fluid pt-4">
+    <div class="row g-3 align-items-center mb-4">
+        <div class="col-12 col-xl-4">
+             <h4 class="mb-1 text-white fw-bold d-flex align-items-center"><i class="bi bi-calendar-check me-2"></i> Jadwal
+                <span class="d-xl-none ms-2 badge bg-primary">Mobile View</span>
+                <span id="connectionStatus" class="badge bg-secondary ms-2" style="font-size: 0.6rem; vertical-align: middle;" title="Koneksi Realtime">
+                   <i class="bi bi-broadcast"></i> Connecting...
+                </span>
+             </h4>
+        </div>
+        <div class="col-12 col-xl-8">
+            <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-xl-end align-items-center">
+                <!-- Search Bar & Date Filter -->
+                <form method="get" id="filterForm" class="d-flex align-items-center gap-2 me-md-2 flex-grow-1 flex-md-grow-0" style="min-width: 500px;">
+                    <div class="input-group input-group-sm flex-grow-1">
+                        <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-search"></i></span>
+                        <input type="text" id="searchInput" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Cari Manifest/Customer/Cycle/VIN..." />
+                    </div>
+                    <div class="input-group input-group-sm" style="width: 160px;">
+                        <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-calendar3"></i></span>
+                        <input type="date" name="filterDate" class="form-control form-control-sm bg-dark text-white border-secondary" 
+                               value="@ViewBag.FilterDate" onchange="this.form.submit()" />
+                    </div>
+                </form>
+
+                <!-- Actions -->
+                <div class="d-flex flex-wrap gap-2 flex-grow-1 flex-xl-grow-0">
+                    <a asp-action="DownloadTemplate" class="btn btn-sm btn-outline-secondary d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center">
+                        <i class="bi bi-download me-2"></i> <span>Template</span>
+                    </a>
+                    <button type="button" class="btn btn-sm btn-success d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center" data-bs-toggle="modal" data-bs-target="#importModal">
+                        <i class="bi bi-file-earmark-excel me-2"></i> <span>Import</span>
+                    </button>
+                    <a asp-action="BulkCreate" class="btn btn-sm btn-info text-dark d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center">
+                        <i class="bi bi-calendar-plus me-2"></i> <span>Bulk</span>
+                    </a>
+                    <a asp-action="Create" class="btn btn-sm btn-primary d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center">
+                        <i class="bi bi-plus-lg me-2"></i> <span>New</span>
+                    </a>
+                    <a asp-controller="System" asp-action="ConsolidateSchedules" class="btn btn-sm btn-warning text-dark d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center"
+                       onclick="return confirm('APAKAH ANDA YAKIN? Semua kartu persiapan (schedule) aktif yang memiliki Manifest, Customer, dan Rute yang sama akan DIGABUNGKAN menjadi satu kartu.')">
+                        <i class="bi bi-stack me-2"></i> <span>Merge Duplicates</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Desktop Table View (Visible on XL Screens, OR ALWAYS if No Data) -->
+    <div class="@(Model.Any() ? "cyber-card d-none d-xl-block" : "cyber-card")">
+        <div class="table-responsive">
+            <table class="table table-dark table-hover mb-0 align-middle">
+                <thead>
+                    <tr class="text-uppercase text-secondary small">
+                        <th>MANIFESTING</th>
+                        <th>DOCK</th>
+                        <th>NAMA CUSTOMER</th>
+                        <th>ROUTE</th>
+                        <th>CYCLE</th>
+                        <th>PART NO / VIN</th>
+                        <th class="text-center">QTY/LOT</th>
+                        <th class="text-center">QTY (PCS)</th>
+                        <th class="text-center">KBN PREP</th>
+                        <th class="text-center">STATUS</th>
+                        <th class="text-center">ACTION</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var schedule in Model)
+                    {
+                        var items = schedule.DeliveryItems != null && schedule.DeliveryItems.Any() 
+                            ? schedule.DeliveryItems.Cast<DeliveryControl.Models.DeliveryItem?>().ToList() 
+                            : new List<DeliveryControl.Models.DeliveryItem?> { null };
+
+                        foreach (var item in items)
+                        {
+                            <tr>
+                                <td class="fw-bold text-info">
+                                    <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">MANIFEST</div>
+                                    @schedule.ScheduleNumber
+                                </td>
+                                <td>
+                                    <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">DOCK</div>
+                                    <span class="badge bg-secondary">
+                                        @(string.IsNullOrEmpty(schedule.Area) ? (schedule.Customer?.Docking ?? "-") : schedule.Area)
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">CUSTOMER</div>
+                                    <span class="fw-bold">@(schedule.Customer?.CustomerCode ?? "-")</span>
+                                </td>
+                                <td>
+                                    <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">ROUTE</div>
+                                    @(schedule.Route ?? "-")
+                                </td>
+                                <td>
+                                    <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">CYCLE</div>
+                                    @(schedule.Cycle ?? "-")
+                                </td>
+                                
+                                @if (item != null)
+                                {
+                                    <td style="background: rgba(13, 110, 253, 0.05); border-left: 2px solid #0d6efd;">
+                                        <div class="d-flex flex-column">
+                                            @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
+                                            {
+                                                <div class="d-flex align-items-center flex-wrap">
+                                                    <span class="text-white fw-bold fs-6">@(item.Item?.CustomerPartNumber ?? "-")</span>
+                                                    @if (!string.IsNullOrEmpty(item.Item?.VIN) && item.Item.VIN != item.Item.CustomerPartNumber)
+                                                    {
+                                                        <span class="text-success fw-bold ms-1" style="font-size: 0.8rem;">/ @item.Item.VIN</span>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-white fw-bold">@(item.Item?.VIN ?? "-")</span>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="small text-muted mb-1" style="font-size: 0.65rem;">QPC</div>
+                                        <span class="badge bg-dark border">@item.Item?.QtyLot</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary">
+                                            @item.Quantity.ToString("N0") Pcs
+                                        </span>
+                                    </td>
+                                    <td class="text-center fw-bold">
+                                        <span class="badge bg-info text-dark" style="font-size: 1.1rem; padding: 0.5rem 0.8rem;">
+                                            <div class="fw-bold">@item.CalculatedKanbanActual.ToString("0.##") / @item.CalculatedKanbanTarget.ToString("0.##")</div>
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        @{
+                                            string statusBadgeClass = "bg-secondary";
+                                            string statusText = "Waiting";
+
+                                            if (item.ActualQuantity >= item.Quantity)
+                                            {
+                                                statusBadgeClass = "bg-success";
+                                                statusText = "Completed";
+                                            }
+                                            else if (item.ActualQuantity > 0)
+                                            {
+                                                statusBadgeClass = "bg-warning text-dark";
+                                                statusText = "Preparing";
+                                            }
+                                        }
+                                        <span class="badge @statusBadgeClass">@statusText</span>
+                                    </td>
+                                }
+                                else 
+                                {
+                                    <td colspan="5" class="text-center text-muted fst-italic py-3">
+                                        <i class="bi bi-exclamation-circle me-1"></i> No Items found (Ghost Schedule)
+                                    </td>
+                                }
+
+                                <td class="text-center">
+                                    <div class="d-flex justify-content-center gap-1">
+                                        @if (item != null)
+                                        {
+                                            <a asp-controller="PreparationWorkflow" asp-action="Index" class="btn btn-sm btn-primary" title="Process Scan">
+                                                <i class="bi bi-box-seam"></i> 
+                                            </a>
+                                        }
+                                        <form asp-action="Delete" asp-route-id="@schedule.ScheduleId" asp-route-pageNumber="@ViewBag.CurrentPage" asp-route-filterDate="@ViewBag.FilterDate" method="post" onsubmit="return confirm('Yakin ingin menghapus schedule ini?');" style="display:inline;">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Delete">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (!Model.Any())
+                    {
+                         <tr>
+                            <td colspan="12" class="text-center py-4 text-muted">
+                                <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                                Belum ada jadwal preparation.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @* Pagination Desktop *@
+        <div class="px-3 pb-3 pt-2 border-top border-secondary d-none d-xl-block">
+            <partial name="_Pager" model='new { CurrentPage = ViewBag.CurrentPage, TotalPages = ViewBag.TotalPages, TotalItems = ViewBag.TotalItems, RouteData = ViewBag.RouteData }' />
+        </div>
+    </div>
+
+    <!-- Mobile/Tablet Card View -->
+    <div class="@(Model.Any() ? "d-xl-none" : "d-none")">
+        @foreach (var schedule in Model)
+        {
+            foreach (var item in schedule.DeliveryItems)
+            {
+                <div class="cyber-mobile-card mb-3">
+                    <div class="cyber-mobile-card-header d-flex justify-content-between align-items-center p-3 border-bottom border-secondary bg-dark bg-opacity-50">
+                        <div>
+                            <span class="text-info fw-bold"><i class="bi bi-hash"></i> @schedule.ScheduleNumber</span>
+                            <span class="badge bg-secondary ms-2">
+                                <i class="bi bi-geo-alt"></i> @(string.IsNullOrEmpty(schedule.Area) ? (schedule.Customer?.Docking ?? "-") : schedule.Area)
+                            </span>
+                        </div>
+                        @{
+                            var pctMobile = (item.Quantity > 0) ? ((double)(item.ActualQuantity ?? 0) / (double)item.Quantity * 100) : 0;
+                            string statusClassMobile = "bg-secondary";
+                            string statusIconMobile = "bi-hourglass";
+                            
+                            if (item.ActualQuantity >= item.Quantity)
+                            {
+                                statusClassMobile = "bg-success";
+                                statusIconMobile = "bi-check-circle";
+                            }
+                            else if (item.ActualQuantity > 0)
+                            {
+                                statusClassMobile = "bg-warning text-dark";
+                                statusIconMobile = "bi-arrow-repeat";
+                            }
+                        }
+                        <span class="badge @statusClassMobile"><i class="bi @statusIconMobile"></i></span>
+                    </div>
+                    <div class="cyber-mobile-card-body p-3">
+                         <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <span class="text-white fw-bold">@(schedule.Customer?.CustomerName ?? "-")</span>
+                            </div>
+                            <div class="col-6 text-end">
+                                <small class="text-secondary d-block">Route / Cycle</small>
+                                <span class="text-white">@(schedule.Route ?? "-") / @(schedule.Cycle ?? "-")</span>
+                            </div>
+                        </div>
+                        
+                     <div class="mb-3 p-2 bg-primary bg-opacity-10 rounded border-start border-primary border-4">
+                            <small class="text-primary fw-bold d-block mb-1" style="letter-spacing: 1px;">DATA ITEM / PESANAN</small>
+                            @if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber) && !string.IsNullOrEmpty(item.Item?.VIN))
+                            {
+                                <span class="text-white fw-bold d-block fs-5">@item.Item.CustomerPartNumber</span>
+                                <span class="text-info small">@item.Item.VIN</span>
+                            }
+                            else if (!string.IsNullOrEmpty(item.Item?.CustomerPartNumber))
+                            {
+                                <span class="text-white fw-bold d-block fs-5">@item.Item.CustomerPartNumber</span>
+                            }
+                            else
+                            {
+                                <span class="text-white fw-bold d-block fs-5">@(item.Item?.VIN ?? "-")</span>
+                            }
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-end p-2 bg-dark bg-opacity-25 rounded border border-secondary mb-3">
+                            <div class="text-center flex-grow-1">
+                                <small class="text-secondary d-block">Schedule Quantity</small>
+                                <span class="badge bg-info text-dark" style="font-size: 1.3rem;">@item.CalculatedKanbanActual.ToString("0.##") / @item.CalculatedKanbanTarget.ToString("0.##") <small>KBN</small></span>
+                                <div class="mt-1">
+                                    <span class="badge bg-secondary">@item.Quantity.ToString("N0") <small>Pcs</small></span>
+                                </div>
+                            </div>
+                             <div class="text-center">
+                                <small class="text-secondary d-block">Progress</small>
+                                <span class="@(item.ActualQuantity >= item.Quantity ? "text-success" : "text-light") fw-bold fs-5">@((int)pctMobile)%</span>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-flex">
+                            <a asp-controller="PreparationWorkflow" asp-action="Index" class="btn btn-primary flex-grow-1">
+                                <i class="bi bi-box-seam me-2"></i> Process Scan
+                            </a>
+                            <form asp-action="Delete" asp-route-id="@schedule.ScheduleId" asp-route-pageNumber="@ViewBag.CurrentPage" asp-route-filterDate="@ViewBag.FilterDate" method="post" onsubmit="return confirm('Yakin ingin menghapus schedule ini?');">
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+
+    <div class="row mt-2 mb-4 d-xl-none">
+        <div class="col-12">
+            <partial name="_Pager" model='new { CurrentPage = ViewBag.CurrentPage, TotalPages = ViewBag.TotalPages, TotalItems = ViewBag.TotalItems, RouteData = ViewBag.RouteData }' />
+        </div>
+    </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content modal-cyber text-white">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold text-warning" id="importModalLabel">
+                    <i class="bi bi-cloud-arrow-up-fill me-2"></i> IMPORT JADWAL PREPARATION
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form asp-action="ImportExcel" method="post" enctype="multipart/form-data">
+                    <div class="mb-4">
+                        <label for="customerId" class="form-label text-info fw-bold"><i class="bi bi-person-badge me-1"></i> Pilih Customer</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-secondary border-0 text-white"><i class="bi bi-search"></i></span>
+                            <input type="text" id="customerSearch" class="form-control bg-secondary text-white border-0" placeholder="Cari Dock atau Nama Customer..." autocomplete="off">
+                        </div>
+                        <select class="form-select bg-secondary text-white border-0 mt-2" id="customerId" name="customerId" required size="5">
+                            @if (ViewBag.Customers != null)
+                            {
+                                foreach (var item in (IEnumerable<SelectListItem>)ViewBag.Customers)
+                                {
+                                    <option value="@item.Value">@item.Text</option>
+                                }
+                            }
+                        </select>
+                        <div class="form-text text-muted small mt-1">Pilih satu customer untuk dikaitkan dengan rincian manifest di Excel.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="excelFile" class="form-label text-info fw-bold"><i class="bi bi-file-earmark-excel me-1"></i> Pilih File Excel</label>
+                        <input type="file" class="form-control bg-secondary text-white border-0" id="excelFile" name="file" accept=".xlsx,.xls" required />
+                        <div class="form-text text-muted small mt-1">Format: <b>Manifesting, Part No, Qty</b>. Max 5MB.</div>
+                    </div>
+                    
+                    <div class="alert alert-info bg-opacity-10 border-info text-info rounded-3 p-2 small m-0 mb-3">
+                        <i class="bi bi-info-circle me-1"></i> Dock, Route, dan Cycle otomatis dari Master Customer. 
+                        <a asp-action="DownloadTemplate" class="text-info fw-bold text-decoration-underline ms-1">Download Template Minimalis</a>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 border-top border-secondary pt-3 mt-2">
+                        <button type="button" class="btn btn-dark px-4" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-warning text-dark px-4 fw-bold shadow-sm">
+                            <i class="bi bi-cloud-upload-fill me-2"></i> Upload & Import
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+
+    <script>
+        $(document).ready(function () {
+            // Status Indicator Element
+            const statusBadge = $('#connectionStatus');
+            
+            function updateStatus(status, color, icon) {
+                if(statusBadge.length) {
+                    statusBadge.removeClass('bg-secondary bg-success bg-danger bg-warning text-dark')
+                              .addClass(color)
+                              .html(`<i class="bi ${icon} me-1"></i> ${status}`);
+                }
+            }
+
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/deliveryHub")
+                .withAutomaticReconnect([0, 2000, 10000, 30000])
+                .configureLogging(signalR.LogLevel.Information)
+                .build();
+
+            connection.on("deliveryUpdated", function (data) {
+                console.log("Prep update received", data);
+                
+                const toastHtml = `
+                    <div class="position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 9999">
+                        <div class="toast show align-items-center text-white bg-success border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
+                            <div class="d-flex">
+                                <div class="toast-body fs-6">
+                                    <i class="bi bi-cloud-download-fill me-2"></i> Data Updated! Reloading...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                $('body').append(toastHtml);
+                setTimeout(() => window.location.reload(), 1500);
+            });
+
+            connection.onreconnecting(error => {
+                updateStatus("Reconnecting...", "bg-warning text-dark", "bi-wifi-off");
+            });
+
+            connection.onreconnected(connectionId => {
+                updateStatus("Live", "bg-success", "bi-wifi");
+            });
+
+            connection.onclose(error => {
+                updateStatus("Offline", "bg-danger", "bi-slash-circle");
+                setTimeout(start, 5000);
+            });
+
+            async function start() {
+                try {
+                    await connection.start();
+                    console.log("Prep SignalR Connected");
+                    updateStatus("Live", "bg-success", "bi-wifi");
+                } catch (err) {
+                    console.error("SignalR Connection Error: ", err);
+                    updateStatus("Error", "bg-danger", "bi-exclamation-triangle");
+                    setTimeout(start, 5000);
+                }
+            };
+
+            start();
+
+            // ============================================
+            // REAL-TIME SEARCH FILTERING
+            // ============================================
+            $('#searchInput').on('keyup', function() {
+                var value = $(this).val().toLowerCase();
+                
+                $('table tbody tr').filter(function() {
+                    $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1);
+                });
+
+                $('.cyber-mobile-card').filter(function() {
+                    $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1);
+                });
+            });
+
+            // ============================================
+            // CUSTOMER DROPDOWN SEARCH (IN MODAL)
+            // ============================================
+            $('#customerSearch').on('keyup', function() {
+                var value = $(this).val().toLowerCase();
+                $('#customerId option').filter(function() {
+                    $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1);
+                });
+                
+                // If search result is only 1, auto-select it or just let user click
+            });
+        });
+    </script>
+}
+
+<style>
+    .cyber-card {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+</style>

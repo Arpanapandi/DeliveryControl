@@ -1,0 +1,549 @@
+@model IEnumerable<DeliveryControl.Models.ViewModels.DriverTripViewModel>
+
+@{
+    ViewData["Title"] = "Portal Driver - Konfirmasi Delivery";
+    var selectedDate = ViewData["SelectedDate"]?.ToString() ?? DateTime.Today.ToString("yyyy-MM-dd");
+    var dayName = ViewData["DayName"]?.ToString() ?? "";
+    var selectedStatus = ViewData["SelectedStatus"]?.ToString() ?? "";
+}
+
+@* Hidden form for anti-forgery token *@
+<form id="hiddenTokenForm" style="display:none;">
+</form>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="bi bi-truck"></i> Portal Driver - Konfirmasi Delivery</h2>
+    </div>
+</div>
+
+<!-- Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form id="filterForm" asp-controller="Driver" asp-action="Index" method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label" for="selectedDate"><i class="bi bi-calendar"></i> Pilih Tanggal</label>
+                <input type="date" 
+                       class="form-control" 
+                       name="selectedDate" 
+                       id="selectedDate"
+                       value="@selectedDate"
+                       onchange="this.form.submit()" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="customerId"><i class="bi bi-building"></i> Nama Customer</label>
+                <select class="form-select" name="customerId" id="customerId" onchange="this.form.submit()">
+                    <option value="">Semua Customer</option>
+                    @if (ViewBag.Customers != null)
+                    {
+                        @foreach (var customer in ViewBag.Customers)
+                        {
+                            var isSelected = ViewData["SelectedCustomerId"]?.ToString() == customer.CustomerId.ToString();
+                            @if (isSelected)
+                            {
+                                <option value="@customer.CustomerId" selected>@customer.CustomerName</option>
+                            }
+                            else
+                            {
+                                <option value="@customer.CustomerId">@customer.CustomerName</option>
+                            }
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" for="routeFilter"><i class="bi bi-signpost"></i> Route</label>
+                <select class="form-select" name="route" id="routeFilter" onchange="this.form.submit()">
+                    @{
+                        var selectedRoute = ViewData["SelectedRoute"]?.ToString() ?? "";
+                        var routes = ViewBag.Routes as List<string> ?? new List<string>();
+                    }
+                    <option value="">Semua Route</option>
+                    @foreach (var r in routes)
+                    {
+                        var isSelectedRoute = string.Equals(selectedRoute, r, StringComparison.OrdinalIgnoreCase);
+                        if (isSelectedRoute)
+                        {
+                            <option value="@r" selected>@r</option>
+                        }
+                        else
+                        {
+                            <option value="@r">@r</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" for="cycleFilter"><i class="bi bi-arrow-repeat"></i> Cycle</label>
+                <select class="form-select" name="cycle" id="cycleFilter" onchange="this.form.submit()">
+                    @{
+                        var selectedCycle = ViewData["SelectedCycle"]?.ToString() ?? "";
+                        var cycles = ViewBag.Cycles as List<string> ?? new List<string>();
+                    }
+                    <option value="">Semua Cycle</option>
+                    @foreach (var cy in cycles)
+                    {
+                        var isSelectedCycle = string.Equals(selectedCycle, cy, StringComparison.OrdinalIgnoreCase);
+                        if (isSelectedCycle)
+                        {
+                            <option value="@cy" selected>@cy</option>
+                        }
+                        else
+                        {
+                            <option value="@cy">@cy</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label"><i class="bi bi-funnel"></i> Status</label>
+                @{
+                    var normStatus = selectedStatus?.Trim();
+
+                    bool isScheduled = string.Equals(normStatus, "Scheduled", StringComparison.OrdinalIgnoreCase);
+                    bool isInProgress = string.Equals(normStatus, "In Progress", StringComparison.OrdinalIgnoreCase);
+                    bool isCompleted = string.Equals(normStatus, "Completed", StringComparison.OrdinalIgnoreCase);
+
+                    var scheduledClass = (isScheduled ? "btn-warning text-dark" : "btn-outline-warning text-warning") + " btn btn-sm flex-fill fw-semibold";
+                    var inProgressClass = (isInProgress ? "btn-info text-dark" : "btn-outline-info text-info") + " btn btn-sm flex-fill fw-semibold";
+                    var completedClass = (isCompleted ? "btn-success" : "btn-outline-success text-success") + " btn btn-sm flex-fill fw-semibold";
+                }
+                <div class="d-flex flex-wrap gap-2 w-100">
+                    <button type="submit"
+                            name="status"
+                            value="Scheduled"
+                            class="@scheduledClass">
+                        Scheduled
+                    </button>
+                    <button type="submit"
+                            name="status"
+                            value="In Progress"
+                            class="@inProgressClass">
+                        Ready To Pickup
+                    </button>
+                    <button type="submit"
+                            name="status"
+                            value="Completed"
+                            class="@completedClass">
+                        Completed
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i> Filter
+                </button>
+            </div>
+            <div class="col-md-2">
+                <a asp-controller="Driver" asp-action="Index" class="btn btn-secondary w-100">
+                    <i class="bi bi-arrow-counterclockwise"></i> Reset
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@{
+    var needAction = ViewBag.NeedActionSchedules as List<DeliveryControl.Models.ViewModels.DriverTripViewModel> ?? new List<DeliveryControl.Models.ViewModels.DriverTripViewModel>();
+    var completed = ViewBag.CompletedSchedules as List<DeliveryControl.Models.ViewModels.DriverTripViewModel> ?? new List<DeliveryControl.Models.ViewModels.DriverTripViewModel>();
+}
+
+<!-- Schedule List -->
+@if (!needAction.Any() && !completed.Any())
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> Tidak ada jadwal delivery untuk tanggal ini.
+    </div>
+}
+else
+{
+    <!-- SECTION: BUTUH AKSI DRIVER -->
+    <div class="mb-3">
+        <h4 class="mb-3">
+            <i class="bi bi-exclamation-circle text-warning"></i> BUTUH AKSI DRIVER
+        </h4>
+
+        @if (!needAction.Any())
+        {
+            <div class="alert alert-success">
+                <i class="bi bi-check-circle"></i> Tidak ada jadwal yang butuh aksi driver.
+            </div>
+        }
+        else
+        {
+            <div class="row">
+                @foreach (var trip in needAction)
+                {
+                    // Gunakan properti DriverStatus di ViewModel
+                    var displayStatus = trip.DriverStatus ?? trip.OverallStatus;
+                    var statusBadge = displayStatus switch
+                    {
+                        "Scheduled" => "bg-warning",
+                        "In Progress" => "bg-info",
+                        "Completed" => "bg-success",
+                        "Cancelled" => "bg-danger",
+                        "Delayed" => "bg-danger",
+                        _ => "bg-secondary"
+                    };
+
+                    var hasArrived = trip.HasArrived;
+                    var hasDeparted = trip.HasDeparted;
+                    
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card h-100 @(hasDeparted ? "border-success" : hasArrived ? "border-info" : "border-warning")">
+                            <div class="card-header @statusBadge text-white">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>TRIP: @trip.Cycle - @trip.Route</strong>
+                                        <div class="dropdown mt-1">
+                                            <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 1px 6px;">
+                                                <i class="bi bi-list-check me-1"></i> MANIFESTS (@trip.Schedules.Count())
+                                            </button>
+                                            <ul class="dropdown-menu shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 180px; z-index: 1051;">
+                                                @foreach (var m in trip.Schedules.OrderBy(x => x.ScheduleNumber))
+                                                {
+                                                    <li><span class="dropdown-item-text py-1 px-3" style="font-size: 0.8rem; border-bottom: 1px solid rgba(0,0,0,0.05);">@m.ScheduleNumber</span></li>
+                                                }
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    <span class="badge bg-white text-dark">@(displayStatus == "Completed" ? "DELIVERED" : (displayStatus == "In Progress" ? "Ready To Pickup" : displayStatus))</span>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <i class="bi bi-building"></i> @(trip.CustomerName)
+                                </h5>
+                                
+                                <!-- INFO TANGGAL DELIVERY/PICKUP -->
+                                @if (trip.PickupTime.HasValue)
+                                {
+                                    var pickupDate = trip.PickupTime.Value.Date;
+                                    var isToday = pickupDate == DateTime.Today;
+                                    var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
+                                    var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
+                                    var badgeColor = isToday ? "bg-success" : (isTomorrow ? "bg-info" : "bg-secondary");
+                                    
+                                    <div class="alert alert-primary py-2 mb-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="mb-0">
+                                                <i class="bi bi-calendar-check"></i> <strong>Tanggal Delivery:</strong>
+                                            </small>
+                                            <span class="badge @badgeColor">
+                                                @dateLabel - @trip.PickupTime.Value.ToString("HH:mm")
+                                            </span>
+                                        </div>
+                                    </div>
+                                }
+                                
+                                <hr />
+                                
+                                <div class="mb-2">
+                                    <small class="text-muted">Cycle:</small>
+                                    <div class="fw-bold" style="font-size: 1.4rem;">
+                                        @trip.Cycle
+                                    </div>
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(trip.Route))
+                                {
+                                    <div class="mb-2">
+                                        <small class="text-muted">Route:</small>
+                                        <div>@trip.Route</div>
+                                    </div>
+                                }
+
+                                @if (!string.IsNullOrWhiteSpace(trip.Area))
+                                {
+                                    <div class="mb-2">
+                                        <small class="text-muted">Area:</small>
+                                        <div><i class="bi bi-geo-alt"></i> @trip.Area</div>
+                                    </div>
+                                }
+                                
+                                <div class="mb-2">
+                                    <small class="text-muted">Manifests:</small>
+                                    <div><strong>@trip.TotalSchedules</strong> Order items</div>
+                                </div>
+
+                                <hr />
+
+                                <!-- Pickup Time + ETD horizontal -->
+                                <div class="row text-center mb-2">
+                                    @if (trip.PickupTime.HasValue)
+                                    {
+                                        <div class="col-6 border-end">
+                                            <small class="text-muted"><i class="bi bi-truck" style="color:#f59e0b;"></i> Pickup Time:</small>
+                                            <div><strong>@trip.PickupTime.Value.ToString("HH:mm")</strong></div>
+                                        </div>
+                                    }
+                                    @if (trip.ETD.HasValue)
+                                    {
+                                        <div class="col-6">
+                                            <small class="text-muted"><i class="bi bi-sign-turn-right" style="color:#f59e0b;"></i> ETD:</small>
+                                            <div><strong>@trip.ETD.Value.ToString("HH:mm")</strong></div>
+                                        </div>
+                                    }
+                                </div>
+
+                                <hr />
+
+                                <!-- Actual Arrival -->
+                                @if (hasArrived && trip.ActualStartTime.HasValue)
+                                {
+                                    <div class="alert alert-info py-2 mb-2">
+                                        <small><i class="bi bi-check-circle"></i> <strong>Kedatangan:</strong></small>
+                                        <div><strong>@trip.ActualStartTime.Value.ToString("HH:mm")</strong></div>
+                                    </div>
+                                }
+
+                                <!-- Actual Departure -->
+                                @if (hasDeparted && trip.ActualEndTime.HasValue)
+                                {
+                                    <div class="alert alert-success py-2 mb-2">
+                                        <small><i class="bi bi-check-circle-fill"></i> <strong>Keberangkatan:</strong></small>
+                                        <div><strong>@trip.ActualEndTime.Value.ToString("HH:mm")</strong></div>
+                                        @{
+                                            var startTime = trip.ActualStartTime ?? trip.ActualEndTime.Value;
+                                            var duration = trip.ActualEndTime.Value - startTime;
+                                            var durationText = duration.TotalHours >= 1 
+                                                ? $"{(int)duration.TotalHours}j {duration.Minutes}m"
+                                                : $"{(int)duration.TotalMinutes}m";
+                                        }
+                                        <small class="text-muted">Durasi: @durationText</small>
+                                    </div>
+                                }
+                            </div>
+                            <div class="card-footer">
+                                @if (!hasArrived)
+                                {
+                                    <!-- Belum konfirmasi kedatangan -->
+                                    <div class="d-grid gap-2">
+                                        <a asp-action="Arrival" asp-route-id="@trip.RepresentativeScheduleId" class="btn btn-warning">
+                                            <i class="bi bi-geo-alt-fill"></i> Konfirmasi Kedatangan
+                                        </a>
+                                        <form asp-action="QuickArrival" asp-route-id="@trip.RepresentativeScheduleId" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-outline-warning btn-sm w-100" 
+                                                    onclick="return confirm('Konfirmasi kedatangan (GROUP) SEKARANG?')">
+                                                <i class="bi bi-lightning-fill"></i> Quick - Tiba Sekarang
+                                            </button>
+                                        </form>
+                                    </div>
+                                }
+                                else if (!hasDeparted)
+                                {
+                                    <!-- Sudah tiba, belum berangkat -->
+                                    <div class="d-grid gap-2">
+                                        <a asp-action="Departure" asp-route-id="@trip.RepresentativeScheduleId" class="btn btn-info">
+                                            <i class="bi bi-arrow-right-circle-fill"></i> Konfirmasi Keberangkatan
+                                        </a>
+                                        <form asp-action="QuickDeparture" asp-route-id="@trip.RepresentativeScheduleId" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-outline-info btn-sm w-100" 
+                                                    onclick="return confirm('Konfirmasi keberangkatan (GROUP) SEKARANG?')">
+                                                <i class="bi bi-lightning-fill"></i> Quick - Berangkat Sekarang
+                                            </button>
+                                        </form>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <!-- Sudah selesai -->
+                                    <div class="d-grid">
+                                        <button class="btn btn-success disabled">
+                                            <i class="bi bi-check-circle-fill"></i> Selesai
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <hr class="my-4" />
+
+    <!-- SECTION: SUDAH SELESAI / TIDAK PERLU AKSI -->
+    <div class="mb-3">
+        <h4 class="mb-3">
+            <i class="bi bi-check2-circle text-success"></i> SUDAH SELESAI / TIDAK PERLU AKSI
+        </h4>
+
+        @if (!completed.Any())
+        {
+            <div class="alert alert-secondary">
+                <i class="bi bi-info-circle"></i> Belum ada jadwal yang selesai.
+            </div>
+        }
+        else
+        {
+            <div class="row">
+                @foreach (var trip in completed)
+                {
+                    // Gunakan properti DriverStatus di ViewModel
+                    var displayStatus = trip.DriverStatus ?? trip.OverallStatus;
+                    var statusBadge = displayStatus switch
+                    {
+                        "Scheduled" => "bg-warning",
+                        "In Progress" => "bg-info",
+                        "Completed" => "bg-success",
+                        "Cancelled" => "bg-danger",
+                        "Delayed" => "bg-danger",
+                        _ => "bg-secondary"
+                    };
+
+                    var hasArrived = trip.HasArrived;
+                    var hasDeparted = trip.HasDeparted;
+                    
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card h-100 @(hasDeparted ? "border-success" : hasArrived ? "border-info" : "border-warning")">
+                            <div class="card-header @statusBadge text-white">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>TRIP: @trip.Cycle - @trip.Route</strong>
+                                        <div class="dropdown mt-1">
+                                            <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 1px 6px;">
+                                                <i class="bi bi-list-check me-1"></i> MANIFESTS (@trip.Schedules.Count())
+                                            </button>
+                                            <ul class="dropdown-menu shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 180px; z-index: 1051;">
+                                                @foreach (var m in trip.Schedules.OrderBy(x => x.ScheduleNumber))
+                                                {
+                                                    <li><span class="dropdown-item-text py-1 px-3" style="font-size: 0.8rem; border-bottom: 1px solid rgba(0,0,0,0.05);">@m.ScheduleNumber</span></li>
+                                                }
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    <span class="badge bg-white text-dark">@(displayStatus == "Completed" ? "DELIVERED" : (displayStatus == "In Progress" ? "Ready To Pickup" : displayStatus))</span>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <i class="bi bi-building"></i> @(trip.CustomerName)
+                                </h5>
+                                
+                                <!-- INFO TANGGAL DELIVERY/PICKUP -->
+                                @if (trip.PickupTime.HasValue)
+                                {
+                                    var pickupDate = trip.PickupTime.Value.Date;
+                                    var isToday = pickupDate == DateTime.Today;
+                                    var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
+                                    var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
+                                    var badgeColor = isToday ? "bg-success" : (isTomorrow ? "bg-info" : "bg-secondary");
+                                    
+                                    <div class="alert alert-primary py-2 mb-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="mb-0">
+                                                <i class="bi bi-calendar-check"></i> <strong>Tanggal Delivery:</strong>
+                                            </small>
+                                            <span class="badge @badgeColor">
+                                                @dateLabel - @trip.PickupTime.Value.ToString("HH:mm")
+                                            </span>
+                                        </div>
+                                    </div>
+                                }
+                                
+                                <hr />
+                                
+                                <div class="mb-2">
+                                    <small class="text-muted">Cycle:</small>
+                                    <div class="fw-bold" style="font-size: 1.4rem;">
+                                        @trip.Cycle
+                                    </div>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(trip.Route))
+                                {
+                                    <div class="mb-2">
+                                        <small class="text-muted">Route:</small>
+                                        <div>@trip.Route</div>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(trip.Area))
+                                {
+                                    <div class="mb-2">
+                                        <small class="text-muted">Area:</small>
+                                        <div><i class="bi bi-geo-alt"></i> @trip.Area</div>
+                                    </div>
+                                }
+                                <div class="mb-2">
+                                    <small class="text-muted">Manifests:</small>
+                                    <div><strong>@trip.TotalSchedules</strong> Order items</div>
+                                </div>
+                                <hr />
+
+                                <!-- Pickup Time -->
+                                @if (trip.PickupTime.HasValue)
+                                {
+                                    <div class="mb-2">
+                                        <small class="text-muted"><i class="bi bi-clock"></i> Pickup Time (Target):</small>
+                                        <div><strong>@trip.PickupTime.Value.ToString("HH:mm")</strong></div>
+                                    </div>
+                                }
+
+                                <hr />
+
+                                <!-- Actual Arrival -->
+                                @if (hasArrived && trip.ActualStartTime.HasValue)
+                                {
+                                    <div class="alert alert-info py-2 mb-2">
+                                        <small><i class="bi bi-check-circle"></i> <strong>Kedatangan:</strong></small>
+                                        <div><strong>@trip.ActualStartTime.Value.ToString("HH:mm")</strong></div>
+                                    </div>
+                                }
+
+                                <!-- Actual Departure -->
+                                @if (hasDeparted && trip.ActualEndTime.HasValue)
+                                {
+                                    <div class="alert alert-success py-2 mb-2">
+                                        <small><i class="bi bi-check-circle-fill"></i> <strong>Keberangkatan:</strong></small>
+                                        <div><strong>@trip.ActualEndTime.Value.ToString("HH:mm")</strong></div>
+                                        @{
+                                            var startTime = trip.ActualStartTime ?? trip.ActualEndTime.Value;
+                                            var duration = trip.ActualEndTime.Value - startTime;
+                                            var durationText = duration.TotalHours >= 1 
+                                                ? $"{(int)duration.TotalHours}j {duration.Minutes}m"
+                                                : $"{(int)duration.TotalMinutes}m";
+                                        }
+                                        <small class="text-muted">Durasi: @durationText</small>
+                                    </div>
+                                }
+                            </div>
+                            <div class="card-footer">
+                                <!-- Group Selesai (Read Only) -->
+                                <button class="btn btn-outline-secondary w-100 disabled">Trip Completed</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@section Scripts {
+    <script>
+        // Pastikan form submit dengan benar dan mempertahankan nilai
+        document.addEventListener('DOMContentLoaded', function() {
+            var filterForm = document.getElementById('filterForm');
+            
+            if (filterForm) {
+                // Form automatic submission for other inputs is already handled by inline onchange
+                console.log('Driver Portal Filter Form initialized');
+            }
+        });
+
+        // Auto refresh setiap 60 detik
+        setTimeout(function() {
+            location.reload();
+        }, 60000);
+        
+        // Highlight waktu real-time
+        setInterval(function() {
+            var now = new Date();
+            var timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            document.title = timeStr + ' - Portal Driver';
+        }, 1000);
+    </script>
+}

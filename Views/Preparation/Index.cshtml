@@ -1,0 +1,629 @@
+@model IEnumerable<DeliveryControl.Models.ViewModels.DriverTripViewModel>
+
+@{
+    ViewData["Title"] = "Portal Preparation - Overview Detail";
+    var selectedDate = ViewData["SelectedDate"]?.ToString() ?? DateTime.Today.ToString("yyyy-MM-dd");
+    var dayName = ViewData["DayName"]?.ToString() ?? "";
+}
+
+<style>
+    :root {
+        --cyber-yellow: #facc15;
+        --cyber-bg: #0f172a;
+        --cyber-card-bg: #1e293b;
+        --cyber-header-bg: #1e293b;
+        --cyber-border: #334155;
+        --cyber-text-muted: #94a3b8;
+    }
+
+    body {
+        background-color: var(--cyber-bg);
+        color: white;
+    }
+
+    .gallery-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1.5rem;
+        padding: 1rem 0;
+    }
+
+    .prep-card {
+        background: var(--cyber-card-bg);
+        border: 2px solid var(--cyber-border);
+        border-radius: 16px;
+        overflow: hidden;
+        transition: transform 0.2s, box-shadow 0.2s;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        cursor: pointer;
+    }
+
+    .prep-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 0 20px rgba(250, 204, 21, 0.2);
+    }
+
+    .prep-card.border-warning { border-color: var(--cyber-yellow) !important; }
+    .prep-card.border-orange { border-color: #f97316 !important; }
+    .prep-card.border-info { border-color: #3b82f6 !important; }
+    .prep-card.border-success { border-color: #10b981 !important; }
+
+    .prep-card-header {
+        padding: 12px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 800;
+        font-size: 1.1rem;
+    }
+
+    .header-scheduled { background: var(--cyber-yellow); color: #000; }
+    .header-preparing { background: #f97316; color: white; }
+    .header-prepared { background: #3b82f6; color: white; }
+    .header-completed { background: #10b981; color: white; }
+
+    .prep-card-body {
+        padding: 24px;
+        flex-grow: 1;
+        color: white;
+    }
+
+    .customer-name {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        text-transform: uppercase;
+    }
+
+    .delivery-banner {
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 20px;
+    }
+
+    .cycle-label {
+        font-size: 0.85rem;
+        color: var(--cyber-text-muted);
+        text-transform: uppercase;
+        margin-bottom: 4px;
+    }
+
+    .cycle-value {
+        font-size: 1.8rem;
+        font-weight: 800;
+        line-height: 1.2;
+        margin-bottom: 15px;
+    }
+
+    .detail-row {
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 15px;
+    }
+
+    .detail-label {
+        color: var(--cyber-text-muted);
+        font-size: 0.85rem;
+        margin-bottom: 2px;
+    }
+
+    .detail-value {
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+
+    .icon-spacing {
+        width: 24px;
+        display: inline-block;
+        text-align: center;
+        margin-right: 8px;
+        color: var(--cyber-yellow);
+    }
+
+    .prep-card-footer {
+        padding: 20px;
+        background: rgba(0,0,0,0.25);
+        border-top: 1px solid var(--cyber-border);
+    }
+
+    .badge-status {
+        background: white;
+        color: #1e293b;
+        padding: 4px 12px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        font-weight: 800;
+    }
+
+    .card-items-list {
+        margin-top: 20px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        padding-top: 15px;
+    }
+
+    .card-item-progress {
+        margin-bottom: 12px;
+    }
+
+    .item-info {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        margin-bottom: 4px;
+    }
+
+    .item-vin {
+        color: var(--cyber-yellow);
+        font-weight: 600;
+    }
+
+    .item-progress-val {
+        font-weight: 700;
+    }
+
+    .progress-mini {
+        height: 8px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 4px;
+    }
+
+    .filter-bar {
+        background: var(--cyber-card-bg);
+        border: 1px solid var(--cyber-border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .cyber-input {
+        background: rgba(15, 23, 42, 0.6) !important;
+        border: 1px solid var(--cyber-border) !important;
+        color: white !important;
+    }
+
+    @@keyframes glow-pulse {
+        0% { box-shadow: 0 0 5px var(--cyber-yellow); border-color: var(--cyber-yellow); }
+        50% { box-shadow: 0 0 25px var(--cyber-yellow); border-color: #fff; transform: scale(1.02); }
+        100% { box-shadow: 0 0 5px var(--cyber-yellow); border-color: var(--cyber-yellow); }
+    }
+
+    .glow-active {
+        animation: glow-pulse 1.5s infinite;
+        z-index: 100;
+        border-color: var(--cyber-yellow) !important;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <!-- ... header content ... -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="text-white fw-bold mb-1"><i class="bi bi-box-seam me-2 text-warning"></i> Portal Preparation</h2>
+        </div>
+        <div class="text-end">
+            <h5 class="text-yellow mb-0">@dayName</h5>
+            <small class="text-white-50">@DateTime.Now.ToString("HH:mm:ss")</small>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar shadow-sm">
+        <form asp-action="Index" method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label text-white-50 small fw-bold">PILIH TANGGAL</label>
+                <input type="date" name="selectedDate" value="@selectedDate" class="form-control cyber-input" onchange="this.form.submit()" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label text-white-50 small fw-bold">CUSTOMER</label>
+                <select name="customerId" class="form-select cyber-input" onchange="this.form.submit()">
+                    <option value="">Semua Customer</option>
+                    @if (ViewBag.Customers != null)
+                    {
+                        foreach (var c in ViewBag.Customers)
+                        {
+                            bool isSel = ViewData["SelectedCustomerId"]?.ToString() == c.CustomerId.ToString();
+                            <option value="@c.CustomerId" selected="@isSel">@c.CustomerName</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label text-white-50 small fw-bold">CYCLE</label>
+                <select name="cycle" class="form-select cyber-input" onchange="this.form.submit()">
+                    <option value="">Semua</option>
+                    @if (ViewBag.Cycles != null)
+                    {
+                        foreach (var cy in ViewBag.Cycles)
+                    {
+                            bool isSel = ViewData["SelectedCycle"]?.ToString() == cy;
+                            <option value="@cy" selected="@isSel">@cy</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-2 offset-md-2 d-flex gap-2">
+                <a asp-action="Index" class="btn btn-secondary flex-grow-1">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    @if (!Model.Any())
+    {
+        <div class="alert bg-dark border-secondary text-info">
+            <i class="bi bi-info-circle me-2"></i> Tidak ada jadwal yang ditemukan untuk kriteria ini.
+        </div>
+    }
+    else
+    {
+        var activeTrips    = Model.Where(t => t.OverallStatus != "Completed").ToList();
+        var completedTrips = Model.Where(t => t.OverallStatus == "Completed").ToList();
+
+        @* ── AKTIF ── *@
+        @if (activeTrips.Any())
+        {
+            <div class="d-flex align-items-center mb-3 gap-2">
+                <i class="bi bi-lightning-charge-fill text-warning fs-5"></i>
+                <span class="fw-bold text-white-50 small" style="letter-spacing: 1px;">BUTUH AKSI PREPARATION</span>
+                <span class="badge bg-warning text-dark ms-1">@activeTrips.Count</span>
+            </div>
+            <div class="gallery-grid mb-5">
+                @foreach (var trip in activeTrips)
+                {
+                    var firstSch = trip.Schedules.FirstOrDefault();
+                    if (firstSch == null) continue;
+
+                    var isCompleted  = trip.OverallStatus == "Completed";
+                    var isPrepared   = trip.OverallStatus == "Prepared";
+                    var isInProgress = trip.OverallStatus == "In Progress";
+                    var isScheduled  = trip.OverallStatus == "Scheduled";
+
+                    var headerClass = "header-scheduled";
+                    var borderClass = "border-warning";
+                    if (isInProgress) { headerClass = "header-preparing"; borderClass = "border-orange"; }
+                    else if (isPrepared) { headerClass = "header-prepared"; borderClass = "border-info"; }
+                    else if (isCompleted) { headerClass = "header-completed"; borderClass = "border-success"; }
+
+                    <div class="prep-card @borderClass"
+                         id="card-@trip.RepresentativeScheduleId"
+                         data-schedule-number="@if(firstSch != null){<text>@firstSch.ScheduleNumber</text>}"
+                         data-date="@(trip.PickupTime?.ToString("yyyy-MM-dd") ?? (firstSch?.ScheduledDate.ToString("yyyy-MM-dd"))) ">
+
+                        <div class="prep-card-header @headerClass">
+                                @{
+                                    var manifestGroups = trip.Schedules
+                                        .GroupBy(s => {
+                                            var sn = s.ScheduleNumber ?? "";
+                                            return sn.Contains("/") ? sn.Substring(0, sn.IndexOf('/')).Trim().ToUpper() : sn.Trim().ToUpper();
+                                        })
+                                        .OrderBy(g => g.Key)
+                                        .ToList();
+                                }
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 2px 8px;">
+                                        <i class="bi bi-list-check me-1"></i> MANIFESTS (@manifestGroups.Count)
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 220px; z-index: 1050;">
+                                        @foreach (var mg in manifestGroups)
+                                        {
+                                            double mKanbanTarget = 0; double mKanbanActual = 0;
+                                            foreach (var m in mg)
+                                            {
+                                                if (m.DeliveryItems != null)
+                                                {
+                                                    foreach (var di in m.DeliveryItems)
+                                                    {
+                                                        var qpc = di.Item?.QtyLot ?? 1;
+                                                        if (qpc > 0) { mKanbanTarget += Math.Ceiling((double)di.Quantity / qpc); mKanbanActual += (double)(di.ActualQuantity ?? 0) / qpc; }
+                                                    }
+                                                }
+                                            }
+                                            var isMComplete = mKanbanActual >= mKanbanTarget && mKanbanTarget > 0;
+                                            <li>
+                                                <div class="dropdown-item-text py-2 px-3 d-flex justify-content-between align-items-center" style="font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                                    <span class="fw-bold @(isMComplete ? "text-success" : "")">@mg.Key</span>
+                                                    <span class="badge @(isMComplete ? "bg-success" : (mKanbanActual > 0 ? "bg-warning text-dark" : "bg-secondary")) ms-2" style="font-family: 'Courier New', monospace;">
+                                                        @mKanbanActual.ToString("0.##")/@mKanbanTarget.ToString("0.##")
+                                                    </span>
+                                                </div>
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+
+                            <span class="badge-status ms-2">@(trip.OverallStatus == "Completed" ? "PREPARED" : trip.OverallStatus.ToUpper())</span>
+                        </div>
+
+                        <div class="prep-card-body">
+                            <div class="customer-name mb-1"><i class="bi bi-building"></i> @trip.CustomerName</div>
+                            @if (trip.PickupTime.HasValue)
+                            {
+                                var pickupDate = trip.PickupTime.Value.Date;
+                                var isToday = pickupDate == DateTime.Today;
+                                var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
+                                var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
+                                var badgeColor = isToday ? "bg-success" : (isTomorrow ? "bg-info" : "bg-secondary");
+                                <div class="delivery-banner">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small class="text-white-50"><i class="bi bi-calendar-check me-1"></i> <strong>Tanggal Delivery:</strong></small>
+                                        <span class="badge @badgeColor">@dateLabel - @trip.PickupTime.Value.ToString("HH:mm")</span>
+                                    </div>
+                                </div>
+                            }
+                            <div class="mb-3"><div class="cycle-label">Cycle:</div><div class="cycle-value">@trip.Cycle</div></div>
+                            <div class="detail-row"><div class="detail-label">Route:</div><div class="detail-value text-info fw-bold">@trip.Route</div></div>
+                            <div class="detail-row"><div class="detail-label">Area:</div><div class="detail-value"><i class="bi bi-geo-alt-fill icon-spacing"></i>@trip.Area</div></div>
+                            <hr class="border-secondary opacity-25">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="detail-row mb-0">
+                                        <div class="detail-label"><i class="bi bi-box-arrow-in-right icon-spacing"></i>Enter Dock:</div>
+                                        <div class="detail-value">@(trip.Schedules.Any(s => s.ActualEnterDockTime.HasValue) ? trip.Schedules.First(s => s.ActualEnterDockTime.HasValue).ActualEnterDockTime?.ToString("HH:mm") : (trip.Schedules.FirstOrDefault()?.EnterDockTime?.ToString("HH:mm") ?? "-"))</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="detail-row mb-0">
+                                        <div class="detail-label"><i class="bi bi-truck icon-spacing"></i>Pickup Time:</div>
+                                        <div class="detail-value">@(trip.PickupTime?.ToString("HH:mm") ?? "-")</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="prep-card-footer">
+                            @if (trip.OverallStatus == "Scheduled")
+                            {
+                                <div class="text-center text-white-50"><small><i class="bi bi-clock me-1"></i> WAITING FOR SCAN</small></div>
+                            }
+                            else if (trip.OverallStatus == "In Progress")
+                            {
+                                <div class="text-center text-orange"><small><i class="bi bi-person-walking me-1"></i> PREPARATION IN PROGRESS</small></div>
+                            }
+                            else if (trip.OverallStatus == "Prepared")
+                            {
+                                <form asp-action="QuickEnterDock" method="post">
+                                    <input type="hidden" name="id" value="@trip.RepresentativeScheduleId" />
+                                    <button type="submit" class="btn btn-info w-100 fw-bold py-3 text-white"><i class="bi bi-check-circle-fill me-2"></i> ENTER DOCK</button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        @* ── COMPLETED ── *@
+        @if (completedTrips.Any())
+        {
+            <div class="d-flex align-items-center mb-3 gap-2" style="border-top: 2px solid rgba(16,185,129,0.35); padding-top: 1.5rem;">
+                <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                <span class="fw-bold text-success small" style="letter-spacing: 1px;">SUDAH SELESAI / TIDAK PERLU AKSI</span>
+                <span class="badge bg-success ms-1">@completedTrips.Count</span>
+            </div>
+            <div class="gallery-grid" style="opacity: 0.72;">
+                @foreach (var trip in completedTrips)
+                {
+                    var firstSch = trip.Schedules.FirstOrDefault();
+                    if (firstSch == null) continue;
+
+                    <div class="prep-card border-success"
+                         id="card-@trip.RepresentativeScheduleId"
+                         data-schedule-number="@if(firstSch != null){<text>@firstSch.ScheduleNumber</text>}"
+                         data-date="@(trip.PickupTime?.ToString("yyyy-MM-dd") ?? (firstSch?.ScheduledDate.ToString("yyyy-MM-dd"))) ">
+
+                        <div class="prep-card-header header-completed">
+                                @{
+                                    var manifestGroupsC = trip.Schedules
+                                        .GroupBy(s => {
+                                            var sn = s.ScheduleNumber ?? "";
+                                            return sn.Contains("/") ? sn.Substring(0, sn.IndexOf('/')).Trim().ToUpper() : sn.Trim().ToUpper();
+                                        })
+                                        .OrderBy(g => g.Key)
+                                        .ToList();
+                                }
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 2px 8px;">
+                                        <i class="bi bi-list-check me-1"></i> MANIFESTS (@manifestGroupsC.Count)
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 220px; z-index: 1050;">
+                                        @foreach (var mg in manifestGroupsC)
+                                        {
+                                            double mKanbanTarget = 0; double mKanbanActual = 0;
+                                            foreach (var m in mg)
+                                            {
+                                                if (m.DeliveryItems != null)
+                                                {
+                                                    foreach (var di in m.DeliveryItems)
+                                                    {
+                                                        var qpc = di.Item?.QtyLot ?? 1;
+                                                        if (qpc > 0) { mKanbanTarget += Math.Ceiling((double)di.Quantity / qpc); mKanbanActual += (double)(di.ActualQuantity ?? 0) / qpc; }
+                                                    }
+                                                }
+                                            }
+                                            var isMComplete = mKanbanActual >= mKanbanTarget && mKanbanTarget > 0;
+                                            <li>
+                                                <div class="dropdown-item-text py-2 px-3 d-flex justify-content-between align-items-center" style="font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                                    <span class="fw-bold text-success">@mg.Key</span>
+                                                    <span class="badge bg-success ms-2" style="font-family: 'Courier New', monospace;">
+                                                        @mKanbanActual.ToString("0.##")/@mKanbanTarget.ToString("0.##")
+                                                    </span>
+                                                </div>
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+
+                            <span class="badge-status ms-2">PREPARED</span>
+                        </div>
+
+                        <div class="prep-card-body">
+                            <div class="customer-name mb-1"><i class="bi bi-building"></i> @trip.CustomerName</div>
+                            @if (trip.PickupTime.HasValue)
+                            {
+                                var pickupDate = trip.PickupTime.Value.Date;
+                                var isToday = pickupDate == DateTime.Today;
+                                var isTomorrow = pickupDate == DateTime.Today.AddDays(1);
+                                var dateLabel = isToday ? "HARI INI" : (isTomorrow ? "BESOK" : pickupDate.ToString("dd/MM/yyyy"));
+                                var badgeColor = isToday ? "bg-success" : (isTomorrow ? "bg-info" : "bg-secondary");
+                                <div class="delivery-banner">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small class="text-white-50"><i class="bi bi-calendar-check me-1"></i> <strong>Tanggal Delivery:</strong></small>
+                                        <span class="badge @badgeColor">@dateLabel - @trip.PickupTime.Value.ToString("HH:mm")</span>
+                                    </div>
+                                </div>
+                            }
+                            <div class="mb-3"><div class="cycle-label">Cycle:</div><div class="cycle-value">@trip.Cycle</div></div>
+                            <div class="detail-row"><div class="detail-label">Route:</div><div class="detail-value text-info fw-bold">@trip.Route</div></div>
+                            <div class="detail-row"><div class="detail-label">Area:</div><div class="detail-value"><i class="bi bi-geo-alt-fill icon-spacing"></i>@trip.Area</div></div>
+                            <hr class="border-secondary opacity-25">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="detail-row mb-0">
+                                        <div class="detail-label"><i class="bi bi-box-arrow-in-right icon-spacing"></i>Enter Dock:</div>
+                                        <div class="detail-value">@(trip.Schedules.Any(s => s.ActualEnterDockTime.HasValue) ? trip.Schedules.First(s => s.ActualEnterDockTime.HasValue).ActualEnterDockTime?.ToString("HH:mm") : (trip.Schedules.FirstOrDefault()?.EnterDockTime?.ToString("HH:mm") ?? "-"))</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="detail-row mb-0">
+                                        <div class="detail-label"><i class="bi bi-truck icon-spacing"></i>Pickup Time:</div>
+                                        <div class="detail-value">@(trip.PickupTime?.ToString("HH:mm") ?? "-")</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="prep-card-footer">
+                            <div class="text-center">
+                                <span class="badge bg-success w-100 py-3" style="font-size: 0.9rem; border-radius: 8px;">
+                                    @{
+                                        var compTime = trip.Schedules.FirstOrDefault(s => s.ActualEnterDockTime.HasValue)?.ActualEnterDockTime
+                                                      ?? trip.Schedules.FirstOrDefault(s => s.ReadyToDockTime.HasValue)?.ReadyToDockTime;
+                                    }
+                                    <i class="bi bi-check-circle-fill me-2"></i> PREPARED@(compTime.HasValue ? ": " + compTime.Value.ToString("HH:mm") : "")
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+
+
+</div>
+
+@section Scripts {
+    <script src="~/lib/signalr.min.js"></script>
+    <script>
+        // SignalR Connection
+        var connection = new signalR.HubConnectionBuilder().withUrl("/deliveryHub").build();
+
+        connection.on("deliveryUpdated", function (data) {
+            console.log("Update received:", data);
+            
+            // Use camelCase for data properties
+            var action = data.action;
+            var scheduleNum = data.scheduleNumber;
+
+            if (action === "preparation" && scheduleNum) {
+                var selector = `.prep-card[data-schedule-number='${scheduleNum}']`;
+                var card = document.querySelector(selector);
+                
+                if (card) {
+                    // Update UI Elements directly
+                    updateCardUI(card, data);
+
+                    // 2. Move to Top
+                    var container = document.querySelector('.gallery-grid');
+                    if (container) container.prepend(card);
+                    
+                    // 3. Glow Effect
+                    card.classList.remove('glow-active');
+                    void card.offsetWidth;
+                    card.classList.add('glow-active');
+                    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    setTimeout(() => card.classList.remove('glow-active'), 10000);
+
+                } else {
+                    // Card not found (maybe new?), reload filtering might be needed but try not to disrupt
+                    // location.reload(); 
+                }
+            } else if (action === "enterDock" || action === "readyToDock") {
+                 // specific logic for enter dock / ready to dock (full reload to refresh buttons)
+                 location.reload();
+            }
+        });
+
+        function updateCardUI(card, data) {
+            // Update Header Color & Text
+            var header = card.querySelector('.prep-card-header');
+            if (header) {
+                var status = data.status || data.Status;
+                var prepStatus = data.preparationStatus || data.PreparationStatus;
+                
+                header.classList.remove('header-scheduled', 'header-preparing', 'header-prepared', 'header-completed');
+                card.classList.remove('border-warning', 'border-orange', 'border-info', 'border-success');
+                
+                var badge = header.querySelector('.badge-status');
+
+                if (status === "Completed") {
+                    header.classList.add('header-completed');
+                    card.classList.add('border-success');
+                    if(badge) badge.innerText = "PREPARED";
+                } else if (prepStatus === "Prepared") {
+                    header.classList.add('header-prepared');
+                    card.classList.add('border-info');
+                    if(badge) badge.innerText = "PREPARED";
+                } else if (status === "In Progress" || prepStatus === "In Progress" || status === "Preparing" || prepStatus === "Preparing") {
+                    header.classList.add('header-preparing');
+                    card.classList.add('border-orange');
+                    if(badge) badge.innerText = "IN PROGRESS";
+                } else {
+                    header.classList.add('header-scheduled');
+                    card.classList.add('border-warning');
+                    if(badge) badge.innerText = "SCHEDULED";
+                }
+            }
+
+            // Note: Individual Item Progress update removed for performance and cleaner UI.
+            // Full reload is safer when Kanban agregat updates via SignalR.
+            if ((data.items || data.Items) && action === "preparation") {
+                // location.reload(); // Uncomment if real-time item aggregation update is needed
+            }
+        }
+
+        connection.start().catch(function (err) {
+            return console.error(err.toString());
+        });
+
+        // Card Click Redirection
+        document.querySelectorAll('.prep-card').forEach(card => {
+            card.addEventListener('click', function(e) {
+                // Jangan redirect jika klik pada tombol atau elemen interaktif lain
+                if (e.target.closest('button, a, input, select')) return;
+                
+                const date = this.getAttribute('data-date');
+                const scheduleNum = this.getAttribute('data-schedule-number');
+                
+                if (date) {
+                    let url = `/PreparationWorkflow/Index?filterDate=${date.trim()}`;
+                    if (scheduleNum) {
+                        url += `&vin=${scheduleNum.trim()}`;
+                    }
+                    window.location.href = url;
+                }
+            });
+        });
+
+        // Remove auto-reload to keep state stable
+        // setTimeout(function() { location.reload(); }, 60000);
+    </script>
+}

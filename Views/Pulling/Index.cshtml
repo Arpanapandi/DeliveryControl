@@ -1,0 +1,807 @@
+@{
+    ViewData["Title"] = "Pulling Process";
+}
+
+<div class="row mb-4">
+    <div class="col-12 text-center">
+        <h2 class="mb-1"><i class="bi bi-arrow-down-square text-primary"></i> Pulling Finish Good</h2>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <!-- Single Full-Width Card -->
+    <div class="col-12">
+        <div class="cyber-card p-4">
+            <h5 class="mb-4 fw-bold border-bottom pb-2"><i class="bi bi-pencil-square me-2"></i> Form Input Pulling</h5>
+            
+            <div class="mx-auto">
+                <!-- 1. Identifikasi Produk (Tag & Label) -->
+                <div class="mb-4">
+                    <!-- Tag Input Group -->
+                    <div class="mb-4">
+                    <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input VIN (TAG MASTER) <span class="text-danger">*</span></label>
+                        <div class="custom-cyber-input-group" id="tagGroup">
+                            <div class="input-icon-left">
+                                <i class="bi bi-tag-fill"></i>
+                            </div>
+                            <input type="text" class="form-control cyber-field" id="tagInput" placeholder="Scan VIN..." readonly>
+                            <button type="button" class="btn-scan-trigger" data-target="tagInput" title="Start Scanning">
+                                <i class="bi bi-qr-code-scan"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    @* 
+                    <!-- Part Detail Card (Hidden by default) -->
+                    <div id="partDetailContainer" style="display: none;" class="mb-4">
+                        <div class="card bg-dark bg-opacity-50 border-primary border-opacity-25 rounded-3">
+                            <div class="card-body p-3">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <h6 class="text-primary fw-bold mb-0"><i class="bi bi-info-circle-fill me-2"></i> PART DETAIL</h6>
+                                    <span id="badgeStatus" class="badge rounded-pill">Status: -</span>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="detail-item">
+                                            <span class="label">Lokasi Rack</span>
+                                            <span class="value" id="valLocation">-</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Prod. Plant</span>
+                                            <span class="value" id="valPlant">-</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Rak / No Rak</span>
+                                            <span class="value" id="valRackInfo">-</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Customer</span>
+                                            <span class="value" id="valCustomer">-</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="detail-item">
+                                            <span class="label">Prod (Category)</span>
+                                            <span class="value" id="valCategory">-</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">VIN / QPC (Lot)</span>
+                                            <span class="value" id="valVinQpc">-</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Stock Limits (MIN/ROP/MAX)</span>
+                                            <span class="value" id="valLimits">-</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Current Stock</span>
+                                            <span class="value fw-bold text-info" id="valCurrentStock">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    *@
+
+                    <!-- Label Input Group -->
+                    <div class="mb-4">
+                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input Label (Unique) <span class="text-danger">*</span></label>
+                        <div class="custom-cyber-input-group" id="labelGroup">
+                            <div class="input-icon-left">
+                                <i class="bi bi-upc-scan"></i>
+                            </div>
+                            <input type="text" class="form-control cyber-field" id="labelInput" placeholder="Scan Label unik..." disabled readonly>
+                            <button type="button" class="btn-scan-trigger" data-target="labelInput" title="Start Scanning" disabled>
+                                <i class="bi bi-qr-code-scan"></i>
+                            </button>
+                        </div>
+                        <small class="text-warning mt-1 d-block" id="labelHint" style="display: none;"><i class="bi bi-check2-circle"></i> Tag valid! Silakan scan Label.</small>
+                    </div>
+
+                </div>
+
+                <div class="mt-5" style="display:none;">
+                    <button type="button" class="btn btn-neon-success w-100 py-2 shadow-lg fs-5" id="btnSavePulling">
+                        <i class="bi bi-cloud-arrow-up-fill me-2"></i> SIMPAN DATA PULLING
+                    </button>
+                    <div id="autoSaveIndicator" class="text-center text-info mt-2">
+                        <span class="spinner-border spinner-border-sm me-2"></span>Menyimpan Data Otomatis...
+                    </div>
+                </div>
+
+                <!-- Toast Notification Helper -->
+                <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100">
+                    <div id="scannerToast" class="toast hide align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                        <div class="d-flex">
+                            <div class="toast-body" id="scannerToastBody">
+                                Message here
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Modals {
+    <!-- Scanner Modal -->
+    <div class="modal fade" id="scannerModal" tabindex="-1" aria-labelledby="scannerModalLabel" aria-hidden="false" data-bs-backdrop="static" style="z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-darker-card border-primary border-opacity-50 shadow-lg">
+                <div class="modal-header border-bottom border-primary border-opacity-25 bg-dark">
+                    <h6 class="modal-title text-white" id="scannerModalLabel">
+                        <i class="bi bi-camera-fill me-2 text-primary"></i>
+                        <span id="currentScanningField">Scanning...</span>
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" id="btnStopScanner"></button>
+                </div>
+                <div class="modal-body p-0 position-relative overflow-hidden" style="height: 400px; background: #000;">
+                    <div id="reader" style="width: 100%; height: 100%;"></div>
+                    <div class="scanner-overlay">
+                        <div class="bounding-box">
+                            <div class="scan-line"></div>
+                            <div class="corner-tl"></div>
+                            <div class="corner-tr"></div>
+                            <div class="corner-bl"></div>
+                            <div class="corner-br"></div>
+                        </div>
+                        <div class="scanner-tip" id="scanner-status">Mencari Barcode / QR... (v7)</div>
+                        <button type="button" class="btn btn-sm btn-primary mt-3 px-3 py-1 rounded-pill" id="btnRestartCamera" style="pointer-events: auto; position: relative; z-index: 30;">
+                            <i class="bi bi-arrow-clockwise me-1"></i> RESTART KAMERA
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-primary border-opacity-25 bg-dark justify-content-center py-2">
+                    <button type="button" class="btn btn-outline-light btn-sm px-4" data-bs-dismiss="modal">BATAL</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+@section Scripts {
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            // Toast Helper Function
+            function showScannerToast(message, type = 'primary') {
+                const $toast = $('#scannerToast');
+                if (!$toast.length) return;
+                $toast.removeClass('bg-primary bg-success bg-danger bg-warning');
+                $toast.addClass('bg-' + type);
+                $('#scannerToastBody').text(message);
+                const toast = new bootstrap.Toast($toast[0], { delay: 3000 });
+                toast.show();
+            }
+
+            function normalizeVin(vin) {
+                if (!vin) return "";
+                let normalized = vin.trim().toUpperCase();
+                if (normalized.endsWith("X")) normalized = normalized.slice(0, -1);
+                if (normalized.endsWith("LB")) normalized = normalized.slice(0, -2);
+                if (normalized.startsWith("LB")) normalized = normalized.slice(2);
+                return normalized;
+            }
+
+            let activeInputId = null;
+
+            // Modal handling
+            const scannerModalElement = document.getElementById('scannerModal');
+            const scannerModal = new bootstrap.Modal(scannerModalElement);
+            
+            // Scanner implementation using Html5Qrcode
+            let html5QrCode = null;
+
+            $(scannerModalElement).on('shown.bs.modal', function () {
+                initScanner();
+            });
+
+            $(scannerModalElement).on('hidden.bs.modal', function () {
+                stopScanner();
+            });
+
+            $('.btn-scan-trigger').click(function() {
+                activeInputId = $(this).data('target');
+                const fieldName = (activeInputId || "").replace('Input', '').toUpperCase();
+                $('#currentScanningField').text("Scanning " + fieldName);
+                scannerModal.show();
+            });
+
+            $('#btnRestartCamera').click(function(e) {
+                e.preventDefault();
+                stopScanner().then(() => initScanner());
+            });
+
+            function initScanner() {
+                if (!window.isSecureContext) {
+                    $('#scanner-status').html('<span class="text-danger">Error: HTTPS diperlukan</span>');
+                    return;
+                }
+
+                const config = { 
+                    fps: 25, 
+                    aspectRatio: 1.0,
+                    qrbox: { width: 250, height: 250 }, // Square for better target match
+                    showTorchButtonIfSupported: true,
+                    videoConstraints: {
+                        facingMode: "environment",
+                        focusMode: "continuous", // Try to force autofocus
+                        width: { min: 640, ideal: 1280, max: 1920 },
+                        height: { min: 480, ideal: 720, max: 1080 }
+                    }
+                };
+
+                if (!html5QrCode) {
+                    html5QrCode = new Html5Qrcode("reader");
+                }
+
+                $('#scanner-status').text("Mengakses Kamera...");
+                
+                html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config,
+                    (decodedText) => onDetected(decodedText),
+                    (errorMessage) => {}
+                ).then(() => {
+                    $('#scanner-status').text("Scanner Aktif");
+                }).catch(err => {
+                    $('#scanner-status').text("Gagal: " + err);
+                });
+            }
+
+            function onDetected(code) {
+                if (activeInputId) {
+                    const currentId = activeInputId;
+                    const trimmedCode = code.trim(); // Keep original case for now, validation will handle upper
+
+                    // Apply validation and processing based on target input
+                    if (currentId === 'tagInput') {
+                        // Validation for tagInput (VIN) must have 'X' suffix
+                        if (!trimmedCode.toUpperCase().endsWith('X')) {
+                            showScannerToast("KODE TIDAK VALID: Wajib scan dari Label asli (Missing X)", "danger");
+                            $(`#${currentId}`).val('');
+                            scannerModal.hide();
+                            return;
+                        }
+                        $(`#${currentId}`).val(trimmedCode).addClass('active-scan');
+                        setTimeout(() => $(`#${currentId}`).removeClass('active-scan'), 500);
+                        scannerModal.hide();
+                        lookupItem(trimmedCode);
+                    } else if (currentId === 'labelInput') {
+                        // 1. Validation for labelInput must NOT have 'X' suffix
+                        if (trimmedCode.toUpperCase().endsWith('X')) {
+                            showScannerToast("KODE TIDAK VALID: Label tidak boleh mengandung suffix X", "danger");
+                            $(`#${currentId}`).val('');
+                            scannerModal.hide();
+                            return;
+                        }
+
+                        // 2. Cross-validation: Label must contain the normalized Tag (VIN)
+                        const tagVal = $('#tagInput').val();
+                        const normTag = normalizeVin(tagVal);
+                        const normLabel = normalizeVin(trimmedCode);
+
+                        if (!normLabel.includes(normTag)) {
+                            showScannerToast(`LABEL TIDAK SESUAI: Label harus mengandung kode ${normTag}`, "danger");
+                            $(`#${currentId}`).val('');
+                            scannerModal.hide();
+                            return;
+                        }
+
+                        $(`#${currentId}`).val(trimmedCode).addClass('active-scan');
+                        setTimeout(() => $(`#${currentId}`).removeClass('active-scan'), 500);
+                        scannerModal.hide();
+                        // AUTOMATION: Auto Submit after Label Scan
+                        setTimeout(() => {
+                           triggerAutoSave();
+                        }, 300);
+                    }
+                }
+            }
+
+            async function stopScanner() {
+                if (html5QrCode && html5QrCode.isScanning) {
+                    try {
+                        await html5QrCode.stop();
+                    } catch (err) {
+                        console.warn("Stop Error:", err);
+                    }
+                }
+            }
+
+            // --- GLOBAL SCANNER HANDLER (ANTI-MANUAL & READONLY SUPPORT) ---
+            let scanBuffer = "";
+            let lastKeyTime = Date.now();
+            const SCAN_INTERVAL = 50; // ms (Scanner is very fast, Human is slow)
+
+            window.addEventListener('keydown', function (e) {
+                const currentTime = Date.now();
+                
+                // If focus is on a normal interactive element (like a modal or another input), don't intercept
+                if (e.target.tagName === "INPUT" && !$(e.target).hasClass('cyber-field')) return;
+                if (e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
+                if ($('.modal.show').length > 0) return;
+
+                // Check speed: If too slow, it's likely a human typing. Reset buffer.
+                if (currentTime - lastKeyTime > SCAN_INTERVAL) {
+                    scanBuffer = "";
+                }
+                lastKeyTime = currentTime;
+
+                // If Enter key is hit (End of Scan)
+                if (e.keyCode === 13) {
+                    if (scanBuffer.length > 0) {
+                        processScanResult(scanBuffer);
+                        scanBuffer = "";
+                    }
+                    e.preventDefault();
+                    return;
+                }
+
+                // Collect only visible characters (avoid Shift/Ctrl/etc)
+                if (e.key.length === 1) {
+                    scanBuffer += e.key;
+                }
+            });
+
+            function processScanResult(code) {
+                code = code.trim();
+                const codeUpper = code.toUpperCase();
+
+                // Determine target: If Tag is empty, it's a Tag Scan. Else it's a Label Scan.
+                if (!$('#tagInput').val()) {
+                    // --- VIN VALIDATION (Must have X) ---
+                    if (!codeUpper.endsWith('X')) {
+                        showScannerToast("KODE TIDAK VALID: Wajib scan dari Label asli (Missing X)", "danger");
+                        return;
+                    }
+                    $('#tagInput').val(code).addClass('active-scan');
+                    setTimeout(() => $('#tagInput').removeClass('active-scan'), 500);
+                    lookupItem(code);
+                } else {
+                    // --- LABEL VALIDATION ---
+                    
+                    // 1. Must NOT have X
+                    if (codeUpper.endsWith('X')) {
+                        showScannerToast("KODE TIDAK VALID: Label tidak boleh mengandung suffix X", "danger");
+                        return;
+                    }
+
+                    // 2. Cross-validation: Label must contain the normalized Tag (VIN)
+                    const tagVal = $('#tagInput').val();
+                    const normTag = normalizeVin(tagVal);
+                    const normLabel = normalizeVin(code);
+
+                    if (!normLabel.includes(normTag)) {
+                        showScannerToast(`LABEL TIDAK SESUAI: Label harus mengandung kode ${normTag}`, "danger");
+                        return;
+                    }
+
+                    $('#labelInput').val(code).addClass('active-scan');
+                    setTimeout(() => $('#labelInput').removeClass('active-scan'), 500);
+                    triggerAutoSave();
+                }
+            }
+
+            // --- ITEM LOOKUP LOGIC ---
+            let isItemValid = false;
+
+            function lookupItem(tag) {
+                if (!tag) return;
+
+                $.ajax({
+                    url: '/Pulling/GetItemInfo',
+                    type: 'GET',
+                    data: { tag: tag },
+                    success: function(response) {
+                        if (response.success) {
+                            isItemValid = true;
+                            enableLabelInput();
+                            
+                            // Workflow: Automatically focus Label for External Scanner
+                            setTimeout(() => {
+                                $('#labelInput').focus();
+                            }, 300);
+                        } else {
+                            isItemValid = false;
+                            disableLabelInput();
+                            showScannerToast("ERROR: " + (response.message || "Item tidak ditemukan."), "danger");
+                            $('#tagInput').val(''); // --- AUTO RESET ---
+                        }
+                    },
+                    error: function() {
+                        showScannerToast("Gagal menghubungi server untuk lookup item.", "danger");
+                        $('#tagInput').val(''); // --- AUTO RESET ---
+                    }
+                });
+            }
+
+            function showPartDetails(data) {
+                $('#valLocation').text(data.rack + "." + data.noRack); // Lokasi Rack derived from Rack.NoRack
+                $('#valPlant').text(data.plant);
+                $('#valRackInfo').text(data.rack);
+                $('#valCustomer').text(data.customer);
+                $('#valCategory').text(data.category);
+                $('#valVinQpc').text(data.vin + " / " + data.qtyLot);
+                $('#valLimits').text(data.rackMin + " / " + data.rop + " / " + data.rackMax);
+                $('#valCurrentStock').text(data.currentStock + " BOX");
+
+                // Badge Status
+                const $badge = $('#badgeStatus');
+                $badge.removeClass('bg-success bg-warning bg-danger').text('Status: ' + data.status.toUpperCase());
+                if (data.status === 'Normal') $badge.addClass('bg-success');
+                else if (data.status === 'Shortage') $badge.addClass('bg-danger');
+                else $badge.addClass('bg-warning text-dark');
+
+                $('#partDetailContainer').slideDown();
+            }
+
+            function hidePartDetails() {
+                $('#partDetailContainer').slideUp();
+            }
+
+            function enableLabelInput() {
+                $('#labelInput, .btn-scan-trigger[data-target="labelInput"]').prop('disabled', false);
+                $('#labelHint').fadeIn();
+                $('#labelInput').focus();
+            }
+
+            function disableLabelInput() {
+                $('#labelInput, .btn-scan-trigger[data-target="labelInput"]').prop('disabled', true);
+                $('#labelHint').fadeOut();
+                $('#labelInput').val('');
+            }
+
+            // Removed: $('#tagInput').on('input', function() { ... }); // Global handler takes over
+            // Removed: $('#labelInput').on('change keypress', function(e) { ... }); // Global handler takes over
+
+            function triggerAutoSave() {
+                 if ($('#btnSavePulling').prop('disabled')) return;
+                 $('#btnSavePulling').click();
+            }
+
+            // Save Data (AJAX)
+            $('#btnSavePulling').click(function () {
+                const tag = $('#tagInput').val();
+                const label = $('#labelInput').val();
+
+                if (!tag || !label) {
+                    // alert('Lengkapi data Tag dan Label!'); // Suppress silent errors during typing
+                    if (!tag) $('#tagInput').focus();
+                    else if (!label) $('#labelInput').focus();
+                    return;
+                }
+
+                const data = {
+                    Tag: tag.trim(),
+                    Label: label.trim(),
+                    Quantity: 1
+                };
+
+                const $btn = $(this);
+                const $indicator = $('#autoSaveIndicator');
+                
+                $btn.prop('disabled', true);
+                $indicator.show(); // Show visual feedback
+
+                $.ajax({
+                    url: '/Pulling/Save',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(data),
+                    success: function (response) {
+                        if (response.success) {
+                            showScannerToast('SUKSES: ' + response.message, 'success');
+                            $('#tagInput, #labelInput').val('');
+                            hidePartDetails();
+                            disableLabelInput();
+                            $('#tagInput').focus(); // Ready for next scan
+                        } else {
+                            showScannerToast('GAGAL: ' + response.message, 'danger');
+                            $('#labelInput').val('').focus();
+                        }
+                    },
+                    error: function () {
+                        showScannerToast('Terjadi kesalahan koneksi.', 'danger');
+                    },
+                    complete: function() {
+                        $btn.prop('disabled', false);
+                         $indicator.hide();
+                    }
+                });
+            });
+
+            // Hardware Scanner Support (Legacy - keeping for safety but global is primary)
+            $('#tagInput, #labelInput').on('keypress', function(e) {
+                if (e.which == 13) e.preventDefault();
+            });
+
+            // Auto-focus Tag on load
+            $('#tagInput').focus();
+
+            // Removed: Global click to refocus for external scanners
+
+            // Visual feedback for focus
+            $('input').on('focus', function() {
+                $(this).closest('.custom-cyber-input-group').addClass('selected-glow');
+            }).on('blur', function() {
+                $(this).closest('.custom-cyber-input-group').removeClass('selected-glow');
+            });
+        });
+</script>
+}
+
+<style>
+    .rack-segmented-bar {
+        background: rgba(15, 23, 42, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        overflow: hidden;
+        width: 100%;
+    }
+
+    .detail-item {
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .detail-item:last-child {
+        border-bottom: none;
+    }
+
+    .detail-item .label {
+        display: block;
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: rgba(255, 255, 255, 0.4);
+        margin-bottom: 2px;
+        font-weight: 700;
+    }
+
+    .detail-item .value {
+        display: block;
+        font-size: 0.95rem;
+        color: #f1f5f9;
+        font-weight: 600;
+    }
+
+    .rack-segment {
+        flex: 1;
+        text-align: center;
+        padding: 15px 0;
+        cursor: pointer;
+        font-weight: 800;
+        color: rgba(255, 255, 255, 0.7);
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        transition: all 0.2s ease;
+        font-size: 1.1rem;
+    }
+
+    .rack-segment:last-child {
+        border-right: none;
+    }
+
+    .rack-segment:hover {
+        background: rgba(59, 130, 246, 0.1);
+        color: white;
+    }
+
+    .rack-segment.active {
+        background: var(--primary-blue);
+        color: white;
+        box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .visual-col-box {
+        width: 25px;
+        height: 25px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: bold;
+        border-radius: 4px;
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    /* CUSTOM INPUT GROUP DESIGN (MATCHING IMAGE) */
+    .custom-cyber-input-group {
+        display: flex;
+        align-items: stretch;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .custom-cyber-input-group:focus-within {
+        border-color: var(--primary-blue);
+        box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
+        background: rgba(30, 41, 59, 0.6);
+    }
+
+    .input-icon-left {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 15px;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 1.2rem;
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .cyber-field {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: white !important;
+        padding: 14px 18px !important;
+        font-size: 1rem;
+        flex-grow: 1;
+        width: 1px; /* Let flex-grow handle width */
+        min-width: 0;
+        z-index: 1; /* Lower than button */
+    }
+
+    .cyber-field::placeholder {
+        color: rgba(255, 255, 255, 0.4);
+    }
+
+    .btn-scan-trigger {
+        background: transparent;
+        border: none;
+        border-left: 1px solid rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.7);
+        padding: 0 18px;
+        font-size: 1.4rem;
+        transition: all 0.2s;
+        cursor: pointer;
+        z-index: 10; /* Higher than input */
+    }
+
+    .btn-scan-trigger:hover {
+        background: rgba(59, 130, 246, 0.1);
+        color: var(--primary-blue);
+    }
+
+    .btn-scan-trigger.active-scanning {
+        background: var(--primary-blue);
+        color: white;
+        animation: pulse-scanner 1.5s infinite;
+    }
+
+    @@keyframes pulse-scanner {
+        0% { opacity: 1; }
+        50% { opacity: 0.6; }
+        100% { opacity: 1; }
+    }
+
+    .btn-neon-success {
+        background: #10b981;
+        color: white;
+        font-weight: 700;
+        border: none;
+        box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-neon-success:hover {
+        background: #059669;
+        transform: translateY(-2px);
+        box-shadow: 0 0 25px rgba(16, 185, 129, 0.5);
+        color: white;
+    }
+
+    .selected-glow {
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.8);
+        animation: pulse-primary 1.5s infinite;
+    }
+
+    @@keyframes pulse-primary {
+        0% { opacity: 1; }
+        50% { opacity: 0.7; }
+        100% { opacity: 1; }
+    }
+
+    .scanner-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        z-index: 20;
+    }
+    
+    .scanner-tip {
+        color: white;
+        font-size: 0.8rem;
+        margin-top: 15px;
+        background: rgba(0,0,0,0.5);
+        padding: 5px 15px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .bounding-box {
+        width: 250px;
+        height: 250px;
+        position: relative;
+        box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.4);
+        border: 2px solid var(--cyber-yellow);
+        border-radius: 4px;
+    }
+    
+    /* Corner indicators */
+    .corner-tl, .corner-tr, .corner-bl, .corner-br {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        border: 4px solid var(--primary-blue);
+    }
+    .corner-tl { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
+    .corner-tr { top: -2px; right: -2px; border-left: 0; border-bottom: 0; }
+    .corner-bl { bottom: -2px; left: -2px; border-right: 0; border-top: 0; }
+    .corner-br { bottom: -2px; right: -2px; border-left: 0; border-top: 0; }
+
+    .scan-line {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: #ef4444;
+        box-shadow: 0 0 10px #ef4444;
+        animation: scan-line 2.5s ease-in-out infinite;
+        -webkit-animation: scan-line 2.5s ease-in-out infinite;
+    }
+
+    @@keyframes scan-line {
+        0% { top: 0; opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { top: 100%; opacity: 0; }
+    }
+
+    @@-webkit-keyframes scan-line {
+        0% { top: 0; opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { top: 100%; opacity: 0; }
+    }
+
+    #reader video {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: contain !important; /* Fix alignment issue */
+    }
+    
+    #reader canvas {
+        display: none !important;
+    }
+
+    .active-scan {
+        background: rgba(16, 185, 129, 0.2) !important;
+        border-color: #10b981 !important;
+    }
+
+    .selected-glow {
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 15px rgba(59, 130, 246, 0.5) !important;
+        background: rgba(30, 41, 59, 0.9) !important;
+    }
+
+    #scannerToast {
+        backdrop-filter: blur(8px);
+        background: rgba(15, 23, 42, 0.9);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+</style>

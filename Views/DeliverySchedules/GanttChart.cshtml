@@ -1,0 +1,1621 @@
+@model IEnumerable<DeliveryControl.Models.DeliverySchedule>
+
+@{
+    ViewData["Title"] = "Gantt Chart - Jadwal Delivery";
+    var startDate = ViewData["StartDate"]?.ToString() ?? DateTime.Today.ToString("yyyy-MM-dd");
+    var endDate = ViewData["EndDate"]?.ToString() ?? DateTime.Today.ToString("yyyy-MM-dd");
+}
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h2 class="mb-1"><i class="bi bi-bar-chart-line"></i> Visualisasi Jadwal Shipping Delivery</h2>
+        <p class="text-muted mb-0">Timeline visual untuk monitoring jadwal delivery</p>
+    </div>
+    <div class="col-md-4 text-end d-flex gap-2 justify-content-end align-items-center mt-2 mt-md-0">
+        <div id="signalr-status-gantt" class="realtime-status-badge status-connecting">
+            <div class="status-pulse"></div>
+            <i class="bi bi-circle-fill status-icon"></i>
+            <span class="status-text">Connecting...</span>
+        </div>
+        <a asp-action="Index" class="btn btn-secondary">
+            <i class="bi bi-table"></i> Tampilan Tabel
+        </a>
+    </div>
+</div>
+
+<!-- Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form asp-action="GanttChart" method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label"><i class="bi bi-calendar"></i> Tanggal Mulai</label>
+                <input type="date" class="form-control" name="startDate" value="@startDate" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label"><i class="bi bi-calendar"></i> Tanggal Selesai</label>
+                <input type="date" class="form-control" name="endDate" value="@endDate" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label"><i class="bi bi-building"></i> Customer</label>
+                <select class="form-select" name="customerId">
+                    <option value="">-- Semua Customer --</option>
+                    @foreach (var item in (IEnumerable<SelectListItem>)ViewData["Customers"]!)
+                    {
+                        <option value="@item.Value" selected="@(item.Value == ViewData["CustomerId"]?.ToString())">@item.Text</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-1">
+                <label class="form-label">&nbsp;</label>
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Filter Reset Button -->
+<div class="row mb-3" id="filterResetRow" style="display: none;">
+    <div class="col-12 text-end">
+        <button class="btn btn-outline-light btn-sm" onclick="filterGanttRows('all')">
+            <i class="bi bi-arrow-clockwise"></i> Reset Filter
+        </button>
+    </div>
+</div>
+
+<!-- Gantt Chart Container -->
+@if (!Model.Any())
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> Tidak ada jadwal delivery untuk periode yang dipilih.
+    </div>
+}
+else
+{
+    <div class="cyber-card gantt-main-card" id="ganttContainer">
+        <div class="card-header gantt-header d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-bar-chart-line-fill" style="color: #60a5fa;"></i>
+                <span style="color: #60a5fa; font-weight: 700;">Timeline Shipping Delivery</span>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="badge bg-dark border border-primary text-light" style="font-size:0.8rem;">
+                    <i class="bi bi-calendar-event"></i>
+                    <span class="ms-1">
+                        @DateTime.Now.ToString("dddd, dd MMMM yyyy", new System.Globalization.CultureInfo("id-ID"))
+                    </span>
+                </span>
+                <span class="badge bg-primary border border-primary text-light" style="font-size:0.85rem;">
+                    <i class="bi bi-clock-fill"></i>
+                    <span class="ms-1" id="ganttCurrentTime">00:00:00</span>
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-light" id="ganttAutoScrollToggle" title="Toggle Auto Scroll">
+                    <i class="bi bi-arrow-down-up" id="ganttAutoScrollIcon"></i>
+                    <span id="ganttAutoScrollText">Auto Scroll: ON</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-light gantt-fullscreen-btn ms-lg-2" id="ganttFullscreenToggle">
+                    <i class="bi bi-arrows-fullscreen" id="ganttFullscreenIcon"></i> Full Screen
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div id="ganttChart" style="display: flex; flex-direction: column; max-height: 70vh; overflow-y: auto; overflow-x: hidden;">
+                <!-- Timeline Header (Fixed) - 18:00 (H-1) to 23:00 (H) = 30 hours -->
+                <div style="display: flex; border-bottom: 3px solid #3b82f6; position: sticky; top: 0; z-index: 100;">
+                    <div style="width: 180px; min-width: 180px; background: #0f172a; padding: 12px; font-weight: 700; color: #60a5fa; text-transform: uppercase; font-size: 0.85rem; border-right: 3px solid #3b82f6; box-sizing: border-box; opacity: 1; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);">
+                        Customer / Schedule
+                    </div>
+                    <div style="flex: 1; background: #0f172a; position: relative; overflow: hidden;">
+                        <!-- H-1 Header (18:00-23:59) - Gray, ~20% width -->
+                        <div style="position: absolute; top: 0; left: 0; width: 20%; height: 20px; background: rgba(100, 116, 139, 0.3); display: flex; align-items: center; justify-content: center; border-bottom: 1px solid rgba(148, 163, 184, 0.3);">
+                            <span style="font-size: 0.7rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">H-1 (18:00-24:00)</span>
+                        </div>
+                        <!-- HARI INI Header (00:00-23:59) - Blue, ~80% width -->
+                        <div style="position: absolute; top: 0; left: 20%; width: 80%; height: 20px; background: rgba(59, 130, 246, 0.2); display: flex; align-items: center; justify-content: center; border-bottom: 1px solid rgba(59, 130, 246, 0.4); border-left: 2px solid #60a5fa;">
+                            <span style="font-size: 0.7rem; font-weight: 600; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.5px;">HARI INI (00:00-24:00)</span>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(30, 1fr); height: 45px; width: 100%; padding-top: 20px;">
+                            @for (int i = 0; i < 30; i++)
+                            {
+                                // Hours: 18,19,20,21,22,23 (H-1), then 0-23 (H)
+                                var actualHour = i < 6 ? (i + 18) : (i - 6);
+                                var isDay2 = i >= 6;
+                                var isMainHour = actualHour % 6 == 0;
+                                var isMidnight = actualHour == 0 && isDay2;
+                                var borderColor = isMidnight ? "#60a5fa" : (isMainHour ? "#60a5fa" : "rgba(148, 163, 184, 0.25)");
+                                var borderWidth = isMidnight ? "3px" : (isMainHour ? "2px" : "1px");
+                                var textColor = isDay2 ? "#60a5fa" : "#94a3b8";
+                                
+                                <div style="border-right: @borderWidth solid @borderColor; 
+                                            display: flex;
+                                            align-items: center;
+                                            justify-content: center;
+                                            position: relative;">
+                                    @if (i % 2 == 0 || isMidnight)
+                                    {
+                                        <span style="font-size: 0.7rem; 
+                                                     font-weight: @(isMainHour || isMidnight ? "700" : "500");
+                                                     color: @textColor;
+                                                     opacity: 1;
+                                                     text-shadow: 0 1px 2px rgba(0,0,0,0.3);">
+                                            @actualHour.ToString("D2"):00
+                                        </span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Scrollable Content -->
+                <div id="ganttBody">
+                    <div style="display: flex; flex-direction: column;">
+                    <table class="table mb-0" style="table-layout: fixed; width: 100%; border-collapse: collapse;">
+                        <tbody>
+        @foreach (var schedule in Model)
+                        {
+                            var pickupTime = schedule.PickupTime ?? schedule.ScheduledDate.AddHours(8);
+                            var etdTime = schedule.ETD ?? schedule.ScheduledDate.AddHours(12);
+                            var actualStartTime = schedule.ActualStartTime;
+                            var actualEndTime = schedule.ActualEndTime;
+            var enterDockTime = schedule.EnterDockTime;
+            var actualEnterDockTime = schedule.ActualEnterDockTime;
+            var estimatedDockTime = enterDockTime?.AddMinutes(15);
+            var actualEstimatedDockTime = actualEnterDockTime?.AddMinutes(15);
+
+                            // Calculate position percentages for 30-hour timeline
+                            // H-1: 18:00-23:59 (6 hours) = 0-20% of timeline
+                            // HARI INI: 00:00-23:59 (24 hours) = 20-100% of timeline
+                            
+                            // Helper function to convert hour to timeline percent
+                            double HourToPercent30(double hour, bool isYesterday) {
+                                if (isYesterday) {
+                                    // Yesterday (H-1): hour 18-24 mapped to 0-20%
+                                    // hour 18 = 0%, hour 24 = 20%
+                                    return ((hour - 18.0) / 6.0) * 20.0;
+                                } else {
+                                    // Today: hour 0-24 mapped to 20-100%
+                                    return 20.0 + (hour / 24.0) * 80.0;
+                                }
+                            }
+                            
+                            double WidthInPercent30(double duration) {
+                                // Duration in hours converted to percent of 30h timeline
+                                return (duration / 30.0) * 100.0;
+                            }
+
+                            // Determine if pickup is in yesterday or today
+                            // Logic: If EnterDock >= 18:00 AND Pickup < 18:00, then it's cross-day
+                            var isPickupCrossDay = enterDockTime.HasValue && 
+                                                  enterDockTime.Value.Hour >= 18 && 
+                                                  pickupTime.Hour < 18;
+                            
+                            var pickupHour = pickupTime.Hour + (pickupTime.Minute / 60.0);
+                            var etdHour = etdTime.Hour + (etdTime.Minute / 60.0);
+                            
+                            // Pickup always in today (HARI INI area)
+                            var pickupPercent = HourToPercent30(pickupHour, false);
+                            var durationHours = etdHour - pickupHour;
+                            if (durationHours < 0) durationHours += 24; // Handle cross-midnight
+                            var scheduleWidth = WidthInPercent30(durationHours);
+
+            var enterDockPercent = 0.0;
+            var enterDockWidth = 0.0;
+            if (enterDockTime.HasValue)
+            {
+                var enterDockHour = enterDockTime.Value.Hour + (enterDockTime.Value.Minute / 60.0);
+                
+                // EnterDock in H-1 area (yesterday) if >= 18:00
+                var isEnterDockYesterday = enterDockHour >= 18.0 && isPickupCrossDay;
+                
+                if (isEnterDockYesterday)
+                {
+                    enterDockPercent = HourToPercent30(enterDockHour, true);
+                }
+                else
+                {
+                    // Normal schedule (same day), put in today area
+                    enterDockPercent = HourToPercent30(enterDockHour, false);
+                }
+                
+                if (estimatedDockTime.HasValue)
+                {
+                    var estimatedDockHour = estimatedDockTime.Value.Hour + (estimatedDockTime.Value.Minute / 60.0);
+                    var dockDuration = estimatedDockHour - enterDockHour;
+                    if (dockDuration < 0) dockDuration += 24;
+                    enterDockWidth = WidthInPercent30(dockDuration);
+                }
+            }
+
+            var actualEnterDockPercent = 0.0;
+            var actualEnterDockWidth = 0.0;
+            var isDockDelay = false;
+            var isDockEarly = false;
+            var dockDiffMinutes = 0;
+            if (actualEnterDockTime.HasValue && enterDockTime.HasValue)
+            {
+                var dockDiff = actualEnterDockTime.Value - enterDockTime.Value;
+                if (dockDiff.TotalMinutes > 0)
+                {
+                    isDockDelay = true;
+                    dockDiffMinutes = (int)dockDiff.TotalMinutes;
+                }
+                else if (dockDiff.TotalMinutes < 0)
+                {
+                    isDockEarly = true;
+                    dockDiffMinutes = (int)Math.Abs(dockDiff.TotalMinutes);
+                }
+            }
+            
+            if (actualEnterDockTime.HasValue)
+            {
+                var actualEnterDockHour = actualEnterDockTime.Value.Hour + (actualEnterDockTime.Value.Minute / 60.0);
+                
+                // Actual EnterDock follows same logic as scheduled EnterDock
+                var isActualEnterYesterday = actualEnterDockHour >= 18.0 && isPickupCrossDay;
+                actualEnterDockPercent = HourToPercent30(actualEnterDockHour, isActualEnterYesterday);
+                
+                if (actualEstimatedDockTime.HasValue)
+                {
+                    var actualEstimatedDockHour = actualEstimatedDockTime.Value.Hour + (actualEstimatedDockTime.Value.Minute / 60.0);
+                    var actualDockDuration = actualEstimatedDockHour - actualEnterDockHour;
+                    if (actualDockDuration < 0) actualDockDuration += 24;
+                    actualEnterDockWidth = WidthInPercent30(actualDockDuration);
+                }
+            }
+
+                            var actualStartPercent = 0.0;
+                            var actualWidth = 0.0;
+                            if (actualStartTime.HasValue && actualEndTime.HasValue)
+                            {
+                                var actualStartHour = actualStartTime.Value.Hour + (actualStartTime.Value.Minute / 60.0);
+                                var actualEndHour = actualEndTime.Value.Hour + (actualEndTime.Value.Minute / 60.0);
+                                
+                                // ActualStart always in today area (like pickup)
+                                actualStartPercent = HourToPercent30(actualStartHour, false);
+                                var actualDuration = actualEndHour - actualStartHour;
+                                if (actualDuration < 0) actualDuration += 24;
+                                actualWidth = WidthInPercent30(actualDuration);
+                            }
+
+                            var displayStatus = (schedule.DriverStatus ?? schedule.Status) ?? "Scheduled";
+                            var statusColor = displayStatus switch
+                            {
+                                "Completed" => "success",
+                                "In Progress" => "warning",
+                                "Cancelled" => "danger",
+                                _ => "secondary"
+                            };
+
+                            var isLateSchedule = schedule.ActualStartTime.HasValue && schedule.PickupTime.HasValue && schedule.ActualStartTime.Value > schedule.PickupTime.Value;
+                            var statusFilter = displayStatus.ToLower().Replace(" ", "");
+                            
+                            <tr class="gantt-row" 
+                                data-status="@statusFilter" 
+                                data-late="@(isLateSchedule ? "true" : "false")"
+                                style="display: flex; border-bottom: 1px solid rgba(59, 130, 246, 0.2);">
+                                <td class="gantt-customer-cell" style="width: 180px; min-width: 180px; background: linear-gradient(135deg, #1e293b 0%, #334155 100%); box-shadow: 3px 0 15px rgba(0,0,0,0.3); border-right: 3px solid #3b82f6; padding: 8px 12px; box-sizing: border-box; border-bottom: none;">
+                                    <div class="customer-info-gantt d-flex flex-column justify-content-center" style="height: 100%;">
+                                        <div class="d-flex align-items-center mb-1">
+                                            <div class="customer-avatar-gantt-compact me-2">
+                                                <i class="bi bi-building-fill"></i>
+                                            </div>
+                                            <div class="flex-grow-1" style="min-width: 0; overflow: hidden;">
+                                                <div style="font-weight: 600; color: #60a5fa; font-size: 0.85rem; line-height: 1.2; opacity: 1; text-shadow: 0 1px 2px rgba(0,0,0,0.3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="@schedule.Customer.CustomerName">
+                                                    @schedule.Customer.CustomerName
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <small style="color: #94a3b8; font-size: 0.7rem;">@schedule.ScheduleNumber</small>
+                                            <span class="badge badge-gantt bg-@statusColor" style="font-size: 0.65rem; padding: 0.25rem 0.5rem;">
+                                                @if (displayStatus == "Completed")
+                                                {
+                                                    <i class="bi bi-check-circle-fill"></i>
+                                                }
+                                                else if (displayStatus == "In Progress")
+                                                {
+                                                    <i class="bi bi-arrow-repeat"></i>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-clock"></i>
+                                                }
+                                            </span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="gantt-timeline-cell" style="flex: 1; position: relative; height: 100px; padding: 0; background: #1e293b; border-bottom: none;">
+                                    <!-- Timeline Grid dengan garis vertikal (30 hours: 18:00 H-1 to 23:00 H) -->
+                                    <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: grid; grid-template-columns: repeat(30, 1fr); z-index: 0; pointer-events: none;">
+                                        @for (int i = 0; i < 30; i++)
+                                        {
+                                            var actualHour = i < 6 ? (i + 18) : (i - 6);
+                                            var isDay2 = i >= 6;
+                                            var isWorkHour = isDay2 && actualHour >= 8 && actualHour <= 17;
+                                            var isMainHour = actualHour % 6 == 0;
+                                            var is2Hour = actualHour % 2 == 0;
+                                            var isMidnight = actualHour == 0 && isDay2;
+                                            var bgColor = isWorkHour ? "rgba(59, 130, 246, 0.12)" : "transparent";
+                                            var borderColor = isMidnight ? "#60a5fa" : (isMainHour ? "#60a5fa" : (is2Hour ? "rgba(96, 165, 250, 0.4)" : "rgba(148, 163, 184, 0.2)"));
+                                            var borderWidth = isMidnight ? "3px" : (isMainHour ? "2px" : "1px");
+                                            <div style="border-right: @borderWidth solid @borderColor; 
+                                                        background: @bgColor;
+                                                        height: 100%;">
+                                            </div>
+                                        }
+                                    </div>
+
+                    <!-- Enter Dock Bar (Scheduled) - Baris 1 -->
+                    @if (enterDockTime.HasValue && estimatedDockTime.HasValue && enterDockWidth > 0)
+                    {
+                        <div style="position: absolute; 
+                                    top: 3px; 
+                                    left: @enterDockPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
+                                    z-index: 1;">
+                            <div class="gantt-bar gantt-dock-scheduled" 
+                                 style="width: @enterDockWidth.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
+                                        min-width: 40px;
+                                        height: 16px; 
+                                        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); 
+                                        border-radius: 4px; 
+                                        border: 2px solid #0ea5e9;
+                                        display: flex; 
+                                        align-items: center; 
+                                        padding: 0 6px;
+                                        box-shadow: 0 2px 8px rgba(14, 165, 233, 0.5), 
+                                                    inset 0 1px 0 rgba(255,255,255,0.2);
+                                        opacity: 0.9;">
+                                <i class="bi bi-door-open" style="font-size: 0.65rem; color: white; margin-right: 3px;"></i>
+                                <span style="font-size: 0.65rem; color: white; font-weight: 600; white-space: nowrap;">
+                                    @enterDockTime.Value.ToString("HH:mm")
+                                </span>
+                                @if (estimatedDockTime.HasValue)
+                                {
+                                    <span style="font-size: 0.65rem; color: white; font-weight: 500; margin-left: 4px; white-space: nowrap;">
+                                        - @estimatedDockTime.Value.ToString("HH:mm")
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Actual Enter Dock Bar - Baris 2 -->
+                    @if (actualEnterDockTime.HasValue && actualEstimatedDockTime.HasValue && actualEnterDockWidth > 0)
+                    {
+                        var dockBarColor = isDockDelay ? "linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)" : (isDockEarly ? "linear-gradient(135deg, #22c55e 0%, #15803d 100%)" : "linear-gradient(135deg, #22c55e 0%, #15803d 100%)");
+                        var dockBarBorder = isDockDelay ? "#ef4444" : "#22c55e";
+                        var dockBarShadow = isDockDelay ? "0 2px 8px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)" : "0 2px 8px rgba(34, 197, 94, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)";
+                        var dockIcon = isDockDelay ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill";
+                        
+                        <div style="position: absolute; 
+                                    top: 25px; 
+                                    left: @actualEnterDockPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
+                                    z-index: 2;">
+                            <div class="gantt-bar gantt-dock-actual" 
+                                 style="width: @actualEnterDockWidth.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
+                                        min-width: 40px;
+                                        height: 16px; 
+                                        background: @dockBarColor; 
+                                        border-radius: 4px; 
+                                        border: 2px solid @dockBarBorder;
+                                        display: flex; 
+                                        align-items: center; 
+                                        padding: 0 6px;
+                                        box-shadow: @dockBarShadow;
+                                        opacity: 0.9;">
+                                <i class="bi @dockIcon" style="font-size: 0.65rem; color: white; margin-right: 3px;"></i>
+                                <span style="font-size: 0.65rem; color: white; font-weight: 600; white-space: nowrap;">
+                                    @actualEnterDockTime.Value.ToString("HH:mm")
+                                </span>
+                                <span style="font-size: 0.65rem; color: white; font-weight: 500; margin-left: 4px; white-space: nowrap;">
+                                    - @actualEstimatedDockTime.Value.ToString("HH:mm")
+                                </span>
+                                @if (enterDockTime.HasValue)
+                                {
+                                    // Jika delay, cukup tampilkan bar merah saja (tanpa badge tambahan)
+                                    if (!isDockDelay)
+                                    {
+                                        if (isDockEarly)
+                                        {
+                                            <span class="badge bg-success ms-1" style="font-size: 0.55rem; padding: 0.15rem 0.4rem; line-height: 1;">
+                                                <i class="bi bi-check-circle-fill"></i> -@dockDiffMinutes m
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success ms-1" style="font-size: 0.55rem; padding: 0.15rem 0.4rem; line-height: 1;">
+                                                <i class="bi bi-check-circle-fill"></i> On Time
+                                            </span>
+                                        }
+                                    }
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Schedule Bar (Planned) - Baris 3 -->
+                                    <div style="position: absolute; 
+                                                top: 47px; 
+                                                left: @pickupPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
+                                                z-index: 1;">
+                                        <div class="gantt-bar gantt-planned" 
+                                             style="width: @scheduleWidth.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
+                                                    min-width: 50px;
+                                                    height: 20px; 
+                                                    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); 
+                                                    border-radius: 6px; 
+                                                    border: 2px solid #0d6efd;
+                                                    display: flex; 
+                                                    align-items: center; 
+                                                    padding: 0 8px;
+                                                    box-shadow: 0 3px 10px rgba(13, 110, 253, 0.6), 
+                                                                inset 0 1px 0 rgba(255,255,255,0.3);
+                                                    opacity: 0.95;">
+                                            <i class="bi bi-calendar-check" style="font-size: 0.75rem; color: white; margin-right: 4px;"></i>
+                                            <span style="font-size: 0.7rem; color: white; font-weight: 600; white-space: nowrap;">
+                                                @pickupTime.ToString("HH:mm") - @etdTime.ToString("HH:mm")
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Actual Bar - Baris 4 -->
+                                    @if (actualStartTime.HasValue && actualEndTime.HasValue)
+                                    {
+                                        var isLate = actualStartTime.Value > pickupTime || actualEndTime.Value > etdTime;
+                                        var actualBarGradient = isLate ? "linear-gradient(135deg, #dc3545 0%, #b02a37 100%)" : "linear-gradient(135deg, #198754 0%, #146c43 100%)";
+                                        var actualBarShadow = isLate ? "0 4px 15px rgba(220, 53, 69, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)" : "0 4px 15px rgba(25, 135, 84, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)";
+                                        var actualBarBorder = isLate ? "rgba(220, 53, 69, 0.3)" : "rgba(25, 135, 84, 0.3)";
+                                        var actualIconClass = isLate ? "gantt-bar-danger" : "gantt-bar-success";
+                                        
+                                        <div style="position: absolute; 
+                                                    top: 69px; 
+                                                    left: @actualStartPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
+                                                    z-index: 2;">
+                                            <div class="gantt-bar gantt-actual @actualIconClass" 
+                                                 style="width: @actualWidth.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
+                                                        min-width: 50px;
+                                                        height: 20px; 
+                                                        background: @actualBarGradient; 
+                                                        border-radius: 6px; 
+                                                        border: 2px solid @(isLate ? "#dc3545" : "#198754");
+                                                        display: flex; 
+                                                        align-items: center; 
+                                                        padding: 0 8px;
+                                                        box-shadow: @actualBarShadow;
+                                                        opacity: 0.95;">
+                                                @if (isLate)
+                                                {
+                                                    <i class="bi bi-exclamation-triangle-fill" style="font-size: 0.75rem; color: white; margin-right: 4px;"></i>
+                                                    <span style="font-size: 0.7rem; color: white; font-weight: 600; white-space: nowrap;">
+                                                        @actualStartTime.Value.ToString("HH:mm") - @actualEndTime.Value.ToString("HH:mm")
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-check-circle-fill" style="font-size: 0.75rem; color: white; margin-right: 4px;"></i>
+                                                    <span style="font-size: 0.7rem; color: white; font-weight: 600; white-space: nowrap;">
+                                                        @actualStartTime.Value.ToString("HH:mm") - @actualEndTime.Value.ToString("HH:mm")
+                                                    </span>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                    else if (actualStartTime.HasValue)
+                                    {
+                                        <!-- Only started, not finished yet -->
+                                        var actualStartHour = actualStartTime.Value.Hour + (actualStartTime.Value.Minute / 60.0);
+                                        // In-progress always in today area
+                                        actualStartPercent = HourToPercent30(actualStartHour, false);
+                                        
+                                        <div class="gantt-bar gantt-inprogress" 
+                                             style="position: absolute; 
+                                                    top: 69px; 
+                                                    left: @actualStartPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
+                                                    min-width: 60px; 
+                                                    height: 20px; 
+                                                    background: linear-gradient(135deg, #ffc107 0%, #d39e00 100%); 
+                                                    border-radius: 6px; 
+                                                    border: 2px solid #ffc107;
+                                                    display: flex; 
+                                                    align-items: center; 
+                                                    padding: 0 8px;
+                                                    color: #000;
+                                                    font-size: 0.7rem;
+                                                    font-weight: bold;
+                                                    z-index: 2;
+                                                    box-shadow: 0 3px 10px rgba(255, 193, 7, 0.7), 
+                                                                inset 0 1px 0 rgba(255,255,255,0.3);
+                                                    animation: pulse-warning 2s ease-in-out infinite;
+                                                    opacity: 0.95;">
+                                            <i class="bi bi-arrow-right-circle-fill" style="margin-right: 4px;"></i>
+                                            <span style="font-size: 0.7rem; font-weight: 600; white-space: nowrap;">
+                                                @actualStartTime.Value.ToString("HH:mm") - ...
+                                            </span>
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Legend - Sederhana seperti di Index -->
+            <div class="legend-container">
+                <h6 class="legend-title">
+                    <i class="bi bi-info-circle-fill"></i> Keterangan:
+                </h6>
+                <div class="d-flex flex-wrap gap-4">
+                    <!-- Legend untuk bar timeline -->
+                    <div class="legend-item-simple">
+                        <i class="bi bi-door-open text-info"></i>
+                        <span>Enter Dock Schedule (Baris 1)</span>
+                    </div>
+                    <div class="legend-item-simple">
+                        <i class="bi bi-door-open-fill text-success"></i>
+                        <span>Actual Enter Dock (Baris 2)</span>
+                    </div>
+                    <div class="legend-item-simple">
+                        <i class="bi bi-calendar-check text-primary"></i>
+                        <span>Schedule (Baris 3)</span>
+                    </div>
+                    <div class="legend-item-simple">
+                        <i class="bi bi-exclamation-triangle-fill text-danger"></i>
+                        <span>Actual Dock Delay (Baris 2)</span>
+                    </div>
+                    <div class="legend-item-simple">
+                        <i class="bi bi-check-circle-fill text-success"></i>
+                        <span>Actual On Time (Baris 4)</span>
+                    </div>
+                    <div class="legend-item-simple">
+                        <i class="bi bi-arrow-right-circle-fill text-warning"></i>
+                        <span>In Progress (Baris 4)</span>
+                    </div>
+
+                    <!-- Legend untuk icon status di kolom customer -->
+                    <div class="legend-item-simple">
+                        <i class="bi bi-check-circle-fill text-success"></i>
+                        <span>Status: <strong>Completed</strong></span>
+                    </div>
+                    <div class="legend-item-simple">
+                        <i class="bi bi-arrow-repeat text-warning"></i>
+                        <span>Status: <strong>In Progress</strong></span>
+                    </div>
+                    <div class="legend-item-simple">
+                        <i class="bi bi-clock text-secondary"></i>
+                        <span>Status: <strong>Waiting</strong></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        // ================== JAM BERJALAN DI HEADER GANTT ==================
+        (function () {
+            function updateGanttTime() {
+                const el = document.getElementById('ganttCurrentTime');
+                if (!el) return;
+                const now = new Date();
+                const h = now.getHours().toString().padStart(2, '0');
+                const m = now.getMinutes().toString().padStart(2, '0');
+                const s = now.getSeconds().toString().padStart(2, '0');
+                el.textContent = `${h}:${m}:${s}`;
+            }
+            updateGanttTime();
+            setInterval(updateGanttTime, 1000);
+        })();
+
+        // Global filter state
+        let currentGanttFilter = 'all';
+
+        // ============================================
+        // AUTO-SCROLL VERTICAL GANTT CHART
+        // ============================================
+        let ganttAutoScrollInterval = null;
+        let isGanttScrollingDown = true;
+        let isGanttPaused = false;
+        let isGanttAutoScrollEnabled = true; // Default enabled
+        const ganttScrollSpeed = 1; // pixels per frame
+        const ganttScrollDelay = 20; // milliseconds between scrolls
+        const GANTT_STORAGE_KEY = 'gantt_autoscroll_enabled';
+
+        // Load state from localStorage
+        function loadGanttAutoScrollState() {
+            const saved = localStorage.getItem(GANTT_STORAGE_KEY);
+            if (saved !== null) {
+                isGanttAutoScrollEnabled = saved === 'true';
+            }
+            updateGanttAutoScrollToggleUI();
+        }
+
+        // Update toggle button UI
+        function updateGanttAutoScrollToggleUI() {
+            const toggleBtn = document.getElementById('ganttAutoScrollToggle');
+            const toggleIcon = document.getElementById('ganttAutoScrollIcon');
+            const toggleText = document.getElementById('ganttAutoScrollText');
+            
+            if (toggleBtn && toggleIcon && toggleText) {
+                if (isGanttAutoScrollEnabled) {
+                    toggleBtn.classList.remove('btn-outline-secondary');
+                    toggleBtn.classList.add('btn-outline-success');
+                    toggleIcon.classList.remove('bi-pause-circle', 'bi-arrow-down-up');
+                    toggleIcon.classList.add('bi-arrow-down-up');
+                    toggleText.textContent = 'Auto Scroll: ON';
+                } else {
+                    toggleBtn.classList.remove('btn-outline-success');
+                    toggleBtn.classList.add('btn-outline-secondary');
+                    toggleIcon.classList.remove('bi-arrow-down-up');
+                    toggleIcon.classList.add('bi-pause-circle');
+                    toggleText.textContent = 'Auto Scroll: OFF';
+                }
+            }
+        }
+
+        // Toggle auto-scroll on/off
+        function toggleGanttAutoScroll() {
+            isGanttAutoScrollEnabled = !isGanttAutoScrollEnabled;
+            localStorage.setItem(GANTT_STORAGE_KEY, isGanttAutoScrollEnabled.toString());
+            updateGanttAutoScrollToggleUI();
+            
+            if (isGanttAutoScrollEnabled) {
+                startGanttAutoScroll();
+            } else {
+                stopGanttAutoScroll();
+            }
+        }
+
+        function startGanttAutoScroll() {
+            if (!isGanttAutoScrollEnabled) return; // Don't start if disabled
+            
+            const ganttChart = document.getElementById('ganttChart');
+            if (!ganttChart) return;
+
+            // Hanya jalankan jika konten lebih tinggi dari container
+            if (ganttChart.scrollHeight <= ganttChart.clientHeight) {
+                return; // Tidak perlu scroll jika konten tidak overflow
+            }
+
+            // Hapus interval yang sudah ada jika ada
+            if (ganttAutoScrollInterval) {
+                clearInterval(ganttAutoScrollInterval);
+            }
+
+            ganttAutoScrollInterval = setInterval(function() {
+                if (isGanttPaused || !isGanttAutoScrollEnabled) return;
+
+                const maxScroll = ganttChart.scrollHeight - ganttChart.clientHeight;
+                const currentScroll = ganttChart.scrollTop;
+
+                if (isGanttScrollingDown) {
+                    // Scroll ke bawah
+                    if (currentScroll < maxScroll) {
+                        ganttChart.scrollTop += ganttScrollSpeed;
+                    } else {
+                        // Sudah sampai bawah, mulai scroll ke atas
+                        isGanttScrollingDown = false;
+                    }
+                } else {
+                    // Scroll ke atas
+                    if (currentScroll > 0) {
+                        ganttChart.scrollTop -= ganttScrollSpeed;
+                    } else {
+                        // Sudah sampai atas, mulai scroll ke bawah
+                        isGanttScrollingDown = true;
+                    }
+                }
+            }, ganttScrollDelay);
+        }
+
+        function stopGanttAutoScroll() {
+            if (ganttAutoScrollInterval) {
+                clearInterval(ganttAutoScrollInterval);
+                ganttAutoScrollInterval = null;
+            }
+        }
+
+        // Filter function for Gantt Chart rows
+        function filterGanttRows(filter) {
+            currentGanttFilter = filter;
+            
+            console.log("🔍 Filtering Gantt Chart:", filter);
+            
+            // Update active card
+            $('.filter-card-gantt').removeClass('active');
+            $(`.filter-card-gantt[data-filter="${filter}"]`).addClass('active');
+            
+            // Show/hide reset button
+            if (filter === 'all') {
+                $('#filterResetRow').fadeOut();
+            } else {
+                $('#filterResetRow').fadeIn();
+            }
+            
+            // Filter rows
+            const rows = $('.gantt-row');
+            let visibleCount = 0;
+            
+            rows.each(function() {
+                const row = $(this);
+                const status = row.data('status');
+                const isLate = row.data('late') === true || row.data('late') === 'true';
+                let shouldShow = false;
+                
+                if (filter === 'all') {
+                    shouldShow = true;
+                } else if (filter === 'completed') {
+                    shouldShow = status === 'completed';
+                } else if (filter === 'inprogress') {
+                    shouldShow = status === 'inprogress';
+                } else if (filter === 'late') {
+                    shouldShow = isLate;
+                }
+                
+                if (shouldShow) {
+                    row.fadeIn(300);
+                    visibleCount++;
+                } else {
+                    row.fadeOut(300);
+                }
+            });
+            
+            console.log(`✅ Visible rows: ${visibleCount}`);
+            
+            // Show empty state if no results
+            if (visibleCount === 0) {
+                if ($('#ganttEmptyState').length === 0) {
+                    $('#ganttChart').prepend(`
+                        <div id="ganttEmptyState" class="alert alert-info text-center m-3">
+                            <i class="bi bi-filter-circle"></i> 
+                            <strong>Tidak ada schedule untuk filter ini.</strong>
+                            <br><small>Klik "Reset Filter" atau pilih card lain.</small>
+                        </div>
+                    `);
+                }
+            } else {
+                $('#ganttEmptyState').remove();
+            }
+            
+            // Restart auto-scroll setelah filter (tunggu animasi selesai)
+            setTimeout(function() {
+                stopGanttAutoScroll();
+                if (isGanttAutoScrollEnabled) {
+                    startGanttAutoScroll();
+                }
+            }, 400);
+        }
+
+        $(document).ready(function() {
+            // Add hover effect to gantt bars
+            $('.gantt-bar').hover(
+                function() {
+                    $(this).css('opacity', '0.8');
+                },
+                function() {
+                    $(this).css('opacity', '1');
+                }
+            );
+
+            // Add tooltip functionality
+            $('.gantt-bar').attr('title', function() {
+                return $(this).find('strong').text();
+            });
+            
+            // Initialize filter
+            filterGanttRows('all');
+            
+            // Load saved auto-scroll state
+            loadGanttAutoScrollState();
+            
+            // Setup toggle button
+            const ganttToggleBtn = document.getElementById('ganttAutoScrollToggle');
+            if (ganttToggleBtn) {
+                ganttToggleBtn.addEventListener('click', toggleGanttAutoScroll);
+            }
+            
+            // Initialize auto-scroll setelah Gantt Chart ter-render
+            setTimeout(function() {
+                if (isGanttAutoScrollEnabled) {
+                    startGanttAutoScroll();
+                }
+            }, 1000);
+
+            // Pause saat hover, resume saat tidak hover
+            const ganttChart = document.getElementById('ganttChart');
+            if (ganttChart) {
+                ganttChart.addEventListener('mouseenter', function() {
+                    isGanttPaused = true;
+                });
+
+                ganttChart.addEventListener('mouseleave', function() {
+                    isGanttPaused = false;
+                });
+            }
+        });
+
+        // ================= FULLSCREEN HANDLING =================
+        const ganttContainer = document.getElementById('ganttContainer');
+        const ganttFsToggle = document.getElementById('ganttFullscreenToggle');
+        const ganttFsIcon = document.getElementById('ganttFullscreenIcon');
+
+        function isFullscreen() {
+            return document.fullscreenElement === ganttContainer;
+        }
+
+        function updateFullscreenButton() {
+            if (isFullscreen()) {
+                ganttFsIcon.classList.remove('bi-arrows-fullscreen');
+                ganttFsIcon.classList.add('bi-fullscreen-exit');
+                ganttFsToggle.innerHTML = '<i class=\"bi bi-fullscreen-exit\" id=\"ganttFullscreenIcon\"></i> Exit Full Screen';
+            } else {
+                ganttFsIcon.classList.remove('bi-fullscreen-exit');
+                ganttFsIcon.classList.add('bi-arrows-fullscreen');
+                ganttFsToggle.innerHTML = '<i class=\"bi bi-arrows-fullscreen\" id=\"ganttFullscreenIcon\"></i> Full Screen';
+            }
+        }
+
+        if (ganttFsToggle && ganttContainer) {
+            ganttFsToggle.addEventListener('click', async () => {
+                try {
+                    if (!isFullscreen()) {
+                        await ganttContainer.requestFullscreen();
+                    } else {
+                        await document.exitFullscreen();
+                    }
+                } catch (e) {
+                    console.error('Fullscreen error:', e);
+                }
+            });
+
+            document.addEventListener('fullscreenchange', updateFullscreenButton);
+        }
+
+        // ============================================
+        // SIGNALR REAL-TIME UPDATE FOR GANTT CHART
+        // ============================================
+        
+        console.log("🚀 Initializing SignalR connection for Gantt Chart...");
+        
+        // Build SignalR connection
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/deliveryHub")
+            .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+        // Connection state management
+        let isConnected = false;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 10;
+
+        // Helper function to update status badge
+        function updateStatusBadge(status, text) {
+            const badge = $('#signalr-status-gantt');
+            badge.removeClass('status-connecting status-live status-reconnecting status-disconnected');
+            badge.addClass(`status-${status}`);
+            badge.find('.status-text').text(text);
+        }
+
+        // Toast notification function
+        function showToast(message, type = 'info') {
+            const toastHtml = `
+                <div class="position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+                    <div class="toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'danger' ? 'danger' : 'info'} border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
+                        <div class="d-flex">
+                            <div class="toast-body">
+                                <i class="bi bi-${type === 'success' ? 'check-circle-fill' : type === 'danger' ? 'exclamation-triangle-fill' : 'info-circle-fill'}"></i> ${message}
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            $('body').append(toastHtml);
+            setTimeout(() => {
+                $('.toast').fadeOut(300, function() { $(this).parent().remove(); });
+            }, 5000);
+        }
+
+        // Refresh Gantt Chart data
+        function refreshGanttChart() {
+            console.log("🔄 Refreshing Gantt Chart data...");
+            
+            // Get current filter values
+            const startDate = $('input[name="startDate"]').val();
+            const endDate = $('input[name="endDate"]').val();
+            const customerId = $('select[name="customerId"]').val();
+            
+            // Build query string
+            let queryString = `?startDate=${startDate}&endDate=${endDate}`;
+            if (customerId) {
+                queryString += `&customerId=${customerId}`;
+            }
+            
+            // Reload page with fade effect
+            $('#ganttChart').fadeOut(200, function() {
+                window.location.href = '@Url.Action("GanttChart", "DeliverySchedules")' + queryString;
+            });
+        }
+
+        // SignalR event handlers
+        connection.on("connected", function(connectionId) {
+            console.log("✅ SignalR Connected! Connection ID:", connectionId);
+            isConnected = true;
+            reconnectAttempts = 0;
+            updateStatusBadge('live', 'Live');
+        });
+
+        connection.on("deliveryUpdated", function(data) {
+            console.log("🔔 Delivery Update Received:", data);
+            
+            // Use camelCase for data properties
+            const action = data.action || data.Action;
+            const message = data.message || data.Message;
+            
+            // Show notification
+            const icon = action === 'arrival' ? '🚚' : '✅';
+            showToast(`${icon} ${message}`, 'success');
+            
+            // Refresh Gantt Chart after a short delay (allow animation)
+            setTimeout(() => {
+                refreshGanttChart();
+            }, 1000);
+        });
+
+        // Connection lifecycle events
+        connection.onreconnecting((error) => {
+            console.warn("⚠️ SignalR reconnecting...", error);
+            isConnected = false;
+            updateStatusBadge('reconnecting', 'Reconnecting...');
+        });
+
+        connection.onreconnected((connectionId) => {
+            console.log("✅ SignalR reconnected! Connection ID:", connectionId);
+            isConnected = true;
+            reconnectAttempts = 0;
+            updateStatusBadge('live', 'Live');
+            
+            // Refresh data after reconnection
+            refreshGanttChart();
+        });
+
+        connection.onclose((error) => {
+            console.error("❌ SignalR connection closed:", error);
+            isConnected = false;
+            updateStatusBadge('disconnected', 'Disconnected');
+            
+            // Auto reconnect
+            if (reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                console.log(`🔄 Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`);
+                setTimeout(() => startConnection(), 5000);
+            } else {
+                console.error("❌ Max reconnect attempts reached. Please refresh the page.");
+                showToast('Koneksi terputus. Silakan refresh halaman.', 'danger');
+            }
+        });
+
+        // Start connection function
+        async function startConnection() {
+            try {
+                await connection.start();
+                console.log("✅ SignalR connection started successfully!");
+            } catch (err) {
+                console.error("❌ SignalR connection failed:", err);
+                setTimeout(() => startConnection(), 5000);
+            }
+        }
+
+        // Initialize connection on page load
+        startConnection();
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (connection && isConnected) {
+                connection.stop();
+            }
+        });
+
+        console.log("✅ SignalR initialization complete for Gantt Chart!");
+    </script>
+}
+
+<style>
+    /* ========================================
+       REALTIME STATUS BADGE - Enhanced Styling
+       ======================================== */
+    .realtime-status-badge {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        border-radius: 25px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+        backdrop-filter: blur(10px);
+    }
+
+    .realtime-status-badge .status-pulse {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 25px;
+        opacity: 0;
+        animation: pulse-ring 2s infinite;
+        pointer-events: none;
+    }
+
+    .realtime-status-badge .status-icon {
+        font-size: 0.7rem;
+        filter: drop-shadow(0 0 4px currentColor);
+    }
+
+    .realtime-status-badge .status-text {
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Status: Connecting (Gray) */
+    .status-connecting {
+        background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        border-color: #adb5bd;
+        color: #fff;
+    }
+
+    .status-connecting .status-pulse {
+        background: rgba(108, 117, 125, 0.5);
+    }
+
+    .status-connecting .status-icon {
+        animation: pulse-icon 1.5s infinite;
+    }
+
+    /* Status: Live (Green) */
+    .status-live {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border-color: #34d399;
+        color: #fff;
+        animation: glow-green 2s infinite alternate;
+    }
+
+    .status-live .status-pulse {
+        background: rgba(16, 185, 129, 0.5);
+    }
+
+    .status-live .status-icon {
+        animation: pulse-icon-success 1.5s infinite;
+    }
+
+    /* Status: Reconnecting (Yellow) */
+    .status-reconnecting {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        border-color: #fbbf24;
+        color: #fff;
+        animation: glow-yellow 1s infinite alternate;
+    }
+
+    .status-reconnecting .status-pulse {
+        background: rgba(245, 158, 11, 0.5);
+    }
+
+    .status-reconnecting .status-icon {
+        animation: spin 2s linear infinite;
+    }
+
+    /* Status: Disconnected (Red) */
+    .status-disconnected {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        border-color: #f87171;
+        color: #fff;
+    }
+
+    .status-disconnected .status-pulse {
+        background: rgba(239, 68, 68, 0.5);
+    }
+
+    .status-disconnected .status-icon {
+        animation: blink-icon 1s infinite;
+    }
+
+    /* Animations */
+    @@keyframes pulse-ring {
+        0% {
+            transform: scale(1);
+            opacity: 0.5;
+        }
+        100% {
+            transform: scale(1.2);
+            opacity: 0;
+        }
+    }
+
+    @@keyframes pulse-icon {
+        0%, 100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.5;
+        }
+    }
+
+    @@keyframes pulse-icon-success {
+        0%, 100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+        50% {
+            transform: scale(1.2);
+            opacity: 0.8;
+        }
+    }
+
+    @@keyframes glow-green {
+        0% {
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+        100% {
+            box-shadow: 0 4px 20px rgba(16, 185, 129, 0.8), 0 0 30px rgba(16, 185, 129, 0.4);
+        }
+    }
+
+    @@keyframes glow-yellow {
+        0% {
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+        }
+        100% {
+            box-shadow: 0 4px 20px rgba(245, 158, 11, 0.8);
+        }
+    }
+
+    @@keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    @@keyframes blink-icon {
+        0%, 49% {
+            opacity: 1;
+        }
+        50%, 100% {
+            opacity: 0.3;
+        }
+    }
+
+    /* ========== STATISTICS CARDS ========== */
+    .cyber-card {
+        border-radius: 12px;
+        border: 2px solid rgba(59, 130, 246, 0.3);
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        transition: all 0.3s ease;
+        overflow: hidden;
+    }
+
+    .cyber-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 15px rgba(59, 130, 246, 0.4);
+    }
+
+    /* Filter Card Styles */
+    .filter-card-gantt {
+        border: 3px solid transparent;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .filter-card-gantt:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+    }
+
+    .filter-card-gantt.active {
+        border-color: #ffffff;
+        box-shadow: 0 0 20px rgba(255,255,255,0.6), 0 10px 25px rgba(0,0,0,0.4);
+        transform: scale(1.05);
+    }
+
+    .filter-card-gantt::after {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .filter-card-gantt:hover::after {
+        opacity: 1;
+    }
+
+    .filter-card-gantt.active::after {
+        opacity: 1;
+    }
+
+    .stat-card-blue {
+        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+        border-color: rgba(13, 110, 253, 0.5);
+    }
+
+    .stat-card-green {
+        background: linear-gradient(135deg, #198754 0%, #146c43 100%);
+        border-color: rgba(25, 135, 84, 0.5);
+    }
+
+    .stat-card-yellow {
+        background: linear-gradient(135deg, #ffc107 0%, #d39e00 100%);
+        border-color: rgba(255, 193, 7, 0.5);
+    }
+
+    .stat-card-red {
+        background: linear-gradient(135deg, #dc3545 0%, #b02a37 100%);
+        border-color: rgba(220, 53, 69, 0.5);
+        animation: pulse-danger 2s ease-in-out infinite;
+    }
+
+    .stat-icon-gantt {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8rem;
+        background: rgba(255, 255, 255, 0.25);
+        transition: all 0.3s ease;
+        opacity: 1;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .cyber-card:hover .stat-icon-gantt {
+        transform: scale(1.05);
+    }
+
+    .stat-icon-blue { 
+        color: #ffffff; 
+        opacity: 1;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+    }
+    .stat-icon-green { 
+        color: #ffffff; 
+        opacity: 1;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+    }
+    .stat-icon-yellow { 
+        color: #ffffff; 
+        opacity: 1;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+    }
+    .stat-icon-red { 
+        color: #ffffff; 
+        opacity: 1;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+    }
+
+    @@keyframes pulse-danger {
+        0%, 100% {
+            box-shadow: 0 4px 10px rgba(220, 53, 69, 0.3);
+        }
+        50% {
+            box-shadow: 0 6px 15px rgba(220, 53, 69, 0.5);
+        }
+    }
+
+    /* ========== GANTT CHART MAIN ========== */
+    .gantt-main-card {
+        border: 3px solid rgba(59, 130, 246, 0.4);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .gantt-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        border-bottom: 3px solid #3b82f6;
+        padding: 1.5rem;
+    }
+
+    /* ========== GANTT BARS ========== */
+    .gantt-bar {
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+    }
+
+    .gantt-bar:hover {
+        transform: translateY(-2px);
+        filter: brightness(1.1);
+        z-index: 10 !important;
+    }
+
+    .gantt-bar.gantt-planned:hover {
+        box-shadow: 0 4px 12px rgba(13, 110, 253, 0.6);
+    }
+
+    .gantt-bar-success:hover {
+        box-shadow: 0 4px 12px rgba(25, 135, 84, 0.6);
+    }
+
+    .gantt-bar-danger:hover {
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.6);
+    }
+
+    .gantt-bar.gantt-inprogress:hover {
+        box-shadow: 0 4px 12px rgba(255, 193, 7, 0.6);
+    }
+
+    .gantt-bar.gantt-dock-scheduled:hover {
+        box-shadow: 0 3px 10px rgba(14, 165, 233, 0.6);
+        transform: translateY(-1px);
+    }
+
+    .gantt-bar.gantt-dock-actual:hover {
+        box-shadow: 0 3px 10px rgba(34, 197, 94, 0.6);
+        transform: translateY(-1px);
+    }
+
+    @@keyframes pulse-warning {
+        0%, 100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.7;
+        }
+    }
+
+    /* ========== GANTT CHART CONTAINER ========== */
+    #ganttChart {
+        background: #1e293b;
+    }
+
+    .gantt-row {
+        transition: all 0.2s ease;
+    }
+
+    .gantt-row:hover {
+        background-color: rgba(59, 130, 246, 0.1);
+    }
+    
+    .gantt-row:hover .gantt-customer-cell {
+        background: #334155 !important;
+    }
+
+    /* Fullscreen styles */
+    #ganttContainer:fullscreen {
+        border-radius: 0;
+    }
+
+    #ganttContainer:fullscreen #ganttChart {
+        max-height: calc(100vh - 140px);
+    }
+
+    /* ========== SCROLLBAR ========== */
+    #ganttChart::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+    }
+
+    #ganttChart::-webkit-scrollbar-track {
+        background: #1e293b;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    #ganttChart::-webkit-scrollbar-thumb {
+        background: #3b82f6;
+        border-radius: 6px;
+    }
+
+    #ganttChart::-webkit-scrollbar-thumb:hover {
+        background: #60a5fa;
+    }
+
+    #ganttChart::-webkit-scrollbar-corner {
+        background: #1e293b;
+    }
+
+    /* ========== LEGEND STYLES ========== */
+    .legend-container {
+        background: rgba(30, 41, 59, 0.4) !important;
+        border-top: 2px solid rgba(59, 130, 246, 0.3) !important;
+        padding: 1.5rem 2rem !important;
+        border-radius: 0 0 12px 12px !important;
+        margin-top: 0 !important;
+    }
+
+    .legend-title {
+        color: #60a5fa !important;
+        font-size: 1.1rem !important;
+        font-weight: 700 !important;
+        margin-bottom: 1.2rem !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+    }
+
+    .legend-title i {
+        font-size: 1.2rem !important;
+    }
+
+    .legend-item-simple {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+        padding: 0.5rem 0.75rem !important;
+        background: rgba(59, 130, 246, 0.08) !important;
+        border-radius: 6px !important;
+        border: 1px solid rgba(59, 130, 246, 0.2) !important;
+        font-size: 0.85rem !important;
+        color: #e2e8f0 !important;
+        transition: all 0.2s ease !important;
+    }
+
+    .legend-item-simple:hover {
+        background: rgba(59, 130, 246, 0.15) !important;
+        border-color: rgba(96, 165, 250, 0.4) !important;
+        transform: translateY(-1px) !important;
+    }
+
+    .legend-item-simple i {
+        font-size: 1rem !important;
+        flex-shrink: 0 !important;
+    }
+
+    .legend-item-simple span {
+        line-height: 1.5 !important;
+    }
+
+    /* ========== TIMELINE GRID ========== */
+    #ganttChart table td.gantt-timeline-cell {
+        background: #1e293b !important;
+        border-top: 1px solid rgba(59, 130, 246, 0.2);
+        border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    /* ========== CUSTOMER COLUMN ========== */
+    .gantt-customer-cell {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+        box-shadow: 3px 0 10px rgba(0, 0, 0, 0.4) !important;
+        border-right: 3px solid #3b82f6 !important;
+    }
+
+
+    /* ========== CUSTOMER INFO ========== */
+    .customer-info-gantt {
+        transition: all 0.3s ease;
+    }
+
+    .customer-avatar-gantt {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1rem;
+        flex-shrink: 0;
+        border: 2px solid rgba(96, 165, 250, 0.4);
+        transition: all 0.3s ease;
+        opacity: 1;
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+    }
+    
+    .customer-avatar-gantt i {
+        opacity: 1;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+    }
+
+    /* Compact version for better space */
+    .customer-avatar-gantt-compact {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 0.85rem;
+        flex-shrink: 0;
+        border: 2px solid rgba(96, 165, 250, 0.4);
+        transition: all 0.3s ease;
+        opacity: 1;
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+    }
+    
+    .customer-avatar-gantt-compact i {
+        opacity: 1;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+    }
+
+    .badge-gantt {
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        transition: all 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 1;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    
+    .badge-gantt i {
+        opacity: 1;
+    }
+
+    .gantt-row:hover .customer-info-gantt {
+        transform: translateX(3px);
+    }
+
+    .gantt-row:hover .customer-avatar-gantt {
+        transform: scale(1.05);
+        border-color: rgba(96, 165, 250, 0.6);
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @@media (max-width: 768px) {
+        .stat-icon-gantt {
+            width: 50px;
+            height: 50px;
+            font-size: 1.5rem;
+        }
+        
+        .legend-item-gantt {
+            padding: 10px 12px;
+        }
+        
+        .legend-box {
+            width: 40px;
+            height: 24px;
+        }
+    }
+
+    /* Auto Scroll Toggle Button */
+    #ganttAutoScrollToggle {
+        transition: all 0.3s ease;
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+
+    #ganttAutoScrollToggle:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    #ganttAutoScrollToggle.btn-outline-success {
+        border-color: #198754;
+        color: #198754;
+    }
+
+    #ganttAutoScrollToggle.btn-outline-success:hover {
+        background-color: #198754;
+        color: white;
+    }
+
+    #ganttAutoScrollToggle.btn-outline-secondary {
+        border-color: #6c757d;
+        color: #6c757d;
+    }
+
+    #ganttAutoScrollToggle.btn-outline-secondary:hover {
+        background-color: #6c757d;
+        color: white;
+    }
+</style>
+

@@ -1,0 +1,534 @@
+@model DeliveryControl.Models.StockDashboardViewModel
+@{
+    ViewData["Title"] = "Dashboard FG";
+}
+
+<div class="header-container mb-3">
+    <div class="header-main-row">
+        <!-- Title Section -->
+        <div class="header-title-section">
+            <i class="bi bi-columns-gap fs-4 text-primary"></i>
+
+            <h1 class="h5 fw-bold mb-0 text-white text-nowrap">Dashboard Finished Goods</h1>
+        </div>
+
+        <!-- Filter Bar Section -->
+        <div class="custom-filter-bar">
+            <!-- Search Box -->
+            <div class="search-box-wrapper">
+                <i class="bi bi-search search-icon"></i>
+                <input type="text" id="tagLabelSearch" class="custom-search-input" placeholder="Cari Tag atau Kanban...">
+            </div>
+
+            <!-- Plant Filter -->
+            <div class="filter-group">
+                <span class="filter-label">Plant:</span>
+                <select id="plantFilter" class="custom-select-input">
+                    <option value="Overall" selected="@(Model.PlantName == "Overall")">Overall</option>
+                    <option value="Molded" selected="@(Model.PlantName == "Molded")">Molded</option>
+                    <option value="Hose" selected="@(Model.PlantName == "Hose")">Hose</option>
+                    <option value="RVI" selected="@(Model.PlantName == "RVI")">RVI</option>
+                </select>
+            </div>
+
+            <!-- Date Filter -->
+            <div class="filter-group">
+                <span class="filter-label">Tanggal:</span>
+                <input type="date" id="dateFilter" class="custom-date-input" value="@(Model.SearchDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))">
+            </div>
+
+            <!-- Period Filter -->
+            <div class="filter-group">
+                <span class="filter-label">Periode:</span>
+                <select id="periodFilter" class="custom-select-input">
+                    <option value="Day" selected="@(Model.Period == "Day")">Day</option>
+                    <option value="Week" selected="@(Model.Period == "Week")">Week</option>
+                    <option value="Month" selected="@(Model.Period == "Month")">Month</option>
+                    <option value="Year" selected="@(Model.Period == "Year")">Year</option>
+                </select>
+            </div>
+
+            <div class="dash-v-divider"></div>
+
+            <!-- Excel Download -->
+            <button id="btnDownloadExcel" class="btn-custom-excel">
+                <i class="bi bi-file-earmark-excel"></i>
+                <span>Template Excel</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Dashboard Sub-Menu Navigation -->
+    <div class="dashboard-nav-wrapper">
+        <div class="nav-links-container">
+            <a asp-controller="Stock" asp-action="Index" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")">
+                <i class="bi bi-columns-gap"></i>
+                <span>Overall Stock</span>
+            </a>
+            <a asp-controller="Stock" asp-action="Molded" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Molded" ? "active" : "")">
+                <i class="bi bi-grid-3x3-gap"></i>
+                <span>Transaction Molded</span>
+            </a>
+            <a asp-controller="Stock" asp-action="Hose" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Hose" ? "active" : "")">
+                <i class="bi bi-layers"></i>
+                <span>Transaction Hose</span>
+            </a>
+            <a asp-controller="Stock" asp-action="RVI" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "RVI" ? "active" : "")">
+                <i class="bi bi-cpu"></i>
+                <span>Transaction RVI</span>
+            </a>
+            <a asp-controller="Stock" asp-action="Trend" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Trend" ? "active" : "")">
+                <i class="bi bi-graph-up"></i>
+                <span>Trend Stock</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<div id="dashboardContent">
+    <div class="row">
+        <!-- Status Indicator Cards -->
+        <div class="col-md-3 mb-4">
+            <div class="cyber-card p-3 text-center border-danger indicator-card clickable" data-filter="Shortage" style="cursor: pointer;">
+                <small class="text-muted d-block text-uppercase">Shortage</small>
+                <h2 class="fw-bold mb-0 text-danger">@Model.ShortageCount</h2>
+                <small class="text-white-50">Low Stock Items</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="cyber-card p-3 text-center border-success indicator-card clickable" data-filter="Normal" style="cursor: pointer;">
+                <small class="text-muted d-block text-uppercase">Normal</small>
+                <h2 class="fw-bold mb-0 text-success">@Model.NormalCount</h2>
+                <small class="text-white-50">Safe Stock Items</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="cyber-card p-3 text-center border-info indicator-card clickable" data-filter="Over" style="cursor: pointer;">
+                <small class="text-muted d-block text-uppercase">Over</small>
+                <h2 class="fw-bold mb-0 text-info">@Model.OverCount</h2>
+                <small class="text-white-50">Excessive Stock</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="cyber-card p-3 text-center">
+                <div class="status-indicator-live active"></div>
+                <small class="text-muted d-block text-uppercase">Total item</small>
+                <h2 class="fw-bold mb-0 text-white fs-4">@(Model.ShortageCount + Model.NormalCount + Model.OverCount)</h2>
+                <small class="text-white-50">IN STORAGE</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Detailed Data Table -->
+        <div class="col-12 mb-4">
+            <div class="cyber-card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-primary"><i class="bi bi-list-ul me-2"></i> Detail Data Barang (@Model.PlantName)</span>
+                    
+                    <div class="d-flex align-items-center gap-2">
+                         <span id="autoScrollStatus" class="small text-muted fw-bold me-1" style="font-size: 0.75rem;">Auto Scroll: OFF</span>
+                         <button id="btnToggleAutoScroll" class="btn btn-outline-secondary btn-xs d-flex align-items-center gap-1">
+                             <i class="bi bi-play-circle"></i> Toggle
+                         </button>
+                    </div>
+                </div>
+                <div class="table-responsive main-stock-container">
+                    <table class="table table-hover mb-0" id="stockDetailTable" style="border-collapse: separate; border-spacing: 0;">
+                        <thead>
+                            <tr style="height: 50px;">
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 50px;">NO</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 120px;">LOKASI RAK</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 100px;">PROD. PLANT</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 80px;">RAK</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 120px;">LABEL</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 60px;">ACT</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 150px;">LEVEL STOCK</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 100px;">CUST</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 100px;">STATUS</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 100px;">PROD</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 120px;">VIN</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 60px;">QPC</th>
+                                <th class="bg-red text-white text-center" style="min-width: 80px;">MIN 1D</th>
+                                <th class="bg-yellow text-dark text-center" style="min-width: 80px;">ROP 2D</th>
+                                <th class="bg-info text-white text-center" style="min-width: 80px;">MAX 3D</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var record in Model.StockDetails)
+                            {
+                                <tr class="stock-row" data-status="@record.Status">
+                                    <td class="text-center">@record.No</td>
+                                    <td class="fw-bold text-primary">@record.ItemName</td>
+                                    <td class="text-center"><span class="badge @(record.Plant == "Molded" ? "bg-primary" : record.Plant == "Hose" ? "bg-info text-dark" : "bg-warning text-dark") smaller">@record.Plant</span></td>
+                                    <td class="text-center fw-bold">@record.RackInfo</td>
+                                    <td class="text-center"><span class="text-primary fw-bold" style="font-size: 0.8rem;">@record.Label</span></td>
+                                    <td class="text-center">
+                                        <div class="d-flex flex-column align-items-center">
+                                            <span class="fw-bold text-info" style="font-size: 1.1rem;">@record.CurrentStock.ToString("G29")</span>
+                                            <small class="text-muted" style="font-size: 0.6rem;">BOX</small>
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                         @if (record.LevelStock < 1.5m)
+                                         {
+                                             <span class="stock-badge stock-level-red px-2 py-1">
+                                                 <i class="bi bi-exclamation-triangle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
+                                             </span>
+                                         }
+                                         else if (record.LevelStock >= 1.5m && record.LevelStock < 2.0m)
+                                         {
+                                             <span class="stock-badge stock-level-yellow px-2 py-1">
+                                                 <i class="bi bi-info-circle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
+                                             </span>
+                                         }
+                                         else if (record.LevelStock >= 2.0m && record.LevelStock <= 3.0m)
+                                         {
+                                             <span class="stock-badge stock-level-green px-2 py-1">
+                                                 <i class="bi bi-check-circle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
+                                             </span>
+                                         }
+                                         else
+                                         {
+                                             <span class="stock-badge stock-level-blue px-2 py-1">
+                                                 <i class="bi bi-star-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
+                                             </span>
+                                         }
+                                    </td>
+                                    <td class="text-center">@record.Customer</td>
+                                    <td class="text-center">
+                                        @if (record.IsActive)
+                                        {
+                                            <span class="badge bg-success opacity-75 smaller">Active</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger opacity-75 smaller">Inactive</span>
+                                        }
+                                    </td>
+                                    <td class="text-center small">@record.Category</td>
+                                    <td class="text-center" style="font-size: 0.8rem;">@record.VIN</td>
+                                    <td class="text-center fw-bold text-info">@(record.QtyLot?.ToString() ?? "-")</td>
+                                    <td class="text-center fw-bold text-danger">@(record.Min?.ToString() ?? "-")</td>
+                                    <td class="text-center fw-bold text-warning">@(record.Rop?.ToString() ?? "-")</td>
+                                    <td class="text-center fw-bold text-success">@(record.Max?.ToString() ?? "-")</td>
+                                </tr>
+                            }
+                            @if (!Model.StockDetails.Any())
+                            {
+                                <tr><td colspan="16" class="text-center py-5 text-muted small">Tidak ada data barang dalam stok.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="px-3 pb-3">
+                    <partial name="_Pager" model='new { CurrentPage = ViewBag.CurrentPage, TotalPages = ViewBag.TotalPages, TotalItems = ViewBag.TotalItems, RouteData = ViewBag.RouteData }' />
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/stockHub")
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on("updateStock", function () {
+                refreshDashboard();
+            });
+
+            connection.start().catch(err => console.error(err.toString()));
+
+            function refreshDashboard() {
+                const plant = $('#plantFilter').val() || 'Overall';
+                const date = $('#dateFilter').val() || '';
+                const period = $('#periodFilter').val() || 'Day';
+                
+                const urlParams = new URLSearchParams(window.location.search);
+                const pageNumber = urlParams.get('pageNumber') || '1';
+                
+                $.ajax({
+                    url: `/Stock/Index?plant=${plant}&date=${date}&period=${period}&pageNumber=${pageNumber}`,
+                    type: 'GET',
+                    success: function (html) {
+                        const newContent = $(html).find('#dashboardContent').html();
+                        $('#dashboardContent').fadeOut(200, function() {
+                            $(this).html(newContent).fadeIn(200);
+                            bindFilterEvents();
+                            applyAllFilters(); // Re-apply local filters (Search & Status)
+                            
+                            // Re-apply auto scroll state if it was active
+                            if (isAutoScrollActive) {
+                                syncAutoScrollUI();
+                                startScrolling();
+                            }
+                        });
+                    }
+                });
+            }
+
+            let currentStatusFilter = 'All';
+
+            function bindFilterEvents() {
+                $('.indicator-card.clickable').off('click').on('click', function() {
+                    currentStatusFilter = $(this).data('filter');
+                    applyAllFilters();
+                });
+
+                $('#plantFilter, #dateFilter, #periodFilter').off('change').on('change', function() {
+                    refreshDashboard();
+                });
+
+                $('#tagLabelSearch').off('input').on('input', function() {
+                    applyAllFilters();
+                });
+
+                $('#tagLabelSearch').off('keypress').on('keypress', function(e) {
+                    if (e.which == 13) {
+                        refreshDashboard();
+                    }
+                });
+
+                $('#btnToggleAutoScroll').off('click').on('click', toggleAutoScroll);
+                
+                $('#btnDownloadExcel').off('click').on('click', function() {
+                    const plant = $('#plantFilter').val() || 'Overall';
+                    const date = $('#dateFilter').val() || '';
+                    const period = $('#periodFilter').val() || 'Day';
+                    window.location.href = `/Stock/ExportToExcel?plant=${plant}&date=${date}&period=${period}`;
+                });
+            }
+
+            function applyAllFilters() {
+                const searchText = $('#tagLabelSearch').val().toLowerCase();
+                let visibleCounter = 1;
+                
+                $('.indicator-card').removeClass('active-filter').css('opacity', '0.5');
+                
+                if (currentStatusFilter === 'All') {
+                    $('.indicator-card').css('opacity', '1');
+                    $('#activeFilterLabel').text('All Items').removeClass().addClass('badge bg-primary');
+                } else {
+                    $(`.indicator-card[data-filter="${currentStatusFilter}"]`).addClass('active-filter').css('opacity', '1');
+                    
+                    let badgeClass = 'bg-secondary';
+                    if (currentStatusFilter === 'Shortage') badgeClass = 'bg-danger';
+                    if (currentStatusFilter === 'Normal') badgeClass = 'bg-success';
+                    if (currentStatusFilter === 'Over') badgeClass = 'bg-info text-dark';
+                    $('#activeFilterLabel').text('Status: ' + currentStatusFilter).removeClass().addClass('badge ' + badgeClass);
+                }
+
+                $('.stock-row').each(function() {
+                    const rowStatus = $(this).data('status');
+                    const itemName = $(this).find('td:nth-child(2)').text().toLowerCase(); 
+                    const label    = $(this).find('td:nth-child(5)').text().toLowerCase(); 
+                    const vin      = $(this).find('td:nth-child(12)').text().toLowerCase();
+                    
+                    const matchesStatus = (currentStatusFilter === 'All' || rowStatus === currentStatusFilter);
+                    const matchesSearch = (itemName.includes(searchText) || label.includes(searchText) || vin.includes(searchText));
+                    
+                    if (matchesStatus && matchesSearch) {
+                        $(this).show();
+                        $(this).find('td:first-child').text(visibleCounter++);
+                    } else {
+                        $(this).hide();
+                    }
+                });
+            }
+
+            // Auto Scroll Logic
+            let isAutoScrollActive = localStorage.getItem('autoScrollActive') === 'true';
+            let scrollInterval;
+            let scrollDirection = 1; // 1: Down, -1: Up
+            const scrollSpeed = 1; 
+            const scrollDelay = 40; // ms
+
+            function toggleAutoScroll() {
+                isAutoScrollActive = !isAutoScrollActive;
+                localStorage.setItem('autoScrollActive', isAutoScrollActive);
+                syncAutoScrollUI();
+                
+                if (isAutoScrollActive) {
+                    scrollDirection = 1;
+                    startScrolling();
+                } else {
+                    stopScrolling();
+                }
+            }
+
+            function syncAutoScrollUI() {
+                const btn = $('#btnToggleAutoScroll');
+                const indicator = $('#autoScrollStatus');
+                const icon = btn.find('i');
+
+                if (isAutoScrollActive) {
+                    btn.removeClass('btn-outline-secondary').addClass('btn-success active');
+                    indicator.text('Auto Scroll: ON').removeClass('text-muted').addClass('text-success');
+                    icon.removeClass('bi-play-circle').addClass('bi-pause-circle');
+                } else {
+                    btn.removeClass('btn-success active').addClass('btn-outline-secondary');
+                    indicator.text('Auto Scroll: OFF').removeClass('text-success').addClass('text-muted');
+                    icon.removeClass('bi-pause-circle').addClass('bi-play-circle');
+                }
+            }
+
+            function startScrolling() {
+                const container = $('.main-stock-container');
+                if (container.length === 0) return;
+                const el = container[0];
+                
+                if (scrollInterval) clearInterval(scrollInterval);
+                
+                scrollInterval = setInterval(function() {
+                    if (!isAutoScrollActive) return;
+
+                    const prevPos = el.scrollTop;
+                    el.scrollTop += (scrollDirection * scrollSpeed);
+                    
+                    // If position didn't change, we hit a boundary
+                    if (el.scrollTop === prevPos && el.scrollHeight > el.clientHeight) {
+                        clearInterval(scrollInterval);
+                        setTimeout(function() {
+                            if (isAutoScrollActive) {
+                                scrollDirection *= -1;
+                                startScrolling();
+                            }
+                        }, 2000); // Wait 2 seconds at edges
+                    }
+                }, scrollDelay);
+            }
+
+            function stopScrolling() {
+                clearInterval(scrollInterval);
+                scrollDirection = 1;
+            }
+
+            bindFilterEvents();
+            
+            // Initial load check
+            if (isAutoScrollActive) {
+                syncAutoScrollUI();
+                startScrolling();
+            }
+        });
+    </script>
+}
+
+<style>
+    /* ========================================
+       COMPACT HEADER & FILTER BAR STYLING
+       ======================================== */
+    .dashboard-nav-wrapper {
+        border-bottom: 2px solid rgba(59, 130, 246, 0.2);
+        margin-top: 5px;
+        padding-bottom: 0;
+    }
+
+    .nav-links-container {
+        display: flex;
+        align-items: center;
+        gap: 25px;
+    }
+
+    .nav-link-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #94a3b8;
+        text-decoration: none;
+        padding: 10px 0px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        position: relative;
+        border-bottom: 2px solid transparent;
+    }
+
+    .nav-link-item i {
+        font-size: 1rem;
+    }
+
+    .nav-link-item:hover {
+        color: #fff;
+    }
+
+    .nav-link-item.active {
+        color: #3b82f6;
+        border-bottom-color: #3b82f6;
+    }
+
+    .nav-link-item.active i {
+        color: #3b82f6;
+    }
+
+    .smaller { font-size: 0.75rem; }
+    .btn-xs { padding: 0.1rem 0.3rem; font-size: 0.7rem; }
+    
+    .bg-dark-blue { background: #0f172a !important; }
+    .bg-red { background: #dc3545 !important; } /* Bootstrap Danger Red */
+    .bg-yellow { background: #ffc107 !important; } /* Bootstrap Warning Yellow */
+    
+    .status-indicator-live {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #94a3b8;
+        display: inline-block;
+        margin-bottom: 5px;
+    }
+    .indicator-card {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border-width: 2px !important;
+    }
+    .indicator-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+    .indicator-card.active-filter {
+        transform: scale(1.05);
+        box-shadow: 0 0 15px rgba(255,255,255,0.1);
+        border-width: 3px !important;
+    }
+    .status-indicator-live.active {
+        background: #10b981;
+        box-shadow: 0 0 10px #10b981;
+        animation: pulse-live 2s infinite;
+    }
+
+    .main-stock-container {
+        max-height: 50vh;
+        overflow-y: auto;
+        position: relative;
+        scrollbar-width: thin;
+        scrollbar-color: #3b82f6 #0f172a;
+    }
+    .main-stock-container::-webkit-scrollbar {
+        width: 6px;
+    }
+    .main-stock-container::-webkit-scrollbar-track {
+        background: #0f172a;
+    }
+    .main-stock-container::-webkit-scrollbar-thumb {
+        background: #3b82f6;
+        border-radius: 10px;
+    }
+    /* Sticky Header for Table */
+    #stockDetailTable thead th {
+        position: sticky;
+        top: 0;
+        background-color: #0f172a; /* Sesuaikan dengan background dark card */
+        z-index: 10;
+        border-bottom: 2px solid #1e293b;
+    }
+
+    @@keyframes pulse-live {
+        0% { opacity: 1; }
+        50% { opacity: 0.4; }
+        100% { opacity: 1; }
+    }
+</style>

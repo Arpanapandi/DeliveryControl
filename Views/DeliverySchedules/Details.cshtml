@@ -1,0 +1,368 @@
+@model DeliveryControl.Models.DeliverySchedule
+
+@{
+    ViewData["Title"] = "Detail Jadwal Delivery";
+    var statusClass = Model.Status switch
+    {
+        "Scheduled" => "badge bg-secondary",
+        "In Progress" => "badge bg-warning text-dark",
+        "Completed" => "badge bg-success",
+        "Cancelled" => "badge bg-danger",
+        "Delayed" => "badge bg-danger",
+        _ => "badge bg-secondary"
+    };
+}
+
+<div class="row mb-3">
+    <div class="col-md-8">
+        <h2><i class="bi bi-calendar-check"></i> Detail Jadwal Delivery</h2>
+    </div>
+    <div class="col-md-4 text-end">
+        @if (Model.Status == "Scheduled")
+        {
+            <a asp-action="Edit" asp-route-id="@Model.ScheduleId" class="btn btn-warning">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            <a asp-action="StartDelivery" asp-route-id="@Model.ScheduleId" class="btn btn-success"
+               onclick="return confirm('Mulai delivery sekarang?')">
+                <i class="bi bi-play-fill"></i> Mulai Delivery
+            </a>
+        }
+        @if (Model.Status == "In Progress")
+        {
+            <a asp-action="CompleteDelivery" asp-route-id="@Model.ScheduleId" class="btn btn-primary"
+               onclick="return confirm('Tandai delivery sebagai selesai?')">
+                <i class="bi bi-check-circle"></i> Selesaikan Delivery
+            </a>
+        }
+        <a asp-action="Index" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Kembali
+        </a>
+    </div>
+</div>
+
+<!-- Schedule Information -->
+<div class="row mb-3">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Informasi Schedule</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>No. Schedule:</strong></div>
+                    <div class="col-md-8">
+                        @Model.ScheduleNumber
+                        @{
+                            var extraSchedules = ViewBag.GroupSchedules as List<DeliveryControl.Models.DeliverySchedule>;
+                            if (extraSchedules != null && extraSchedules.Any())
+                            {
+                                <div class="mt-1 small border-top pt-1">
+                                    <span class="text-muted">Part of Trip Group:</span><br />
+                                    @foreach (var s in extraSchedules)
+                                    {
+                                        <span class="badge bg-light text-dark border me-1">@s.ScheduleNumber</span>
+                                    }
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Customer:</strong></div>
+                    <div class="col-md-8">@Model.Customer.CustomerCode</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Tanggal:</strong></div>
+                    <div class="col-md-8">@Model.ScheduledDate.ToString("dddd, dd MMMM yyyy")</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Pickup Time (Std):</strong></div>
+                    <div class="col-md-8">
+                        @if (Model.PickupTime.HasValue)
+                        {
+                            @Model.PickupTime.Value.ToString("HH:mm")
+                        }
+                        else
+                        {
+                            <span class="text-muted">-</span>
+                        }
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Actual Pickup:</strong></div>
+                    <div class="col-md-8">
+                        @if (Model.ActualPickupTime.HasValue)
+                        {
+                            <span class="text-success fw-bold">@Model.ActualPickupTime.Value.ToString("HH:mm")</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">Truk belum pickup / berangkat</span>
+                        }
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>ETD:</strong></div>
+                    <div class="col-md-8">
+                        @if (Model.ETD.HasValue)
+                        {
+                            @Model.ETD.Value.ToString("HH:mm")
+                        }
+                        else
+                        {
+                            <span class="text-muted">-</span>
+                        }
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Route:</strong></div>
+                    <div class="col-md-8">@(Model.Route ?? "-")</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Cycle:</strong></div>
+                    <div class="col-md-8">@(Model.Cycle ?? "-")</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Range:</strong></div>
+                    <div class="col-md-8">@(Model.Range ?? "-")</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>SKID:</strong></div>
+                    <div class="col-md-8">@(Model.SKID?.ToString() ?? "-")</div>
+                </div>
+                @{
+                    double totalKbnTarget = 0;
+                    double totalKbnActual = 0;
+                    
+                    // Create a list of all schedules in this trip group
+                    var allSchedules = new List<DeliveryControl.Models.DeliverySchedule> { Model };
+                    if (ViewBag.GroupSchedules != null) {
+                        allSchedules.AddRange((List<DeliveryControl.Models.DeliverySchedule>)ViewBag.GroupSchedules);
+                    }
+
+                    foreach (var s in allSchedules)
+                    {
+                        if (s.DeliveryItems != null)
+                        {
+                            foreach (var di in s.DeliveryItems)
+                            {
+                                var qpc = di.Item?.QtyLot ?? 1;
+                                if (qpc > 0)
+                                {
+                                    totalKbnTarget += Math.Ceiling((double)di.Quantity / qpc);
+                                    totalKbnActual += (double)(di.ActualQuantity ?? 0) / qpc;
+                                }
+                            }
+                        }
+                    }
+                }
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Target Kanban (Group):</strong></div>
+                    <div class="col-md-8">@totalKbnTarget.ToString("0.##") KBN</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Actual Kanban (Group):</strong></div>
+                    <div class="col-md-8">
+                        <span class="@(totalKbnActual >= totalKbnTarget && totalKbnTarget > 0 ? "text-success" : (totalKbnActual > 0 ? "text-warning" : "")) fw-bold">
+                            @totalKbnActual.ToString("0.##") KBN
+                        </span>
+                        @if (totalKbnTarget > 0)
+                        {
+                            var pct = (totalKbnActual * 100) / totalKbnTarget;
+                            <small class="text-muted ms-2">(@pct.ToString("F1")%)</small>
+                        }
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Area:</strong></div>
+                    <div class="col-md-8">@(Model.Area ?? "-")</div>
+                </div>
+                <div class="row mb-2" id="time-actual-row">
+                    <div class="col-md-4"><strong>Waktu Actual:</strong></div>
+                    <div class="col-md-8">
+                        @if (Model.ActualStartTime.HasValue)
+                        {
+                            <span>@Model.ActualStartTime.Value.ToString("HH:mm")</span>
+                            @if (Model.ActualEndTime.HasValue)
+                            {
+                                <span> - @Model.ActualEndTime.Value.ToString("HH:mm")</span>
+                            }
+                            @if (Model.DelayStatus == "Late" && Model.DelayDuration.HasValue)
+                            {
+                                <br />
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-exclamation-triangle"></i> 
+                                    Terlambat @Model.DelayDuration.Value.TotalMinutes.ToString("0") menit
+                                </span>
+                            }
+                            else if (Model.DelayStatus == "On Time")
+                            {
+                                <br />
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle"></i> On Time
+                                </span>
+                            }
+                        }
+                        else
+                        {
+                            <span class="text-muted">Belum dimulai</span>
+                        }
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Status:</strong></div>
+                    <div class="col-md-8"><span class="@statusClass">@Model.Status</span></div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Nomor Kendaraan:</strong></div>
+                    <div class="col-md-8">@(Model.VehicleNumber ?? "-")</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4"><strong>Driver:</strong></div>
+                    <div class="col-md-8">
+                        @(Model.DriverName ?? "-")
+                        @if (!string.IsNullOrEmpty(Model.DriverPhone))
+                        {
+                            <br /><small class="text-muted">Telp: @Model.DriverPhone</small>
+                        }
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(Model.Notes))
+                {
+                    <div class="row mb-2">
+                        <div class="col-md-4"><strong>Catatan:</strong></div>
+                        <div class="col-md-8">@Model.Notes</div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Informasi Tambahan</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <strong>Dibuat:</strong><br />
+                    @Model.CreatedDate.ToString("dd/MM/yyyy HH:mm")<br />
+                    <small class="text-muted">oleh: @(Model.CreatedBy ?? "System")</small>
+                </div>
+                @if (Model.UpdatedDate.HasValue)
+                {
+                    <div class="mb-2">
+                        <strong>Diupdate:</strong><br />
+                        @Model.UpdatedDate.Value.ToString("dd/MM/yyyy HH:mm")<br />
+                        <small class="text-muted">oleh: @(Model.UpdatedBy ?? "System")</small>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delivery Items -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-box"></i> Item Delivery (Total Trip)</h5>
+                <div>
+                    <span class="badge bg-light text-dark me-2">Grouped: @allSchedules.Count Manifests</span>
+                    <a asp-controller="DeliveryItems" asp-action="Create" asp-route-scheduleId="@Model.ScheduleId" class="btn btn-light btn-sm">
+                        <i class="bi bi-plus-circle"></i> Tambah Item
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                @{
+                    var combinedItems = allSchedules
+                        .SelectMany(s => s.DeliveryItems.Select(di => new { 
+                            ScheduleNumber = s.ScheduleNumber, 
+                            Item = di.Item, 
+                             di.Quantity, 
+                             di.ActualQuantity, 
+                             di.IsCompleted, 
+                             di.DeliveryItemId
+                        }))
+                        .OrderBy(x => x.ScheduleNumber)
+                        .ThenBy(x => x.Item?.ItemName)
+                        .ToList();
+                }
+
+                @if (combinedItems.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Manifest</th>
+                                    <th>Item</th>
+                                    <th class="text-center">Target</th>
+                                    <th class="text-center">Actual</th>
+                                    <th class="text-center">Variance</th>
+                                    <th>Unit</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var groupItem in combinedItems)
+                                {
+                                    <tr>
+                                        <td><span class="badge bg-secondary">@groupItem.ScheduleNumber</span></td>
+                                        <td>
+                                            <strong>@groupItem.Item?.ItemName</strong><br />
+                                            <small class="text-muted">@groupItem.Item?.ItemCode</small>
+                                        </td>
+                                        <td class="text-center">
+                                            @{
+                                                var qpc = groupItem.Item?.QtyLot ?? 1;
+                                                var kbnPlan = Math.Ceiling((double)groupItem.Quantity / (qpc > 0 ? qpc : 1));
+                                                var kbnActual = (double)(groupItem.ActualQuantity ?? 0) / (qpc > 0 ? qpc : 1);
+                                                var kbnVariance = kbnActual - kbnPlan;
+                                            }
+                                            @kbnPlan.ToString("0.##")
+                                        </td>
+                                        <td class="text-center">@kbnActual.ToString("0.##")</td>
+                                        <td class="text-center">
+                                            @{
+                                                var varianceClass = kbnVariance >= 0 ? "text-success" : "text-danger";
+                                            }
+                                            <span class="@varianceClass">@kbnVariance.ToString("0.##")</span>
+                                        </td>
+                                        <td>KBN</td>
+                                        <td>
+                                            @if (groupItem.IsCompleted)
+                                            {
+                                                <span class="badge bg-success">Completed</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-warning">Pending</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <a asp-controller="DeliveryItems" asp-action="Edit" asp-route-id="@groupItem.DeliveryItemId" 
+                                               class="btn btn-sm btn-warning" title="Edit">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> Belum ada item delivery yang ditambahkan.
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+

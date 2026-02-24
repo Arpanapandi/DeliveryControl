@@ -1,0 +1,266 @@
+@model DeliveryControl.Models.Item
+
+@{
+    ViewData["Title"] = "Edit Item";
+}
+
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="bi bi-pencil-square"></i> Edit Item</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a asp-action="Index">Item</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Edit</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Form Edit Item</h5>
+            </div>
+            <div class="card-body">
+                <form asp-action="Edit" method="post">
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+                    
+                    <input type="hidden" asp-for="ItemId" />
+                    <input type="hidden" asp-for="CreatedDate" />
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label asp-for="ItemCode" class="form-label text-info fw-bold">VIN (Unique Code)</label>
+                            <input asp-for="ItemCode" class="form-control" />
+                            <span asp-validation-for="ItemCode" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="ItemName" class="form-label fw-bold">LOKASI RACK</label>
+                            <input asp-for="ItemName" class="form-control" />
+                            <span asp-validation-for="ItemName" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="Customer" class="form-label fw-bold">Customer (CUST)</label>
+                            <input asp-for="Customer" class="form-control" />
+                            <span asp-validation-for="Customer" class="text-danger"></span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Description" class="form-label">Deskripsi</label>
+                        <textarea asp-for="Description" class="form-control" rows="2"></textarea>
+                        <span asp-validation-for="Description" class="text-danger"></span>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label asp-for="Unit" class="form-label">Unit</label>
+                            <select asp-for="Unit" class="form-select">
+                                <option value="">-- Pilih Unit --</option>
+                                @if (ViewBag.Units is List<string> units)
+                                {
+                                    @foreach (var unit in units)
+                                    {
+                                        <option value="@unit" selected="@(Model.Unit == unit)">@unit</option>
+                                    }
+                                }
+                            </select>
+                            <input type="hidden" asp-for="Category" />
+                            <span asp-validation-for="Unit" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="Plant" class="form-label">Plant</label>
+                            <select asp-for="Plant" class="form-select">
+                                <option value="">-- Pilih Plant --</option>
+                                <option value="Molded" selected="@(Model.Plant == "Molded")">Molded</option>
+                                <option value="Hose" selected="@(Model.Plant == "Hose")">Hose</option>
+                                <option value="RVI" selected="@(Model.Plant == "RVI")">RVI</option>
+                            </select>
+                            <span asp-validation-for="Plant" class="text-danger"></span>
+                        </div>
+                    </div>
+
+                    <hr class="my-4" />
+                    <h5 class="mb-3 text-primary"><i class="bi bi-geo-alt-fill"></i> Location & Lot Capacity</h5>
+
+                    <div class="mb-3">
+                        <label class="form-label d-block text-muted small fw-bold">1. PILIH RAK (A - I)</label>
+                        <input type="hidden" asp-for="Rack" id="rakHiddenInput" />
+                        <div class="rak-button-grid">
+                            @foreach (var r in "ABCDEFGHI")
+                            {
+                                <button type="button" class="btn btn-outline-primary rak-option @(Model.Rack == r.ToString() ? "btn-primary text-white" : "")" data-rak="@r">@r</button>
+                            }
+                        </div>
+                        <span asp-validation-for="Rack" class="text-danger"></span>
+                    </div>
+
+                    <div class="mb-3" id="noRakContainer" style="@(string.IsNullOrEmpty(Model.Rack) ? "display: none;" : "")">
+                        <label class="form-label d-block text-muted small fw-bold">2. PILIH NO RAK (1 - 33)</label>
+                        <input type="hidden" asp-for="NoRack" id="noRakHiddenInput" />
+                        <div class="no-rak-button-grid">
+                            @for (int i = 1; i <= 33; i++)
+                            {
+                                <button type="button" class="btn btn-outline-secondary no-rak-option @(Model.NoRack == i ? "btn-secondary text-white" : "")" data-no-rak="@i">@i</button>
+                            }
+                        </div>
+                        <span asp-validation-for="NoRack" class="text-danger"></span>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label asp-for="QtyLot" class="form-label text-info fw-bold">QPC (Qty/Lot)</label>
+                            <input asp-for="QtyLot" class="form-control" type="number" />
+                            <span asp-validation-for="QtyLot" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="RackMin" class="form-label text-danger fw-bold">MIN 1D</label>
+                            <input asp-for="RackMin" class="form-control" type="number" />
+                            <span asp-validation-for="RackMin" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="ROP" class="form-label text-warning fw-bold">ROP 2D</label>
+                            <input asp-for="ROP" class="form-control" type="number" />
+                            <span asp-validation-for="ROP" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="RackMax" class="form-label text-success fw-bold">MAX 3D</label>
+                            <input asp-for="RackMax" class="form-control" type="number" />
+                            <span asp-validation-for="RackMax" class="text-danger"></span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 mt-3">
+                        <label asp-for="VIN" class="form-label fw-bold">VIN Number</label>
+                        <input asp-for="VIN" class="form-control" />
+                        <span asp-validation-for="VIN" class="text-danger"></span>
+                    </div>
+
+                    <hr class="my-4" />
+                    <h5 class="mb-3 text-muted small fw-bold"><i class="bi bi-info-circle"></i> Physical & Other Info</h5>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6 d-flex align-items-center">
+                            <div class="form-check form-switch pt-4">
+                                <input asp-for="IsActive" class="form-check-input" type="checkbox" />
+                                <label asp-for="IsActive" class="form-check-label">Aktif</label>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="Weight" class="form-label">Weight</label>
+                            <div class="input-group">
+                                <input asp-for="Weight" class="form-control form-control-sm" type="number" step="0.1" />
+                                <span class="input-group-text small">KG</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="Volume" class="form-label">Volume</label>
+                            <div class="input-group">
+                                <input asp-for="Volume" class="form-control form-control-sm" type="number" step="0.1" />
+                                <span class="input-group-text small">M³</span>
+                            </div>
+                        </div>
+                        <input type="hidden" asp-for="MinStock" />
+                        <input type="hidden" asp-for="MaxStock" />
+                    </div>
+
+                    <div class="d-flex gap-2 justify-content-end mt-4">
+                        <a asp-action="Index" class="btn btn-secondary px-4 rounded-pill">
+                            <i class="bi bi-x-circle"></i> Batal
+                        </a>
+                        <button type="submit" class="btn btn-primary px-4 rounded-pill">
+                            <i class="bi bi-save"></i> Simpan Perubahan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header bg-primary text-white">
+                <h6 class="mb-0"><i class="bi bi-info-circle"></i> Informasi Master</h6>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted mb-2">
+                    <strong>Item:</strong> @Model.ItemCode - @Model.ItemName
+                </p>
+                <p class="small text-muted mb-0">
+                    <strong>Dibuat:</strong> @Model.CreatedDate.ToString("dd/MM/yyyy HH:mm")
+                </p>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-primary border-opacity-25">
+            <div class="card-header bg-light">
+                <h6 class="mb-0 text-primary"><i class="bi bi-geo-alt"></i> Info Mapping</h6>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted mb-2">
+                    Gunakan grid tombol untuk memilih lokasi rak. Pemilihan rak baris (A-I) akan mengaktifkan pemilihan nomor rak (1-33).
+                </p>
+                <div class="alert alert-warning p-2 small mb-0">
+                    <i class="bi bi-exclamation-triangle"></i> Data mapping digunakan untuk proses auto-pulling.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        $(document).ready(function () {
+            // Rak selection
+            $('.rak-option').click(function() {
+                $('.rak-option').removeClass('btn-primary text-white').addClass('btn-outline-primary');
+                $(this).removeClass('btn-outline-primary').addClass('btn-primary text-white');
+                
+                const rak = $(this).data('rak');
+                $('#rakHiddenInput').val(rak);
+                
+                // Show No Rak container
+                if($('#noRakContainer').is(':hidden')) {
+                    $('#noRakContainer').fadeIn();
+                }
+            });
+
+            // No Rak selection
+            $('.no-rak-option').click(function() {
+                $('.no-rak-option').removeClass('btn-secondary text-white').addClass('btn-outline-secondary');
+                $(this).removeClass('btn-outline-secondary').addClass('btn-secondary text-white');
+                
+                const noRak = $(this).data('no-rak');
+                $('#noRakHiddenInput').val(noRak);
+            });
+        });
+    </script>
+}
+
+<style>
+    .rak-button-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+    }
+
+    .no-rak-button-grid {
+        display: grid;
+        grid-template-columns: repeat(11, 1fr);
+        gap: 5px;
+    }
+    
+    .rak-option, .no-rak-option {
+        padding: 10px 0;
+        font-weight: 600;
+        border-radius: 6px;
+    }
+
+    .no-rak-option {
+        padding: 5px 0;
+        font-size: 0.85rem;
+    }
+</style>
+
