@@ -508,8 +508,7 @@
                         showScannerToast("KODE TIDAK VALID: Wajib scan dari Label asli (Missing X)", "danger");
                         return;
                     }
-                    const cleanVin = code.substring(0, code.length - 1);
-                    $('#tagInput').val(cleanVin).addClass('active-scan');
+                    $('#tagInput').val(code).addClass('active-scan');
                     setTimeout(() => $('#tagInput').removeClass('active-scan'), 500);
                     performLookup();
                 } else if (!label) {
@@ -589,8 +588,8 @@
                         scannerModal.hide();
                         return;
                     }
-                    // Strip 'X'
-                    decodedText = decodedText.trim().substring(0, decodedText.trim().length - 1);
+                    // Validation successful, keep X for visual
+                    decodedText = decodedText.trim();
                 }
                 
                 // Validation for Label/Kanban must NOT have 'X' suffix
@@ -687,16 +686,11 @@
                 if (!tag) return;
 
                 // Validation for External Scanner / Manual Bypass: Must end with 'X'
-                // If it's tagInput and tag is not empty, check if it has X
                 if (tag && !label && !kanban) {
                     if (!tag.toUpperCase().endsWith('X') && tag.length > 5) {
                          showScannerToast("KODE TIDAK VALID: Wajib scan dari Label asli (Missing X)", "danger");
                          $('#tagInput').val('').focus();
                          return;
-                    }
-                    if (tag.toUpperCase().endsWith('X')) {
-                        tag = tag.substring(0, tag.length - 1);
-                        $('#tagInput').val(tag);
                     }
                 }
                 

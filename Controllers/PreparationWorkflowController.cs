@@ -102,7 +102,7 @@ namespace DeliveryControl.Controllers
                     // Fallback to pulling records
                     var pulling = await _context.PullingRecords
                         .OrderByDescending(p => p.CreatedDate)
-                        .FirstOrDefaultAsync(p => p.Tag == tag);
+                        .FirstOrDefaultAsync(p => p.Tag == normalizedTag);
                     if (pulling != null)
                     {
                         var pItem = await _context.Items.FindAsync(pulling.ItemId);
@@ -148,13 +148,21 @@ namespace DeliveryControl.Controllers
             string partNo = (targetItem.CustomerPartNumber ?? "").ToUpper();
             string itemVin = (targetItem.VIN ?? "").ToUpper();
 
-            // NEW: Split by slash to handle "kode didepan garis miring"
+            // Split by slash to handle "kode didepan garis miring"
             string cleanKanban = kanbanUpper.Split('/')[0].Trim();
             string cleanPartNo = partNo.Split('/')[0].Trim();
-            string cleanVin = itemVin.Split('/')[0].Trim();
+            string cleanVin    = itemVin.Split('/')[0].Trim();
 
-            // Validate Kanban input strictly against Part Number or VIN (Part BEFORE slash)
-            if (cleanKanban == cleanPartNo || cleanKanban == cleanVin)
+            // FLEXIBLE MATCH:
+            // 1. Exact match (strict)
+            // 2. Contains match — barcode di lapangan mengandung kode jadwal sebagai substring
+            //    Contoh: scan "OKB26017235 IRM-8975170170 2" → mengandung "IRM-8975170170" → VALID
+            bool matchPartNo = !string.IsNullOrEmpty(cleanPartNo) &&
+                               (cleanKanban == cleanPartNo || kanbanUpper.Contains(cleanPartNo));
+            bool matchVin    = !string.IsNullOrEmpty(cleanVin) &&
+                               (cleanKanban == cleanVin || kanbanUpper.Contains(cleanVin));
+
+            if (matchPartNo || matchVin)
             {
                 schedule = await _context.DeliverySchedules
                     .Include(s => s.Customer)
@@ -179,7 +187,7 @@ namespace DeliveryControl.Controllers
                         qtyLot = targetItem.QtyLot ?? 0,
                         currentStock = currentStock
                     },
-                    message = $"KANBAN tidak sesuai dengan produk!" 
+                    message = $"KANBAN tidak sesuai! Barcode harus mengandung kode: {(string.IsNullOrEmpty(partNo) ? itemVin : partNo)}" 
                 });
             }
         }
@@ -299,7 +307,7 @@ namespace DeliveryControl.Controllers
             using var transaction = await _context.Database.BeginTransactionAsync();
             try 
             {
-                record.Tag = record.Tag.Trim();
+                record.Tag = VinHelper.Normalize(record.Tag);
                 record.Label = record.Label.Trim();
                 record.Kanban = record.Kanban.Trim();
 

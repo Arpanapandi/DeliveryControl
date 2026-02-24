@@ -58,14 +58,10 @@ namespace DeliveryControl.Controllers
                 .ToList();
 
             var groupedSchedules = todaySchedules
-                .GroupBy(s => new { 
-                    s.CustomerId, 
-                    s.Area, 
-                    s.Cycle, 
-                    Manifest = (s.ScheduleNumber ?? "").Contains("/")
-                        ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper()
-                        : (s.ScheduleNumber ?? "").Trim().ToUpper(), // Group by Base Manifest (before /) 
-                    Date = s.ScheduledDate.Date 
+                .GroupBy(s => new {
+                    Area  = (string.IsNullOrEmpty(s.Area) ? (s.Customer?.Docking ?? "") : s.Area).Trim().ToUpper(),
+                    Cycle = (s.Cycle ?? "").Trim().ToUpper(),
+                    Route = (s.Route ?? "").Trim().ToUpper()
                 })
                 .Select(g => new { 
                     Schedules = g.ToList(),
@@ -95,7 +91,16 @@ namespace DeliveryControl.Controllers
             
             // Jumlah order yang seharusnya sudah delivered berdasarkan ETD sampai jam sekarang
             var shouldBeDeliveredCount = todaySchedules
-                .GroupBy(s => new { s.CustomerId, s.Area, s.Cycle, Date = s.ScheduledDate.Date })
+                .GroupBy(s => new { 
+                    s.CustomerId, 
+                    Area = (string.IsNullOrEmpty(s.Area) ? (s.Customer?.Docking ?? "") : s.Area).Trim().ToUpper(), 
+                    Cycle = (s.Cycle ?? "").Trim().ToUpper(), 
+                    Route = (s.Route ?? "").Trim().ToUpper(),
+                    Manifest = (s.ScheduleNumber ?? "").Contains("/")
+                        ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper()
+                        : (s.ScheduleNumber ?? "").Trim().ToUpper(),
+                    Date = s.ScheduledDate.Date 
+                })
                 .Count(g => (g.First().ETD <= now) == true);
             
             // Count Delay Pickup - Berdasarkan jadwal perwakilan grup
@@ -206,14 +211,10 @@ namespace DeliveryControl.Controllers
                 .ToList();
 
             var groupedSchedules = todaySchedules
-                .GroupBy(s => new { 
-                    s.CustomerId, 
-                    s.Area, 
-                    s.Cycle, 
-                    Manifest = (s.ScheduleNumber ?? "").Contains("/")
-                        ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper()
-                        : (s.ScheduleNumber ?? "").Trim().ToUpper(),
-                    Date = s.ScheduledDate.Date 
+                .GroupBy(s => new {
+                    Area  = (string.IsNullOrEmpty(s.Area) ? (s.Customer?.Docking ?? "") : s.Area).Trim().ToUpper(),
+                    Cycle = (s.Cycle ?? "").Trim().ToUpper(),
+                    Route = (s.Route ?? "").Trim().ToUpper()
                 })
                 .Select(g => new { 
                     Schedules = g.ToList(),
@@ -227,7 +228,16 @@ namespace DeliveryControl.Controllers
             var inProgressCount = groupedSchedules.Count(g => g.DisplayStatus == "In Progress");
             
             var shouldBeDeliveredCount = todaySchedules
-                .GroupBy(s => new { s.CustomerId, s.Area, s.Cycle, Date = s.ScheduledDate.Date })
+                .GroupBy(s => new { 
+                    s.CustomerId, 
+                    Area = (string.IsNullOrEmpty(s.Area) ? (s.Customer?.Docking ?? "") : s.Area).Trim().ToUpper(), 
+                    Cycle = (s.Cycle ?? "").Trim().ToUpper(), 
+                    Route = (s.Route ?? "").Trim().ToUpper(),
+                    Manifest = (s.ScheduleNumber ?? "").Contains("/")
+                        ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper()
+                        : (s.ScheduleNumber ?? "").Trim().ToUpper(),
+                    Date = s.ScheduledDate.Date 
+                })
                 .Count(g => (g.First().ETD <= now) == true);
 
             var delayPickupCount = groupedSchedules.Count(g => 

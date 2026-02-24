@@ -69,30 +69,48 @@ namespace DeliveryControl.Controllers
                 }
             }
 
-            var totalItems = rawSchedules.Count;
-            int pageSize = 20;
-
-            var schedules = rawSchedules
+            // Build flat item rows for pagination (view renders 1 row per DeliveryItem)
+            // Each schedule without items still counts as 1 row (ghost schedule)
+            var flatRows = rawSchedules
                 .OrderBy(s =>
                 {
-                    // Completed scan 100% (Prepared) → paling bawah dari scheduled, walau Status-nya masih "In Progress"
-                    if (s.PreparationStatus == "Prepared")
-                        return 2;
-                    // Selesai delivery (ActualEndTime terisi) → paling bawah sekali
-                    if (s.Status == "Completed" || s.ActualEndTime.HasValue)
-                        return 3;
-                    // Preparing / Sedang Scan (belum 100%) → paling atas
-                    if (s.PreparationStatus == "In Progress" || s.Status == "In Progress")
-                        return 0;
-                    // Scheduled / Waiting → default tengah
+                    if (s.PreparationStatus == "Prepared") return 2;
+                    if (s.Status == "Completed" || s.ActualEndTime.HasValue) return 3;
+                    if (s.PreparationStatus == "In Progress" || s.Status == "In Progress") return 0;
                     return 1;
                 })
                 .ThenBy(s => s.ScheduledDate)
                 .ThenBy(s => s.ScheduleNumber)
                 .ThenBy(s => s.ScheduleId)
+                .SelectMany(s => s.DeliveryItems != null && s.DeliveryItems.Any()
+                    ? s.DeliveryItems.Select(di => (Schedule: s, Item: di))
+                    : new[] { (Schedule: s, Item: (DeliveryItem)null!) })
+                .ToList();
+
+            var totalItems = flatRows.Count;
+            int pageSize = 20;
+
+            // Take the page slice of item rows, then reconstruct schedule list preserving order
+            var pageRows = flatRows
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToList();
+
+            // Rebuild schedule list: keep only items visible on this page, in original order
+            var schedulesOnPage = pageRows
+                .GroupBy(r => r.Schedule.ScheduleId)
+                .Select(g =>
+                {
+                    var sched = g.First().Schedule;
+                    sched.DeliveryItems = g
+                        .Where(r => r.Item != null)
+                        .Select(r => r.Item)
+                        .ToList();
+                    return sched;
+                })
+                .ToList();
+
+            var schedules = schedulesOnPage;
 
             ViewBag.FilterDate = dateToFilter.ToString("yyyy-MM-dd");
             ViewBag.CurrentPage = pageNumber;
@@ -484,6 +502,7 @@ namespace DeliveryControl.Controllers
             }
 
             int successCount = 0;
+            int itemCount = 0;
             int errorCount = 0;
             var errorSamples = new List<string>();
 
@@ -742,6 +761,8 @@ namespace DeliveryControl.Controllers
                                     ManifestNum = manifest,
                                     ItemCode = itemCode,
                                     DockLocation = dockLocation,
+                                    Route = route,
+                                    Cycle = cycle,
                                     MatchedItem = matchedItem,
                                     Quantity = qty,
                                     Row = row
@@ -754,80 +775,69 @@ namespace DeliveryControl.Controllers
                             }
                         }
 
-                        // --- PHASE 2: Individual Row Processing (No Grouping) ---
+                        // --- PHASE 2: 1 Baris Excel = 1 DeliverySchedule ---
                         var scheduledDate = DateTime.Today;
-                        var importSession = DateTime.Now.ToString("HHmm"); // Tambahan suffix waktu agar tidak bentrok saat re-import
+                        var importSession = DateTime.Now.ToString("HHmm");
 
                         int sequentialCounter = 1;
                         foreach (var rowData in validRowsData)
                         {
-                            // Create a separate schedule for EACH row (Portal Preparation requirement)
+                            var customer = rowData.Customer;
+
+                            var scheduleNumber = string.IsNullOrEmpty(rowData.ManifestNum)
+                                ? $"SCH-{scheduledDate:yyyyMMdd}-{sequentialCounter++}"
+                                : $"{rowData.ManifestNum}/{importSession}-{sequentialCounter++}";
+
                             var schedule = new DeliverySchedule
                             {
-                                ScheduleNumber = $"{rowData.ManifestNum}/{importSession}-{sequentialCounter++}", // Format: MANIFEST/HHmm-ROW
-                                CustomerId = rowData.Customer.CustomerId,
+                                ScheduleNumber = scheduleNumber,
+                                CustomerId = customer.CustomerId,
                                 ScheduledDate = scheduledDate,
                                 Status = "Scheduled",
                                 CreatedDate = DateTime.Now,
                                 CreatedBy = User.Identity?.Name ?? "ImportExcel",
-                                
-                                // Mapping info from Excel / Customer Master
-                                Route = !string.IsNullOrEmpty(rowData.Customer.Route) ? rowData.Customer.Route : (colMap.Route != -1 ? GetSafeString(rowData.Row.Cell(colMap.Route)) : ""),
-                                Cycle = !string.IsNullOrEmpty(rowData.Customer.Cycle) ? rowData.Customer.Cycle : (colMap.Cycle != -1 ? GetSafeString(rowData.Row.Cell(colMap.Cycle)) : ""),
-                                Area = !string.IsNullOrEmpty(rowData.Customer.Area) ? rowData.Customer.Area : rowData.DockLocation, 
-                                StartPrepareTime = rowData.Customer.StartPrepareTime,
-                                StdPrepareTime = rowData.Customer.StdPrepareTime,
-                                Range = rowData.Customer.Range,
-                                SKID = rowData.Customer.SKID
+                                Route = !string.IsNullOrEmpty(customer.Route) ? customer.Route : rowData.Route,
+                                Cycle = !string.IsNullOrEmpty(customer.Cycle) ? customer.Cycle : rowData.Cycle,
+                                Area = !string.IsNullOrEmpty(customer.Area) ? customer.Area : rowData.DockLocation,
+                                StartPrepareTime = customer.StartPrepareTime,
+                                StdPrepareTime = customer.StdPrepareTime,
+                                Range = customer.Range,
+                                SKID = customer.SKID
                             };
 
-                            var enterDockTime = ParseTimeToDateTime(rowData.Customer.Docking, scheduledDate);
-                            var pickupTime = (colMap.Pickup != -1 ? GetSafeTime(rowData.Row.Cell(colMap.Pickup), scheduledDate) : null) ?? ParseTimeToDateTime(rowData.Customer.Pickup, scheduledDate);
-                            var etdTime = (colMap.Etd != -1 ? GetSafeTime(rowData.Row.Cell(colMap.Etd), scheduledDate) : null) ?? ParseTimeToDateTime(rowData.Customer.ETD, scheduledDate);
+                            var enterDockTime = ParseTimeToDateTime(customer.Docking, scheduledDate);
+                            var pickupTime = (colMap.Pickup != -1 ? GetSafeTime(rowData.Row.Cell(colMap.Pickup), scheduledDate) : null)
+                                            ?? ParseTimeToDateTime(customer.Pickup, scheduledDate);
+                            var etdTime = (colMap.Etd != -1 ? GetSafeTime(rowData.Row.Cell(colMap.Etd), scheduledDate) : null)
+                                          ?? ParseTimeToDateTime(customer.ETD, scheduledDate);
 
-                            // Gunakan StartPrepare sebagai anchor untuk menentukan H+1
-                            var startPrepTime = scheduledDate.Date.AddMinutes(rowData.Customer.StartPrepareTime);
-
-                            if (enterDockTime.HasValue && enterDockTime.Value < startPrepTime)
-                                enterDockTime = enterDockTime.Value.AddDays(1);
-
-                            if (pickupTime.HasValue && pickupTime.Value < startPrepTime)
-                                pickupTime = pickupTime.Value.AddDays(1);
-
-                            if (etdTime.HasValue && etdTime.Value < startPrepTime)
-                                etdTime = etdTime.Value.AddDays(1);
-
-                            // Double checks for logic consistency
-                            if (pickupTime.HasValue && enterDockTime.HasValue && pickupTime.Value < enterDockTime.Value)
-                                pickupTime = pickupTime.Value.AddDays(1);
-                            if (etdTime.HasValue && pickupTime.HasValue && etdTime.Value < pickupTime.Value)
-                                etdTime = etdTime.Value.AddDays(1);
+                            var startPrepTime = scheduledDate.Date.AddMinutes(customer.StartPrepareTime);
+                            if (enterDockTime.HasValue && enterDockTime.Value < startPrepTime) enterDockTime = enterDockTime.Value.AddDays(1);
+                            if (pickupTime.HasValue && pickupTime.Value < startPrepTime) pickupTime = pickupTime.Value.AddDays(1);
+                            if (etdTime.HasValue && etdTime.Value < startPrepTime) etdTime = etdTime.Value.AddDays(1);
+                            if (pickupTime.HasValue && enterDockTime.HasValue && pickupTime.Value < enterDockTime.Value) pickupTime = pickupTime.Value.AddDays(1);
+                            if (etdTime.HasValue && pickupTime.HasValue && etdTime.Value < pickupTime.Value) etdTime = etdTime.Value.AddDays(1);
 
                             schedule.EnterDockTime = enterDockTime;
                             schedule.PickupTime = pickupTime;
                             schedule.ETD = etdTime;
 
-                            // Add the specific item (matched in Phase 1)
-                            var deliveryItem = new DeliveryItem {
+                            var deliveryItem = new DeliveryItem
+                            {
                                 Quantity = rowData.Quantity,
                                 ActualQuantity = 0,
                                 CreatedDate = DateTime.Now
                             };
-
                             if (rowData.MatchedItem.ItemId == 0)
-                            {
                                 deliveryItem.Item = rowData.MatchedItem;
-                            }
                             else
-                            {
                                 deliveryItem.ItemId = rowData.MatchedItem.ItemId;
-                            }
 
                             schedule.DeliveryItems.Add(deliveryItem);
-                            schedule.TotalTargetQuantity = (decimal)rowData.Quantity;
-
+                            schedule.TotalTargetQuantity = rowData.Quantity;
                             _context.DeliverySchedules.Add(schedule);
                             successCount++;
+                            itemCount++;
                         }
 
                         // SAVE EVERYTHING
@@ -845,7 +855,7 @@ namespace DeliveryControl.Controllers
 
                 if (successCount > 0)
                 {
-                    TempData["SuccessMessage"] = $"Berhasil import {successCount} schedule dengan Items!";
+                    TempData["SuccessMessage"] = $"Berhasil import {successCount} schedule ({itemCount} item baris) dari Excel!";
                 }
                 
                 if (errorCount > 0)
@@ -947,7 +957,9 @@ namespace DeliveryControl.Controllers
         public Customer Customer { get; set; } = null!;
         public string ManifestNum { get; set; } = "";
         public string ItemCode { get; set; } = "";
-        public string? DockLocation { get; set; } // Added for DOCK location support
+        public string? DockLocation { get; set; }
+        public string Route { get; set; } = "";
+        public string Cycle { get; set; } = "";
         public Item? MatchedItem { get; set; }
         public int Quantity { get; set; }
         public IXLRow Row { get; set; } = null!;

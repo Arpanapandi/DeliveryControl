@@ -45,7 +45,6 @@
             </ul>
         </div>
         <div class="btn-group btn-group-sm shadow-sm" role="group">
-            <a asp-action="Trend" asp-route-period="Day" asp-route-mode="@Model.ViewMode" class="btn @(Model.FilterPeriod == "Day" ? "btn-primary" : "btn-outline-primary")" style="height: 30px; display: flex; align-items: center; font-size: 0.75rem;">Hari Ini</a>
             <a asp-action="Trend" asp-route-period="Month" asp-route-mode="@Model.ViewMode" class="btn @(Model.FilterPeriod == "Month" ? "btn-primary" : "btn-outline-primary")" style="height: 30px; display: flex; align-items: center; font-size: 0.75rem;">Bulan Ini</a>
             <a asp-action="Trend" asp-route-period="Year" asp-route-mode="@Model.ViewMode" class="btn @(Model.FilterPeriod == "Year" ? "btn-primary" : "btn-outline-primary")" style="height: 30px; display: flex; align-items: center; font-size: 0.75rem;">Tahun Ini</a>
         </div>
@@ -162,7 +161,7 @@
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <h6 class="text-uppercase text-muted small fw-bold">Current Period</h6>
-                        <h2 class="mb-0 fw-bold">@Model.FilterPeriod</h2>
+                        <h2 class="mb-0 fw-bold">@(Model.FilterPeriod == "Month" ? "Bulan Ini" : Model.FilterPeriod == "Year" ? "Tahun Ini" : Model.FilterPeriod)</h2>
                     </div>
                     <div class="stat-icon-circle bg-warning-subtle text-warning">
                         <i class="bi bi-calendar-event"></i>
@@ -187,24 +186,6 @@
         </div>
     </div>
 
-    <!-- Plant Specific Trends -->
-    <div class="row g-4 mb-4" id="plantTrendsRow">
-        @foreach (var plant in Model.PlantTrends)
-        {
-            <div class="col-md-4 plant-card" data-plant="@plant.PlantName">
-                <div class="cyber-card p-4">
-                    <h6 class="mb-3 fw-bold"><i class="bi bi-building me-2"></i> Trend @plant.PlantName</h6>
-                    <div style="height: 200px;">
-                        <canvas id="chart-@plant.PlantName"></canvas>
-                    </div>
-                    <div class="mt-3 d-flex justify-content-between align-items-center">
-                        <small class="text-muted">Peak: <strong>@plant.PeakActivity</strong></small>
-                        <span class="badge bg-primary-subtle text-primary fw-normal">Live Monitoring</span>
-                    </div>
-                </div>
-            </div>
-        }
-    </div>
 
     <!-- Recent Critical Stocks (Molded, Hose, RVI) -->
     <div class="row g-4 mb-4" id="recentActivitiesRow">
@@ -255,8 +236,7 @@
                                             <td class="p-2 ps-4 fw-medium text-light-emphasis text-truncate" style="font-size: 0.75rem; background: transparent;" title="@item.ItemName">@item.VIN</td>
                                              <td class="p-2 text-center" style="background: transparent;">
                                                  @{
-                                                     var stockClass = item.LevelStock < 1.0m ? "stock-level-red" :
-                                                                    item.LevelStock >= 1.0m && item.LevelStock < 1.5m ? "stock-level-orange" :
+                                                     var stockClass = item.LevelStock < 1.5m ? "stock-level-red" :
                                                                     item.LevelStock >= 1.5m && item.LevelStock < 2.0m ? "stock-level-yellow" :
                                                                     item.LevelStock >= 2.0m && item.LevelStock <= 3.0m ? "stock-level-green" :
                                                                     "stock-level-blue";
@@ -427,6 +407,11 @@
                 <text>'@plant.PlantName': {
                     pulling: @Html.Raw(Json.Serialize(plant.DataPoints.Select(p => p.PullingCount))),
                     preparation: @Html.Raw(Json.Serialize(plant.DataPoints.Select(p => p.PreparationCount))),
+                    catLess1: @Html.Raw(Json.Serialize(plant.CategoryTrends.Select(c => c.CatLess1))),
+                    catLess1_5: @Html.Raw(Json.Serialize(plant.CategoryTrends.Select(c => c.CatLess1_5))),
+                    catRange1_5_2: @Html.Raw(Json.Serialize(plant.CategoryTrends.Select(c => c.CatRange1_5_2))),
+                    catRange2_3: @Html.Raw(Json.Serialize(plant.CategoryTrends.Select(c => c.CatRange2_3))),
+                    catMore3: @Html.Raw(Json.Serialize(plant.CategoryTrends.Select(c => c.CatMore3))),
                     stock: '@plant.TotalStock.ToString("N0")',
                     peak: '@plant.PeakActivity.ToString("N0")'
                 },</text>
@@ -442,7 +427,7 @@
                 { label: '< 1.5 D', data: allData['Overall'].catLess1_5, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', fill: false, tension: 0.1, borderWidth: 3, pointRadius: 4, pointBackgroundColor: '#f97316' },
                 { label: '1.5 - 2 D', data: allData['Overall'].catRange1_5_2, borderColor: '#eab308', backgroundColor: 'rgba(234, 179, 8, 0.1)', fill: false, tension: 0.1, borderWidth: 3, pointRadius: 4, pointBackgroundColor: '#eab308' },
                 { label: '2 - 3 D', data: allData['Overall'].catRange2_3, borderColor: '#22c55e', backgroundColor: 'rgba(34, 197, 94, 0.1)', fill: false, tension: 0.1, borderWidth: 3, pointRadius: 4, pointBackgroundColor: '#22c55e' },
-                { label: '> 3 D', data: allData['Overall'].catMore3, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: false, tension: 0.1, borderWidth: 3, pointRadius: 4, pointBackgroundColor: '#3b82f6' }
+                { label: '> 3 D', data: allData['Overall'].catMore3, borderColor: '#60a5fa', backgroundColor: 'rgba(96, 165, 250, 0.1)', fill: false, tension: 0.1, borderWidth: 3, pointRadius: 4, pointBackgroundColor: '#60a5fa' }
             ];
         } else {
             datasets = [
@@ -468,10 +453,8 @@
             
             document.getElementById('mainChartTitle').innerHTML = `<i class="bi ${icon} text-primary me-2"></i> ${displayTitle}`;
             
-            if (viewMode === 'Level' && key !== 'Overall') {
-                // For now, Level view is overall only. If plant selected, show no data or alert
-                mainChart.data.datasets.forEach(ds => ds.data = []);
-            } else if (viewMode === 'Level') {
+            if (viewMode === 'Level') {
+                mainChart.data.datasets.forEach(ds => ds.hidden = false);
                 mainChart.data.datasets[0].data = allData[key].catLess1;
                 mainChart.data.datasets[1].data = allData[key].catLess1_5;
                 mainChart.data.datasets[2].data = allData[key].catRange1_5_2;
@@ -491,17 +474,12 @@
             // Update UI
             document.getElementById('plantFilterBtn').innerHTML = `<i class="bi bi-filter"></i> ${key === 'Overall' ? 'Semua Plant' : key}`;
             
-            // Filter Plant Cards & Recent Activities
-            const plantCards = document.querySelectorAll('.plant-card');
+            // Filter Recent Activities
             const recentCards = document.querySelectorAll('.plant-recent');
 
             if (key === 'Overall') {
-                plantCards.forEach(c => c.style.display = 'block');
                 recentCards.forEach(c => c.style.display = 'block');
             } else {
-                plantCards.forEach(c => {
-                    c.style.display = (c.getAttribute('data-plant') === key) ? 'block' : 'none';
-                });
                 recentCards.forEach(c => {
                     c.style.display = (c.getAttribute('data-plant') === key) ? 'block' : 'none';
                 });
@@ -513,34 +491,6 @@
             element.classList.add('active');
         }
 
-        // Plant Specific Charts
-        @foreach (var plant in Model.PlantTrends)
-        {
-            <text>
-            new Chart(document.getElementById('chart-@plant.PlantName'), {
-                type: 'bar',
-                data: {
-                    labels: @Html.Raw(Json.Serialize(plant.DataPoints.Select(p => p.Label))),
-                    datasets: [
-                        {
-                            label: 'IN',
-                            data: @Html.Raw(Json.Serialize(plant.DataPoints.Select(p => p.PullingCount))),
-                            backgroundColor: '#10b981'
-                        },
-                        {
-                            label: 'OUT',
-                            data: @Html.Raw(Json.Serialize(plant.DataPoints.Select(p => p.PreparationCount))),
-                            backgroundColor: '#f59e0b'
-                        }
-                    ]
-                },
-                options: {
-                    ...chartOptions,
-                    plugins: { ...chartOptions.plugins, legend: { display: false } }
-                }
-            });
-            </text>
-        }
 
         // Auto-scroll logic for tables with toggle support
         const scrollStates = {};
@@ -639,8 +589,16 @@
                             Object.assign(allData, newData);
                             
                             // 3. Update Main Chart (it uses allData)
-                            mainChart.data.datasets[0].data = allData[currentPlantKey].pulling;
-                            mainChart.data.datasets[1].data = allData[currentPlantKey].preparation;
+                            if (viewMode === 'Level') {
+                                mainChart.data.datasets[0].data = allData[currentPlantKey].catLess1;
+                                mainChart.data.datasets[1].data = allData[currentPlantKey].catLess1_5;
+                                mainChart.data.datasets[2].data = allData[currentPlantKey].catRange1_5_2;
+                                mainChart.data.datasets[3].data = allData[currentPlantKey].catRange2_3;
+                                mainChart.data.datasets[4].data = allData[currentPlantKey].catMore3;
+                            } else {
+                                mainChart.data.datasets[0].data = allData[currentPlantKey].pulling;
+                                mainChart.data.datasets[1].data = allData[currentPlantKey].preparation;
+                            }
                             mainChart.update();
 
                             // 4. Update Header Indicators (important for realtime)

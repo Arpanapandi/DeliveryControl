@@ -90,8 +90,8 @@ namespace DeliveryControl.Controllers
         {
             if (ModelState.IsValid)
             {
-                // Trim strings
-                record.Tag = (record.Tag ?? "").Trim();
+                // Trim strings and remove visual X
+                record.Tag = VinHelper.Normalize(record.Tag);
                 record.Label = (record.Label ?? "").Trim();
 
                 if (string.IsNullOrEmpty(record.Tag))
@@ -104,6 +104,13 @@ namespace DeliveryControl.Controllers
 
                 // 2. Lookup Item Master - Using VIN as Tag
                 var normalizedSaveTag = VinHelper.Normalize(record.Tag);
+                var normalizedLabel = VinHelper.Normalize(record.Label);
+
+                if (!normalizedLabel.Contains(normalizedSaveTag))
+                {
+                    return Json(new { success = false, message = $"KODE LABEL SALAH: Label harus mengandung kode {normalizedSaveTag}" });
+                }
+
                 var itemSaveCandidates = await _context.Items
                     .Where(i => i.VIN.Contains(normalizedSaveTag))
                     .ToListAsync();

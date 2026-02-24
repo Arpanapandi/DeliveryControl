@@ -83,6 +83,14 @@
                 <a asp-controller="DeliverySchedules" asp-action="DelayPickupTrend" class="btn btn-outline-light px-3">
                     <i class="bi bi-graph-up-arrow"></i> Tren Delay Pickup
                 </a>
+                <a asp-controller="System" asp-action="ConsolidateSchedules" class="btn btn-warning px-3" 
+                   onclick="return confirm('APAKAH ANDA YAKIN? Semua kartu persiapan (schedule) aktif yang memiliki Manifest, Customer, dan Rute yang sama akan DIGABUNGKAN menjadi satu kartu.')">
+                    <i class="bi bi-stack"></i> Rapikan Data (Merge)
+                </a>
+                <a asp-controller="System" asp-action="ClearTransactions" class="btn btn-danger px-3" 
+                   onclick="return confirm('APAKAH ANDA YAKIN? Semua data transaksi (Schedule, Pulling, Prep, Log) akan DIHAPUS PERMANEN. Data Master TIDAK akan dihapus.')">
+                    <i class="bi bi-trash"></i> Clear Data
+                </a>
             </div>
         </div>
     </div>

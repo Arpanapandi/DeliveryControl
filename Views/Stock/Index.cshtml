@@ -112,9 +112,9 @@
         <div class="col-md-3 mb-4">
             <div class="cyber-card p-3 text-center">
                 <div class="status-indicator-live active"></div>
-                <small class="text-muted d-block text-uppercase">Stock Level</small>
-                <h2 class="fw-bold mb-0 text-white fs-4">@Model.NetStock Total</h2>
-                <small class="text-white-50">Box in Storage</small>
+                <small class="text-muted d-block text-uppercase">Total item</small>
+                <h2 class="fw-bold mb-0 text-white fs-4">@(Model.ShortageCount + Model.NormalCount + Model.OverCount)</h2>
+                <small class="text-white-50">IN STORAGE</small>
             </div>
         </div>
     </div>
@@ -170,16 +170,10 @@
                                         </div>
                                     </td>
                                     <td class="text-center">
-                                         @if (record.LevelStock < 1.0m)
+                                         @if (record.LevelStock < 1.5m)
                                          {
                                              <span class="stock-badge stock-level-red px-2 py-1">
                                                  <i class="bi bi-exclamation-triangle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
-                                             </span>
-                                         }
-                                         else if (record.LevelStock >= 1.0m && record.LevelStock < 1.5m)
-                                         {
-                                             <span class="stock-badge stock-level-orange px-2 py-1">
-                                                 <i class="bi bi-exclamation-circle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
                                              </span>
                                          }
                                          else if (record.LevelStock >= 1.5m && record.LevelStock < 2.0m)
@@ -312,6 +306,7 @@
 
             function applyAllFilters() {
                 const searchText = $('#tagLabelSearch').val().toLowerCase();
+                let visibleCounter = 1;
                 
                 $('.indicator-card').removeClass('active-filter').css('opacity', '0.5');
                 
@@ -339,6 +334,7 @@
                     
                     if (matchesStatus && matchesSearch) {
                         $(this).show();
+                        $(this).find('td:first-child').text(visibleCounter++);
                     } else {
                         $(this).hide();
                     }

@@ -48,14 +48,10 @@
     var tomorrow = today.AddDays(1);
 }
 
-@foreach (var group in Model.GroupBy(s => new { 
-    s.CustomerId, 
-    s.Area, 
-    s.Cycle, 
-    Date = s.ScheduledDate.Date,
-    Manifest = (s.ScheduleNumber ?? "").Contains("/") 
-               ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper() 
-               : (s.ScheduleNumber ?? "").Trim().ToUpper()
+@foreach (var group in Model.GroupBy(s => new {
+    Area  = (string.IsNullOrWhiteSpace(s.Area) ? (s.Customer?.Docking ?? "") : s.Area).Trim().ToUpper(),
+    Cycle = (s.Cycle ?? "").Trim().ToUpper(),
+    Route = (s.Route ?? "").Trim().ToUpper()
 }))
 {
     var schedules = group.ToList();

@@ -86,7 +86,7 @@ namespace DeliveryControl.Controllers
             }
         }
 
-        public async Task<IActionResult> Trend(string period = "Day", string mode = "Activity")
+        public async Task<IActionResult> Trend(string period = "Month", string mode = "Activity")
         {
             var now = DateTime.Now;
             var today = DateTime.Today;
@@ -103,9 +103,9 @@ namespace DeliveryControl.Controllers
             var activePlants = new[] { "Molded", "Hose", "RVI" };
             DateTime filterStartDate = period switch
             {
-                "Month" => startOfMonth,
                 "Year" => startOfYear,
-                _ => today // Default to "Day"
+                "Day" => today,
+                _ => startOfMonth // Default to "Month"
             };
 
             viewModel.TotalFGStock = await _context.PullingRecords
@@ -141,8 +141,8 @@ namespace DeliveryControl.Controllers
                 .OrderByDescending(r => r.CreatedDate)
                 .ToListAsync();
 
-            // Map to StockItemDetail for the view
-            viewModel.RecentMolded = moldedPulling.Select(p => new StockItemDetail {
+            // Map to StockItemDetail for the view (Conditional: Shortage Grouping for Level, Transactional for Activity)
+            var moldedTransList = moldedPulling.Select(p => new StockItemDetail {
                 ItemName = p.Item?.ItemName ?? "N/A",
                 VIN = p.Item?.VIN ?? "-",
                 LevelStock = p.Item != null && moldedStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
@@ -150,8 +150,11 @@ namespace DeliveryControl.Controllers
                 Status = p.Item != null && moldedStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
                                 ? moldedStockVM.StockDetails.First(d => d.Tag == p.Tag).Status : "Normal"
             }).ToList();
+            viewModel.RecentMolded = mode == "Level" 
+                ? moldedStockVM.StockDetails.Where(d => d.Status == "Shortage").ToList() 
+                : moldedTransList;
 
-            viewModel.RecentHose = hosePulling.Select(p => new StockItemDetail {
+            var hoseTransList = hosePulling.Select(p => new StockItemDetail {
                 ItemName = p.Item?.ItemName ?? "N/A",
                 VIN = p.Item?.VIN ?? "-",
                 LevelStock = p.Item != null && hoseStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
@@ -159,8 +162,11 @@ namespace DeliveryControl.Controllers
                 Status = p.Item != null && hoseStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
                                 ? hoseStockVM.StockDetails.First(d => d.Tag == p.Tag).Status : "Normal"
             }).ToList();
+            viewModel.RecentHose = mode == "Level" 
+                ? hoseStockVM.StockDetails.Where(d => d.Status == "Shortage").ToList() 
+                : hoseTransList;
 
-            viewModel.RecentRVI = rviPulling.Select(p => new StockItemDetail {
+            var rviTransList = rviPulling.Select(p => new StockItemDetail {
                 ItemName = p.Item?.ItemName ?? "N/A",
                 VIN = p.Item?.VIN ?? "-",
                 LevelStock = p.Item != null && rviStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
@@ -168,8 +174,14 @@ namespace DeliveryControl.Controllers
                 Status = p.Item != null && rviStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
                                 ? rviStockVM.StockDetails.First(d => d.Tag == p.Tag).Status : "Normal"
             }).ToList();
+            viewModel.RecentRVI = mode == "Level" 
+                ? rviStockVM.StockDetails.Where(d => d.Status == "Shortage").ToList() 
+                : rviTransList;
 
             // 2. Trend Data Calculation
+            // Pre-fetch Category Snapshots ONCE for high performance
+            var allSnapshots = await GetHistoricalCategorySnapshots(filterStartDate, now, period);
+
             foreach (var plant in activePlants)
             {
                 var plantTrend = new PlantTrendData { PlantName = plant.ToUpper() };
@@ -206,6 +218,22 @@ namespace DeliveryControl.Controllers
                 if (plantTrend.DataPoints.Any()) {
                     plantTrend.PeakActivity = plantTrend.DataPoints.Max(p => Math.Max(p.PullingCount, p.PreparationCount));
                 }
+
+                plantTrend.CategoryTrends = allSnapshots.Select(s => {
+                    var pStats = s.PlantStats.GetValueOrDefault(plant.ToUpper()) ?? new CategoryStats();
+                    return new CategoryTrendPoint {
+                        Label = s.Label,
+                        CatLess1 = pStats.Less1,
+                        CatLess1_5 = pStats.Less1_5,
+                        CatRange1_5_2 = pStats.Range1_5_2,
+                        CatRange2_3 = pStats.Range2_3,
+                        CatMore3 = pStats.More3,
+                        ShortageCount = pStats.Less1 + pStats.Less1_5,
+                        NormalCount = pStats.Range1_5_2 + pStats.Range2_3,
+                        OverCount = pStats.More3
+                    };
+                }).ToList();
+
                 viewModel.PlantTrends.Add(plantTrend);
             }
 
@@ -222,6 +250,19 @@ namespace DeliveryControl.Controllers
                     }
                     viewModel.OverallTrend.Add(point);
                 }
+
+                // Populate Overall Category Trends FROM THE SAME pre-fetched snapshots
+                viewModel.CategoryTrends = allSnapshots.Select(s => new CategoryTrendPoint {
+                    Label = s.Label,
+                    CatLess1 = s.TotalStats.Less1,
+                    CatLess1_5 = s.TotalStats.Less1_5,
+                    CatRange1_5_2 = s.TotalStats.Range1_5_2,
+                    CatRange2_3 = s.TotalStats.Range2_3,
+                    CatMore3 = s.TotalStats.More3,
+                    ShortageCount = s.TotalStats.Less1 + s.TotalStats.Less1_5,
+                    NormalCount = s.TotalStats.Range1_5_2 + s.TotalStats.Range2_3,
+                    OverCount = s.TotalStats.More3
+                }).ToList();
             }
             
             if (viewModel.OverallTrend.Any()) {
@@ -356,13 +397,22 @@ namespace DeliveryControl.Controllers
             foreach (var item in allItems)
             {
                 var count = piecesByItem.GetValueOrDefault(item.ItemId, 0);
-                if (count < (item.RackMin ?? 5)) itemStatuses[item.ItemId] = "Shortage";
+                var min = (decimal)(item.RackMin ?? 5);
+                var level = min > 0 ? count / min : 0;
+
+                if (level < 1.5m) itemStatuses[item.ItemId] = "Shortage";
                 else if (count > (item.RackMax ?? 20)) itemStatuses[item.ItemId] = "Over";
                 else itemStatuses[item.ItemId] = "Normal";
             }
 
+            // --- COUNT UNIQUE ITEMS FOR INDICATORS (Based on Item status - ONLY FOR IN-STOCK ITEMS) ---
+            var inStockItemIds = piecesByItem.Keys;
+            var shortageCount = itemStatuses.Where(kv => inStockItemIds.Contains(kv.Key)).Count(v => v.Value == "Shortage");
+            var normalCount = itemStatuses.Where(kv => inStockItemIds.Contains(kv.Key)).Count(v => v.Value == "Normal");
+            var overCount = itemStatuses.Where(kv => inStockItemIds.Contains(kv.Key)).Count(v => v.Value == "Over");
+            // ------------------------------------------------------------------
+
             var stockDetails = new List<StockItemDetail>();
-            int shortageCount = 0, normalCount = 0, overCount = 0;
 
             // GROUP BY LABEL: Agar tampilan di dashboard digabung per Label
             var groupedByLabel = inStockPieces.GroupBy(p => new { p.ItemId, Label = (p.Label ?? "").Trim().ToUpper() });
@@ -375,9 +425,13 @@ namespace DeliveryControl.Controllers
                 // Hitung jumlah box UNTUK LABEL INI SAJA (Permintaan user: agregasi per label)
                 var labelStockCount = (decimal)group.Count();
                 
-                if (status == "Shortage") shortageCount += group.Count(); 
-                else if (status == "Normal") normalCount += group.Count(); 
-                else if (status == "Over") overCount += group.Count();
+                // (shortageCount, normalCount, overCount calculations moved outside loop to count unique items)
+
+                // SYNC LEVEL STOCK WITH ITEM STATUS: 
+                // Permintaan user: Ikon/Badge di tabel harus konsisten dengan status global item.
+                // Maka LevelStock di sini adalah level TOTAL item, bukan cuma label ini.
+                var totalItemStock = piecesByItem.GetValueOrDefault(latestPiece.ItemId ?? -1, 0);
+                var itemLevelStock = (latestPiece.Item?.RackMin ?? 5) > 0 ? totalItemStock / (latestPiece.Item?.RackMin ?? 5) : 0;
 
                 stockDetails.Add(new StockItemDetail
                 {
@@ -397,8 +451,8 @@ namespace DeliveryControl.Controllers
                     Min = latestPiece.Item?.RackMin ?? 5, 
                     Rop = latestPiece.Item?.ROP ?? 0,
                     Max = latestPiece.Item?.RackMax ?? 20, 
-                    CurrentStock = labelStockCount, // Ini akan muncul di kolom ACT
-                    LevelStock = (latestPiece.Item?.RackMin ?? 5) > 0 ? labelStockCount / (latestPiece.Item?.RackMin ?? 5) : 0, 
+                    CurrentStock = labelStockCount, // TETAP: Jumlah box fisik label ini
+                    LevelStock = itemLevelStock, // SYNC: Level total item (untuk ikon)
                     Operator = latestPiece.CreatedBy ?? "-", 
                     Status = status,
                     LastActivityDate = latestPiece.CreatedDate
@@ -537,7 +591,11 @@ namespace DeliveryControl.Controllers
                 CatLess1_5 = s.TotalStats.Less1_5,
                 CatRange1_5_2 = s.TotalStats.Range1_5_2,
                 CatRange2_3 = s.TotalStats.Range2_3,
-                CatMore3 = s.TotalStats.More3
+                CatMore3 = s.TotalStats.More3,
+                
+                HoseShortage = (s.PlantStats.GetValueOrDefault("HOSE")?.Less1 ?? 0) + (s.PlantStats.GetValueOrDefault("HOSE")?.Less1_5 ?? 0),
+                MoldedShortage = (s.PlantStats.GetValueOrDefault("MOLDED")?.Less1 ?? 0) + (s.PlantStats.GetValueOrDefault("MOLDED")?.Less1_5 ?? 0),
+                RviShortage = (s.PlantStats.GetValueOrDefault("RVI")?.Less1 ?? 0) + (s.PlantStats.GetValueOrDefault("RVI")?.Less1_5 ?? 0)
             }).ToList();
         }
 

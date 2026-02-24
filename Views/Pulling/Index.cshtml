@@ -175,6 +175,15 @@
                 toast.show();
             }
 
+            function normalizeVin(vin) {
+                if (!vin) return "";
+                let normalized = vin.trim().toUpperCase();
+                if (normalized.endsWith("X")) normalized = normalized.slice(0, -1);
+                if (normalized.endsWith("LB")) normalized = normalized.slice(0, -2);
+                if (normalized.startsWith("LB")) normalized = normalized.slice(2);
+                return normalized;
+            }
+
             let activeInputId = null;
 
             // Modal handling
@@ -255,20 +264,31 @@
                             scannerModal.hide();
                             return;
                         }
-                        // Strip the 'X' for internal processing
-                        const cleanCode = trimmedCode.substring(0, trimmedCode.length - 1);
-                        $(`#${currentId}`).val(cleanCode).addClass('active-scan');
+                        $(`#${currentId}`).val(trimmedCode).addClass('active-scan');
                         setTimeout(() => $(`#${currentId}`).removeClass('active-scan'), 500);
                         scannerModal.hide();
-                        lookupItem(cleanCode);
+                        lookupItem(trimmedCode);
                     } else if (currentId === 'labelInput') {
-                        // Validation for labelInput must NOT have 'X' suffix
+                        // 1. Validation for labelInput must NOT have 'X' suffix
                         if (trimmedCode.toUpperCase().endsWith('X')) {
                             showScannerToast("KODE TIDAK VALID: Label tidak boleh mengandung suffix X", "danger");
                             $(`#${currentId}`).val('');
                             scannerModal.hide();
                             return;
                         }
+
+                        // 2. Cross-validation: Label must contain the normalized Tag (VIN)
+                        const tagVal = $('#tagInput').val();
+                        const normTag = normalizeVin(tagVal);
+                        const normLabel = normalizeVin(trimmedCode);
+
+                        if (!normLabel.includes(normTag)) {
+                            showScannerToast(`LABEL TIDAK SESUAI: Label harus mengandung kode ${normTag}`, "danger");
+                            $(`#${currentId}`).val('');
+                            scannerModal.hide();
+                            return;
+                        }
+
                         $(`#${currentId}`).val(trimmedCode).addClass('active-scan');
                         setTimeout(() => $(`#${currentId}`).removeClass('active-scan'), 500);
                         scannerModal.hide();
@@ -336,16 +356,28 @@
                         showScannerToast("KODE TIDAK VALID: Wajib scan dari Label asli (Missing X)", "danger");
                         return;
                     }
-                    const cleanVin = code.substring(0, code.length - 1);
-                    $('#tagInput').val(cleanVin).addClass('active-scan');
+                    $('#tagInput').val(code).addClass('active-scan');
                     setTimeout(() => $('#tagInput').removeClass('active-scan'), 500);
-                    lookupItem(cleanVin);
+                    lookupItem(code);
                 } else {
-                    // --- LABEL VALIDATION (Must NOT have X) ---
+                    // --- LABEL VALIDATION ---
+                    
+                    // 1. Must NOT have X
                     if (codeUpper.endsWith('X')) {
                         showScannerToast("KODE TIDAK VALID: Label tidak boleh mengandung suffix X", "danger");
                         return;
                     }
+
+                    // 2. Cross-validation: Label must contain the normalized Tag (VIN)
+                    const tagVal = $('#tagInput').val();
+                    const normTag = normalizeVin(tagVal);
+                    const normLabel = normalizeVin(code);
+
+                    if (!normLabel.includes(normTag)) {
+                        showScannerToast(`LABEL TIDAK SESUAI: Label harus mengandung kode ${normTag}`, "danger");
+                        return;
+                    }
+
                     $('#labelInput').val(code).addClass('active-scan');
                     setTimeout(() => $('#labelInput').removeClass('active-scan'), 500);
                     triggerAutoSave();

@@ -10,16 +10,22 @@ namespace DeliveryControl.Helpers
 
             string normalized = vin.Trim().ToUpper();
 
-            // Hapus prefix "LB"
-            if (normalized.StartsWith("LB"))
+            // 1. Hapus suffix "X" (Visual only from form)
+            if (normalized.EndsWith("X"))
             {
-                normalized = normalized.Substring(2);
+                normalized = normalized.Substring(0, normalized.Length - 1);
             }
 
-            // Hapus suffix "LB"
+            // 2. Hapus suffix "LB" (From import or internal)
             if (normalized.EndsWith("LB"))
             {
                 normalized = normalized.Substring(0, normalized.Length - 2);
+            }
+
+            // 3. Hapus prefix "LB"
+            if (normalized.StartsWith("LB"))
+            {
+                normalized = normalized.Substring(2);
             }
 
             return normalized;

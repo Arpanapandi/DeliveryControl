@@ -297,34 +297,47 @@
                          data-date="@(trip.PickupTime?.ToString("yyyy-MM-dd") ?? (firstSch?.ScheduledDate.ToString("yyyy-MM-dd"))) ">
 
                         <div class="prep-card-header @headerClass">
-                            <div class="dropdown">
-                                <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 2px 8px;">
-                                    <i class="bi bi-list-check me-1"></i> MANIFESTS (@trip.Schedules.Count())
-                                </button>
-                                <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 220px; z-index: 1050;">
-                                    @foreach (var m in trip.Schedules.OrderBy(x => x.ScheduleNumber))
-                                    {
-                                        double mKanbanTarget = 0; double mKanbanActual = 0;
-                                        if (m.DeliveryItems != null)
+                                @{
+                                    var manifestGroups = trip.Schedules
+                                        .GroupBy(s => {
+                                            var sn = s.ScheduleNumber ?? "";
+                                            return sn.Contains("/") ? sn.Substring(0, sn.IndexOf('/')).Trim().ToUpper() : sn.Trim().ToUpper();
+                                        })
+                                        .OrderBy(g => g.Key)
+                                        .ToList();
+                                }
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 2px 8px;">
+                                        <i class="bi bi-list-check me-1"></i> MANIFESTS (@manifestGroups.Count)
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 220px; z-index: 1050;">
+                                        @foreach (var mg in manifestGroups)
                                         {
-                                            foreach (var di in m.DeliveryItems)
+                                            double mKanbanTarget = 0; double mKanbanActual = 0;
+                                            foreach (var m in mg)
                                             {
-                                                var qpc = di.Item?.QtyLot ?? 1;
-                                                if (qpc > 0) { mKanbanTarget += Math.Ceiling((double)di.Quantity / qpc); mKanbanActual += (double)(di.ActualQuantity ?? 0) / qpc; }
+                                                if (m.DeliveryItems != null)
+                                                {
+                                                    foreach (var di in m.DeliveryItems)
+                                                    {
+                                                        var qpc = di.Item?.QtyLot ?? 1;
+                                                        if (qpc > 0) { mKanbanTarget += Math.Ceiling((double)di.Quantity / qpc); mKanbanActual += (double)(di.ActualQuantity ?? 0) / qpc; }
+                                                    }
+                                                }
                                             }
+                                            var isMComplete = mKanbanActual >= mKanbanTarget && mKanbanTarget > 0;
+                                            <li>
+                                                <div class="dropdown-item-text py-2 px-3 d-flex justify-content-between align-items-center" style="font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                                    <span class="fw-bold @(isMComplete ? "text-success" : "")">@mg.Key</span>
+                                                    <span class="badge @(isMComplete ? "bg-success" : (mKanbanActual > 0 ? "bg-warning text-dark" : "bg-secondary")) ms-2" style="font-family: 'Courier New', monospace;">
+                                                        @mKanbanActual.ToString("0.##")/@mKanbanTarget.ToString("0.##")
+                                                    </span>
+                                                </div>
+                                            </li>
                                         }
-                                        var isMComplete = mKanbanActual >= mKanbanTarget && mKanbanTarget > 0;
-                                        <li>
-                                            <div class="dropdown-item-text py-2 px-3 d-flex justify-content-between align-items-center" style="font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                                                <span class="fw-bold @(isMComplete ? "text-success" : "")">@m.ScheduleNumber</span>
-                                                <span class="badge @(isMComplete ? "bg-success" : (mKanbanActual > 0 ? "bg-warning text-dark" : "bg-secondary")) ms-2" style="font-family: 'Courier New', monospace;">
-                                                    @mKanbanActual.ToString("0.##")/@mKanbanTarget.ToString("0.##")
-                                                </span>
-                                            </div>
-                                        </li>
-                                    }
-                                </ul>
-                            </div>
+                                    </ul>
+                                </div>
+
                             <span class="badge-status ms-2">@(trip.OverallStatus == "Completed" ? "PREPARED" : trip.OverallStatus.ToUpper())</span>
                         </div>
 
@@ -406,34 +419,47 @@
                          data-date="@(trip.PickupTime?.ToString("yyyy-MM-dd") ?? (firstSch?.ScheduledDate.ToString("yyyy-MM-dd"))) ">
 
                         <div class="prep-card-header header-completed">
-                            <div class="dropdown">
-                                <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 2px 8px;">
-                                    <i class="bi bi-list-check me-1"></i> MANIFESTS (@trip.Schedules.Count())
-                                </button>
-                                <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 220px; z-index: 1050;">
-                                    @foreach (var m in trip.Schedules.OrderBy(x => x.ScheduleNumber))
-                                    {
-                                        double mKanbanTarget = 0; double mKanbanActual = 0;
-                                        if (m.DeliveryItems != null)
+                                @{
+                                    var manifestGroupsC = trip.Schedules
+                                        .GroupBy(s => {
+                                            var sn = s.ScheduleNumber ?? "";
+                                            return sn.Contains("/") ? sn.Substring(0, sn.IndexOf('/')).Trim().ToUpper() : sn.Trim().ToUpper();
+                                        })
+                                        .OrderBy(g => g.Key)
+                                        .ToList();
+                                }
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-light dropdown-toggle opacity-75 fw-bold" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem; border-radius: 6px; padding: 2px 8px;">
+                                        <i class="bi bi-list-check me-1"></i> MANIFESTS (@manifestGroupsC.Count)
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary" style="max-height: 250px; overflow-y: auto; min-width: 220px; z-index: 1050;">
+                                        @foreach (var mg in manifestGroupsC)
                                         {
-                                            foreach (var di in m.DeliveryItems)
+                                            double mKanbanTarget = 0; double mKanbanActual = 0;
+                                            foreach (var m in mg)
                                             {
-                                                var qpc = di.Item?.QtyLot ?? 1;
-                                                if (qpc > 0) { mKanbanTarget += Math.Ceiling((double)di.Quantity / qpc); mKanbanActual += (double)(di.ActualQuantity ?? 0) / qpc; }
+                                                if (m.DeliveryItems != null)
+                                                {
+                                                    foreach (var di in m.DeliveryItems)
+                                                    {
+                                                        var qpc = di.Item?.QtyLot ?? 1;
+                                                        if (qpc > 0) { mKanbanTarget += Math.Ceiling((double)di.Quantity / qpc); mKanbanActual += (double)(di.ActualQuantity ?? 0) / qpc; }
+                                                    }
+                                                }
                                             }
+                                            var isMComplete = mKanbanActual >= mKanbanTarget && mKanbanTarget > 0;
+                                            <li>
+                                                <div class="dropdown-item-text py-2 px-3 d-flex justify-content-between align-items-center" style="font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                                    <span class="fw-bold text-success">@mg.Key</span>
+                                                    <span class="badge bg-success ms-2" style="font-family: 'Courier New', monospace;">
+                                                        @mKanbanActual.ToString("0.##")/@mKanbanTarget.ToString("0.##")
+                                                    </span>
+                                                </div>
+                                            </li>
                                         }
-                                        var isMComplete = mKanbanActual >= mKanbanTarget && mKanbanTarget > 0;
-                                        <li>
-                                            <div class="dropdown-item-text py-2 px-3 d-flex justify-content-between align-items-center" style="font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                                                <span class="fw-bold text-success">@m.ScheduleNumber</span>
-                                                <span class="badge bg-success ms-2" style="font-family: 'Courier New', monospace;">
-                                                    @mKanbanActual.ToString("0.##")/@mKanbanTarget.ToString("0.##")
-                                                </span>
-                                            </div>
-                                        </li>
-                                    }
-                                </ul>
-                            </div>
+                                    </ul>
+                                </div>
+
                             <span class="badge-status ms-2">PREPARED</span>
                         </div>
 

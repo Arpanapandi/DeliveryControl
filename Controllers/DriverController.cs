@@ -30,6 +30,27 @@ namespace DeliveryControl.Controllers
         // GET: Driver - Daftar schedule untuk driver (berbasis PICKUP DATE seperti Dashboard)
         public async Task<IActionResult> Index(DateTime? selectedDate, int? customerId, string? status, string? route, string? cycle)
         {
+            // TEMPORARY: Cleanup for presentation (Trigger with ?status=Cleanup)
+            if (status == "Cleanup")
+            {
+                var completedToCleanup = await _context.DeliverySchedules
+                    .Where(s => s.Status == "Completed" || s.ActualEndTime.HasValue)
+                    .ToListAsync();
+                
+                foreach (var sch in completedToCleanup)
+                {
+                    var items = await _context.DeliveryItems.Where(i => i.ScheduleId == sch.ScheduleId).ToListAsync();
+                    _context.DeliveryItems.RemoveRange(items);
+                    
+                    var preps = await _context.PreparationRecords.Where(p => p.ScheduleId == sch.ScheduleId).ToListAsync();
+                    _context.PreparationRecords.RemoveRange(preps);
+                }
+                
+                _context.DeliverySchedules.RemoveRange(completedToCleanup);
+                await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
+            }
+
             var scheduleDate = selectedDate ?? DateTime.Today;
             var windowStart = scheduleDate.AddDays(-7); // Mundur 7 hari untuk cover delay/cross-day
             var windowEnd = scheduleDate.AddDays(3);    // Maju 3 hari untuk planning ke depan
@@ -144,16 +165,12 @@ namespace DeliveryControl.Controllers
             ViewBag.Routes = availableRoutes;
             ViewBag.Cycles = availableCycles;
 
-            // Grouping Logic: Schedule Date + Route + Cycle + Area + PickupTime (IGNORE CustomerId)
+            // Grouping: Dock (Area) + Cycle + Route saja — manifest berbeda tapi trip sama = 1 card
             var groupedSchedules = schedulesForSelectedDate
                 .GroupBy(s => new {
-                    Date = s.PickupTime?.Date ?? s.ScheduledDate.Date,
-                    Manifest = (s.ScheduleNumber ?? "").Contains("/")
-                        ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper()
-                        : (s.ScheduleNumber ?? "").Trim().ToUpper(), // Group by Base Manifest (before /)
                     Cycle = (s.Cycle ?? "").Trim().ToUpper(),
                     Route = (s.Route ?? "").Trim().ToUpper(),
-                    Area = (s.Area ?? "").Trim().ToUpper()
+                    Area  = (s.Area  ?? "").Trim().ToUpper()
                 })
                 .Select(g => {
                     var first = g.First();

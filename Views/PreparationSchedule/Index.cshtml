@@ -43,6 +43,10 @@
                     <a asp-action="Create" class="btn btn-sm btn-primary d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center">
                         <i class="bi bi-plus-lg me-2"></i> <span>New</span>
                     </a>
+                    <a asp-controller="System" asp-action="ConsolidateSchedules" class="btn btn-sm btn-warning text-dark d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center"
+                       onclick="return confirm('APAKAH ANDA YAKIN? Semua kartu persiapan (schedule) aktif yang memiliki Manifest, Customer, dan Rute yang sama akan DIGABUNGKAN menjadi satu kartu.')">
+                        <i class="bi bi-stack me-2"></i> <span>Merge Duplicates</span>
+                    </a>
                 </div>
             </div>
         </div>
@@ -195,6 +199,11 @@
                 </tbody>
             </table>
         </div>
+
+        @* Pagination Desktop (d-none d-xl-block: hanya tampil pada layar xl+) *@
+        <div class="px-3 pb-3 pt-2 border-top border-secondary d-none d-xl-block">
+            <partial name="_Pager" model='new { CurrentPage = ViewBag.CurrentPage, TotalPages = ViewBag.TotalPages, TotalItems = ViewBag.TotalItems, RouteData = ViewBag.RouteData }' />
+        </div>
     </div>
 
     <!-- Mobile/Tablet Card View (Visible on Large and Small Screens, HIDDEN if No Data) -->
@@ -292,7 +301,7 @@
         }
     </div>
 
-    <div class="row mt-2 mb-4">
+    <div class="row mt-2 mb-4 d-xl-none">
         <div class="col-12">
             <partial name="_Pager" model='new { CurrentPage = ViewBag.CurrentPage, TotalPages = ViewBag.TotalPages, TotalItems = ViewBag.TotalItems, RouteData = ViewBag.RouteData }' />
         </div>

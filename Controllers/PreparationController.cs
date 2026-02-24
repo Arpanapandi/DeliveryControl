@@ -118,7 +118,7 @@ namespace DeliveryControl.Controllers
             
             ViewBag.Customers = customers;
 
-            // Data cycle untuk dropdown filter cycle (berdasarkan tanggal operasional terpilih)
+            // Data cycle untuk dropdown filter cycle
             var availableCycles = allSchedules
                 .Where(s => s.ScheduledDate.Date == enterDockDate.Date)
                 .Select(s => s.Cycle)
@@ -126,72 +126,63 @@ namespace DeliveryControl.Controllers
                 .Distinct()
                 .OrderBy(cy => cy)
                 .ToList();
-
             ViewBag.Cycles = availableCycles;
 
+            // =====================================================================
+            // GROUPING LOGIC - Kartu digroup berdasarkan:
+            // Manifest Base (sebelum '/') + Customer + Cycle + Route + Effective Dock
+            // KRITIS: s.Area bisa kosong di beberapa record, maka fallback ke Customer.Docking
+            // =====================================================================
             var groupedSchedules = schedulesForToday
                 .GroupBy(s => new {
-                    Date = s.ScheduledDate.Date,
-                    Manifest = (s.ScheduleNumber ?? "").Contains("/")
-                        ? (s.ScheduleNumber ?? "").Split('/')[0].Trim().ToUpper()
-                        : (s.ScheduleNumber ?? "").Trim().ToUpper(), // Group by Base Manifest (before /)
-                    Cycle = (s.Cycle ?? "").Trim().ToUpper(),
-                    Route = (s.Route ?? "").Trim().ToUpper(), 
-                    Area = (s.Area ?? "").Trim().ToUpper()
-                })
+                    // Grouping per TRIP, bukan per manifest.
+                    // Semua manifest yang pergi ke rute/dock/cycle yang sama akan masuk 1 kartu.
+                     Cycle = (s.Cycle ?? "").Trim().ToUpper(),
+                     Route = (s.Route ?? "").Trim().ToUpper(),
+                     // Effective Dock: gunakan Area jika ada, fallback ke Customer.Docking
+                     Area = (string.IsNullOrWhiteSpace(s.Area)
+                                 ? (s.Customer?.Docking ?? "")
+                                 : s.Area).Trim().ToUpper()
+                 })
                 .Select(g => {
-                    var first = g.First();
+                    var first       = g.First();
                     var sortedGroup = g.OrderBy(x => x.ScheduleNumber).ToList();
 
-                    // Combine Customer Names
                     var uniqueCustomers = g.Select(x => x.Customer?.CustomerName ?? "-").Distinct().ToList();
                     var customerDisplay = uniqueCustomers.Count > 1
                         ? string.Join(", ", uniqueCustomers)
                         : (uniqueCustomers.FirstOrDefault() ?? "-");
 
-                    // Status Logic for the Group (User Explicit Workflow)
-                    // Yellow: Scheduled (Kuning) - No scan yet
-                    // Orange: In Progress (Oren) - Scan started
-                    // Blue: Prepared (Biru) - Scan 100% complete
-                    // Green: Completed (Hijau) - Enter Dock clicked
-                    
-                    var isAllPrepared = g.All(x => x.PreparationStatus == "Prepared");
-                    var hasAnyEnterDock = g.Any(x => x.ActualEnterDockTime.HasValue);
+                    // Status Logic for the Group
+                    var isAllPrepared     = g.All(x => x.PreparationStatus == "Prepared");
+                    var hasAnyEnterDock   = g.Any(x => x.ActualEnterDockTime.HasValue);
                     var hasAnyScanProgress = g.Any(x => x.PreparationStatus == "In Progress" || x.PreparationStatus == "Prepared");
 
                     var groupStatus = "Scheduled";
-                    if (hasAnyEnterDock)
-                    {
-                        groupStatus = "Completed"; // Hijau
-                    }
-                    else if (isAllPrepared)
-                    {
-                        groupStatus = "Prepared"; // Biru
-                    }
-                    else if (hasAnyScanProgress)
-                    {
-                        groupStatus = "In Progress"; // Oren
-                    }
+                    if (hasAnyEnterDock)        groupStatus = "Completed";  // Hijau
+                    else if (isAllPrepared)      groupStatus = "Prepared";   // Biru
+                    else if (hasAnyScanProgress) groupStatus = "In Progress"; // Oren
 
                     return new DeliveryControl.Models.ViewModels.DriverTripViewModel
                     {
                         RepresentativeScheduleId = first.ScheduleId,
-                        CustomerName = customerDisplay,
-                        Cycle = first.Cycle ?? "",
-                        Route = first.Route ?? "",
-                        Area = first.Area ?? "",
-                        PickupTime = first.PickupTime,
-                        ETD = first.ETD,
+                        CustomerName   = customerDisplay,
+                        Cycle          = first.Cycle ?? "",
+                        Route          = first.Route ?? "",
+                        Area           = first.Area ?? "",
+                        PickupTime     = first.PickupTime,
+                        ETD            = first.ETD,
                         ActualStartTime = first.ActualStartTime,
-                        ActualEndTime = first.ActualEndTime,
-                        DriverStatus = first.DriverStatus ?? "Scheduled",
-                        OverallStatus = groupStatus, // Custom status for the group card
-                        Schedules = sortedGroup
+                        ActualEndTime  = first.ActualEndTime,
+                        DriverStatus   = first.DriverStatus ?? "Scheduled",
+                        OverallStatus  = groupStatus,
+                        Schedules      = sortedGroup
                     };
                 })
-                .OrderBy(vm => vm.OverallStatus == "In Progress" ? 0 : (vm.OverallStatus == "Prepared" ? 1 : (vm.OverallStatus == "Scheduled" ? 2 : 3))) // Priority: In Progress -> Prepared -> Scheduled -> Completed
+                .OrderBy(vm => vm.OverallStatus == "In Progress" ? 0 : (vm.OverallStatus == "Prepared" ? 1 : (vm.OverallStatus == "Scheduled" ? 2 : 3)))
                 .ThenBy(vm => vm.PickupTime ?? vm.ETD ?? DateTime.MaxValue)
                 .ToList();
+
 
             // Kelompokkan menjadi:
             // 1. BUTUH AKSI PREPARATION (BELUM MASUK DOCK/PREPARED)
