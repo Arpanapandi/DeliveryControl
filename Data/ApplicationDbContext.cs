@@ -25,6 +25,8 @@ namespace DeliveryControl.Data
         public DbSet<ActivityLog> ActivityLogs { get; set; }
         public DbSet<PullingRecord> PullingRecords { get; set; }
         public DbSet<PreparationRecord> PreparationRecords { get; set; }
+        public DbSet<UserDock> UserDocks { get; set; }
+        public DbSet<StockSnapshot> StockSnapshots { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -240,6 +242,23 @@ namespace DeliveryControl.Data
             // Default users:
             // - Username: admin, Password: admin123, Role: Admin
             // - Username: user, Password: user123, Role: User
+
+            // Configure StockSnapshot
+            modelBuilder.Entity<StockSnapshot>(entity =>
+            {
+                entity.HasIndex(e => new { e.Plant, e.SnapshotDate });
+                entity.HasIndex(e => e.SnapshotDate);
+                entity.HasIndex(e => new { e.ItemCode, e.SnapshotDate });
+            });
+
+            // Configure UserDock
+            modelBuilder.Entity<UserDock>(entity =>
+            {
+                entity.HasOne<User>()
+                    .WithMany()
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
         }
     }
 }

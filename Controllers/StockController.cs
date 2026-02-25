@@ -2,16 +2,20 @@ using Microsoft.AspNetCore.Mvc;
 using DeliveryControl.Data;
 using DeliveryControl.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using DeliveryControl.Services;
 
 namespace DeliveryControl.Controllers
 {
     public class StockController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly StockSnapshotService _snapshotService;
 
-        public StockController(ApplicationDbContext context)
+        public StockController(ApplicationDbContext context, StockSnapshotService snapshotService)
         {
             _context = context;
+            _snapshotService = snapshotService;
         }
 
         public async Task<IActionResult> Index(string plant = "Overall", DateTime? date = null, string period = "Day", int pageNumber = 1)
@@ -683,6 +687,115 @@ namespace DeliveryControl.Controllers
         }
 
         // [ResetStockData removed for safety]
+
+        /// <summary>Halaman Critical Stock Trend — membaca StockSnapshot</summary>
+        public async Task<IActionResult> TrendCriticalStock(string level = "1.5D", string period = "30d")
+        {
+            var endDate   = DateTime.Today;
+            var startDate = period switch
+            {
+                "7d"  => endDate.AddDays(-6),
+                "14d" => endDate.AddDays(-13),
+                "30d" => endDate.AddDays(-29),
+                "90d" => endDate.AddDays(-89),
+                _     => endDate.AddDays(-29)
+            };
+
+            var allPlants = await _context.StockSnapshots
+                .Where(s => !s.IsManual)
+                .Select(s => s.Plant)
+                .Distinct()
+                .OrderBy(p => p)
+                .ToListAsync();
+
+            var snapshots = await _context.StockSnapshots
+                .Where(s => s.SnapshotDate.Date >= startDate
+                         && s.SnapshotDate.Date <= endDate
+                         && !s.IsManual)
+                .ToListAsync();
+
+            var dateRange = Enumerable.Range(0, (endDate - startDate).Days + 1)
+                .Select(i => startDate.AddDays(i))
+                .ToList();
+
+            // Breakdown per plant (untuk chart & cards)
+            var plantBreakdown = allPlants.Select(p =>
+            {
+                var ps = snapshots.Where(s => s.Plant == p).ToList();
+
+                var trend = dateRange.Select(date =>
+                {
+                    var daySnaps = ps.Where(s => s.SnapshotDate.Date == date).ToList();
+                    return new
+                    {
+                        Date        = date.ToString("dd/MM"),
+                        DateFull    = date.ToString("dd/MM/yyyy"),
+                        HasSnapshot = daySnaps.Any(),
+                        Below1D     = daySnaps.Count(s => s.StockLevel == "<1D"),
+                        Below1_5D   = daySnaps.Count(s => s.StockLevel == "<1D" || s.StockLevel == "<1.5D"),
+                    };
+                }).ToList();
+
+                // Top 5 item paling sering kritis (<1D dalam periode ini)
+                var criticalItems = ps
+                    .Where(s => s.StockLevel == "<1D")
+                    .GroupBy(s => new { s.ItemCode, s.ItemName })
+                    .Select(g => new
+                    {
+                        g.Key.ItemCode,
+                        g.Key.ItemName,
+                        CriticalDays = g.Select(x => x.SnapshotDate.Date).Distinct().Count(),
+                    })
+                    .OrderByDescending(x => x.CriticalDays)
+                    .Take(5)
+                    .ToList();
+
+                var todayPs = ps.Where(s => s.SnapshotDate.Date == endDate).ToList();
+
+                return new
+                {
+                    Plant         = p,
+                    Trend         = trend,
+                    CriticalItems = criticalItems,
+                    TotalBelow1D  = todayPs.Count(s => s.StockLevel == "<1D"),
+                    TotalBelow1_5D = todayPs.Count(s => s.StockLevel == "<1D" || s.StockLevel == "<1.5D"),
+                };
+            }).ToList();
+
+            // Summary hari ini
+            var todayAll = snapshots.Where(s => s.SnapshotDate.Date == endDate).ToList();
+            ViewBag.TodayBelow1D   = todayAll.Count(s => s.StockLevel == "<1D");
+            ViewBag.TodayBelow1_5D = todayAll.Count(s => s.StockLevel == "<1D" || s.StockLevel == "<1.5D");
+            ViewBag.TodayTotal     = todayAll.Count;
+            ViewBag.LastSnapshot   = await _context.StockSnapshots
+                .Where(s => !s.IsManual)
+                .OrderByDescending(s => s.CreatedAt)
+                .Select(s => (DateTime?)s.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            ViewBag.AllPlants      = allPlants;
+            ViewBag.SelectedLevel  = level;
+            ViewBag.SelectedPeriod = period;
+            ViewBag.PlantBreakdown = JsonSerializer.Serialize(plantBreakdown);
+            ViewBag.DateLabels     = JsonSerializer.Serialize(dateRange.Select(d => d.ToString("dd/MM")).ToList());
+
+            return View();
+        }
+
+        /// <summary>Manual trigger snapshot — hanya Admin</summary>
+        [HttpPost]
+        public async Task<IActionResult> TriggerSnapshot()
+        {
+            try
+            {
+                var (count, message) = await _snapshotService.TakeSnapshotAsync(isManual: true);
+                return Json(new { success = count > 0, message, itemCount = count });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = ex.Message, itemCount = 0 });
+            }
+        }
     }
 
     public static class DictExtensions {

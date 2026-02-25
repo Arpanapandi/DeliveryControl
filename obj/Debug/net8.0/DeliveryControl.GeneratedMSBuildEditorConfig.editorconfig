@@ -258,6 +258,10 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcVHJlbmQuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
+[C:/DeliveryControl/DeliveryControl/Views/Stock/TrendCriticalStock.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcVHJlbmRDcml0aWNhbFN0b2NrLmNzaHRtbA==
+build_metadata.AdditionalFiles.CssScope = 
+
 [C:/DeliveryControl/DeliveryControl/Views/Users/Create.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcVXNlcnNcQ3JlYXRlLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 

@@ -81,7 +81,7 @@
                         <label asp-for="Role" class="form-label"></label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-shield-check"></i></span>
-                            <select asp-for="Role" class="form-select" asp-items="ViewBag.Roles">
+                            <select asp-for="Role" id="roleSelect" class="form-select" asp-items="ViewBag.Roles">
                                 <option value="">-- Pilih Role --</option>
                             </select>
                         </div>
@@ -97,41 +97,56 @@
                         </div>
                     </div>
 
-                    <div class="card bg-dark bg-opacity-10 border-info border-opacity-25 mt-4">
-                        <div class="card-header bg-info bg-opacity-10 border-info border-opacity-25">
-                            <h6 class="mb-0 text-info fw-bold"><i class="bi bi-key-fill me-2"></i> Akses Dock (Preparation Workflow)</h6>
-                        </div>
-                        <div class="card-body">
-                            <p class="text-muted small mb-3">Tentukan dock mana saja yang dapat diakses/dilihat oleh user ini di halaman Preparation.</p>
-                            <div class="mb-3">
-                                <div class="input-group input-group-sm mb-2">
-                                    <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-search"></i></span>
-                                    <input type="text" id="dockSearch" class="form-control bg-dark text-white border-secondary" placeholder="Cari Dock, Customer, atau Cycle...">
+                    <div id="dockAccessSection" style="display:none;">
+                        <div class="mt-4">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-grid-3x3 me-1"></i> Penugasan Dock <span class="text-danger">*</span>
+                            </label>
+                            <div style="border:1.5px solid #d97706;border-radius:10px;overflow:hidden;">
+                                <!-- Header -->
+                                <div class="d-flex justify-content-between align-items-center px-3 py-2"
+                                     style="background:rgba(217,119,6,0.12);border-bottom:1px solid rgba(217,119,6,0.3);">
+                                    <span style="color:#fbbf24;font-size:.82rem;">
+                                        <i class="bi bi-info-circle me-1"></i> Pilih dock yang boleh diakses user ini
+                                    </span>
+                                    <div class="d-flex gap-3">
+                                        <a href="#" id="selectAllDocks" style="font-size:.82rem;color:#34d399;text-decoration:none;">Pilih Semua</a>
+                                        <a href="#" id="clearAllDocks"  style="font-size:.82rem;color:#f87171;text-decoration:none;">Batal Semua</a>
+                                    </div>
+                                </div>
+                                <!-- Search -->
+                                <div class="px-3 pt-2 pb-1" style="background:#0f1929;">
+                                    <input type="text" id="dockSearch"
+                                           class="form-control form-control-sm bg-dark text-white border-secondary"
+                                           placeholder="Cari nama dock, kode, atau cycle...">
+                                </div>
+                                <!-- Grid -->
+                                <div id="dockContainer" style="max-height:320px;overflow-y:auto;background:#0f1929;padding:10px 12px;">
+                                    <div class="row g-2" id="dockGrid">
+                                        @foreach (var dock in (IEnumerable<DeliveryControl.Models.Dock>)ViewBag.AllDocks)
+                                        {
+                                            var isChecked = ((IEnumerable<int>)ViewBag.UserDockIds).Contains(dock.DockId);
+                                            var subInfo   = string.Join(" · ", new[] { dock.Customer?.CustomerCode, dock.Customer?.Cycle, dock.Customer?.ETD }.Where(s => !string.IsNullOrEmpty(s)));
+                                            <div class="col-md-4 dock-item">
+                                                <label class="dock-card w-100"
+                                                       style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;
+                                                              border:1px solid #1e3a5f;border-radius:7px;cursor:pointer;
+                                                              background:@(isChecked?"rgba(59,130,246,0.12)":"transparent");transition:background .15s;">
+                                                    <input class="form-check-input mt-1 flex-shrink-0" type="checkbox"
+                                                           name="selectedDockIds" value="@dock.DockId"
+                                                           id="dock_@dock.DockId" @(isChecked ? "checked" : "")>
+                                                    <div style="min-width:0;">
+                                                        <div class="fw-semibold text-white text-truncate" style="font-size:.82rem;">@dock.DockName</div>
+                                                        <div class="text-muted text-truncate" style="font-size:.70rem;">@subInfo</div>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        }
+                                    </div>
                                 </div>
                             </div>
-                            
-                            <div class="border rounded border-secondary bg-dark bg-opacity-25" id="dockContainer" style="max-height: 350px; overflow-y: auto;">
-                                <div class="list-group list-group-flush">
-                                    @foreach (var dock in (IEnumerable<DeliveryControl.Models.Dock>)ViewBag.AllDocks)
-                                    {
-                                        var isChecked = ((IEnumerable<int>)ViewBag.UserDockIds).Contains(dock.DockId);
-                                        <label class="list-group-item list-group-item-action bg-transparent border-secondary py-1 dock-item" style="cursor: pointer;">
-                                            <div class="form-check d-flex align-items-center gap-2 mb-0">
-                                                <input class="form-check-input mt-0" type="checkbox" name="selectedDockIds" value="@dock.DockId" id="dock_@dock.DockId" @(isChecked ? "checked" : "")>
-                                                <div class="d-flex align-items-center flex-grow-1">
-                                                    <div>
-                                                        <span class="fw-bold text-info" style="font-size: 0.85rem;">@dock.DockCode</span>
-                                                        <span class="text-white-50 ms-2" style="font-size: 0.7rem;">@dock.Customer?.CustomerName</span>
-                                                    </div>
-                                                    @if (!string.IsNullOrEmpty(dock.Customer?.Cycle))
-                                                    {
-                                                        <span class="badge bg-warning text-dark ms-auto" style="font-size: 0.65rem;">@dock.Customer.Cycle</span>
-                                                    }
-                                                </div>
-                                            </div>
-                                        </label>
-                                    }
-                                </div>
+                            <div class="mt-2" style="font-size:.78rem;color:#fbbf24;">
+                                <i class="bi bi-info-circle me-1"></i> Wajib pilih minimal 1 dock untuk role Preparation.
                             </div>
                         </div>
                     </div>
@@ -173,16 +188,40 @@
 
 @section Scripts {
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
-    
     <script>
-        $(document).ready(function () {
-            $('#dockSearch').on('keyup', function() {
-                var value = $(this).val().toLowerCase();
-                $("#dockContainer .dock-item").filter(function() {
-                    $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
-                });
+    $(document).ready(function () {
+        // Show/hide dock section
+        function toggleDockSection() {
+            var role = $('#roleSelect').val();
+            if (role === 'Preparation') { $('#dockAccessSection').slideDown(200); }
+            else { $('#dockAccessSection').slideUp(200); }
+        }
+        if ($('#roleSelect').val() === 'Preparation') { $('#dockAccessSection').show(); }
+        $('#roleSelect').on('change', toggleDockSection);
+
+        // Search filter
+        $('#dockSearch').on('keyup', function() {
+            var v = $(this).val().toLowerCase();
+            $('#dockGrid .dock-item').each(function() {
+                $(this).toggle($(this).text().toLowerCase().includes(v));
             });
         });
+
+        // Pilih Semua / Batal Semua
+        $('#selectAllDocks').on('click', function(e) {
+            e.preventDefault();
+            $('#dockGrid .dock-item:visible input[type=checkbox]').prop('checked', true).trigger('change');
+        });
+        $('#clearAllDocks').on('click', function(e) {
+            e.preventDefault();
+            $('#dockGrid input[type=checkbox]').prop('checked', false).trigger('change');
+        });
+
+        // Highlight card saat checked
+        $(document).on('change', '#dockGrid input[type=checkbox]', function() {
+            var card = $(this).closest('label.dock-card');
+            card.css('background', this.checked ? 'rgba(59,130,246,0.12)' : 'transparent');
+        });
+    });
     </script>
 }
-

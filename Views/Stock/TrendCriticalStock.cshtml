@@ -1,4 +1,4 @@
-@{
+﻿@{
     ViewData["Title"] = "Trend Critical Stock";
     var allPlants      = ViewBag.AllPlants as List<string> ?? new List<string>();
     var selectedLevel  = ViewBag.SelectedLevel as string ?? "1.5D";
@@ -183,7 +183,7 @@
             <div class="tcs-card tcs-card-red p-4">
                 <div class="tcs-label mb-2">
                     <i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>
-                    CRITICAL &lt;1 DAY — HARI INI
+                    CRITICAL &lt;1 DAY ΓÇö HARI INI
                 </div>
                 <div class="tcs-stat-num text-danger">@todayBelow1D</div>
                 <div class="text-muted small mt-1">Item dengan stock &lt; 1 hari</div>
@@ -201,7 +201,7 @@
             <div class="tcs-card tcs-card-orange p-4">
                 <div class="tcs-label mb-2">
                     <i class="bi bi-exclamation-circle-fill text-warning me-1"></i>
-                    WARNING &lt;1.5 DAYS — HARI INI
+                    WARNING &lt;1.5 DAYS ΓÇö HARI INI
                 </div>
                 <div class="tcs-stat-num text-warning">@todayBelow1_5D</div>
                 <div class="text-muted small mt-1">Item dengan stock &lt; 1.5 hari</div>
@@ -232,7 +232,7 @@
                     <div class="progress mt-2" style="height:4px;background:#1e3a5f">
                         <div class="progress-bar bg-info" style="width:@pct%"></div>
                     </div>
-                    <small class="text-muted">@pct% item aman (≥1.5D)</small>
+                    <small class="text-muted">@pct% item aman (ΓëÑ1.5D)</small>
                 }
             </div>
         </div>
@@ -269,7 +269,7 @@
     @if (allPlants.Any())
     {
         <h6 class="text-white mb-3 fw-semibold">
-            <i class="bi bi-building me-2 text-primary"></i>Breakdown per Plant — Hari Ini
+            <i class="bi bi-building me-2 text-primary"></i>Breakdown per Plant ΓÇö Hari Ini
         </h6>
         <div id="plantCards" class="row g-3 mb-4"></div>
     }
@@ -294,11 +294,11 @@
 @section Scripts {
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-// ── Data dari server ──────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Data dari server ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const PLANT_BREAKDOWN = @Html.Raw(plantBreakdown);
 const DATE_LABELS     = @Html.Raw(dateLabels);
 
-// ── Warna tetap per plant (konsisten dengan existing pages) ──────────────────
+// ΓöÇΓöÇ Warna tetap per plant (konsisten dengan existing pages) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const PLANT_COLORS = {
     'Hose'   : '#3b82f6',   // biru
     'Molded' : '#a855f7',   // ungu
@@ -317,13 +317,13 @@ function hexRgba(hex, a) {
     return `rgba(${r},${g},${b},${a})`;
 }
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇ State ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 let currentLevel = '@selectedLevel';
 
 Chart.defaults.color       = '#94a3b8';
 Chart.defaults.borderColor = '#1e3a5f';
 
-// ── Build datasets sesuai level ───────────────────────────────────────────────
+// ΓöÇΓöÇ Build datasets sesuai level ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 function buildDatasets(level) {
     return PLANT_BREAKDOWN.map((p, i) => {
         const color = plantColor(p.plant, i);
@@ -348,7 +348,7 @@ function buildDatasets(level) {
     });
 }
 
-// ── Chart init ────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Chart init ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const ctx = document.getElementById('mainChart').getContext('2d');
 const mainChart = new Chart(ctx, {
     type : 'line',
@@ -367,10 +367,10 @@ const mainChart = new Chart(ctx, {
                 bodyColor      : '#94a3b8',
                 padding        : 12,
                 callbacks: {
-                    title : items => `📅 ${items[0].label}`,
+                    title : items => `≡ƒôà ${items[0].label}`,
                     label : item  => {
                         const lbl = currentLevel === '1D' ? '< 1 Day' : '< 1.5 Days';
-                        const val = item.raw !== null ? item.raw : '—';
+                        const val = item.raw !== null ? item.raw : 'ΓÇö';
                         return ` ${item.dataset.label}: ${val} item ${lbl}`;
                     }
                 }
@@ -391,7 +391,7 @@ const mainChart = new Chart(ctx, {
     }
 });
 
-// ── Custom legend (clickable hide/show per plant) ─────────────────────────────
+// ΓöÇΓöÇ Custom legend (clickable hide/show per plant) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 function renderLegend() {
     const el = document.getElementById('chartLegend');
     el.innerHTML = PLANT_BREAKDOWN.map((p, i) => {
@@ -415,7 +415,7 @@ function togglePlant(idx) {
         ?.classList.toggle('hidden-series', !!meta.hidden);
 }
 
-// ── Switch level ──────────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Switch level ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 function switchLevel(lv) {
     currentLevel = lv;
     document.getElementById('btnLv1D')  .className = 'level-btn' + (lv === '1D'   ? ' red'    : '');
@@ -432,7 +432,7 @@ function switchLevel(lv) {
     window.history.replaceState({}, '', url);
 }
 
-// ── Breakdown cards ───────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Breakdown cards ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 function renderCards() {
     const el = document.getElementById('plantCards');
     if (!el) return;
@@ -456,14 +456,14 @@ function renderCards() {
         }).join('');
 
         const critHtml = p.criticalItems.length === 0
-            ? '<p class="text-muted small mb-0 mt-2">Tidak ada item kritis periode ini 🎉</p>'
+            ? '<p class="text-muted small mb-0 mt-2">Tidak ada item kritis periode ini ≡ƒÄë</p>'
             : p.criticalItems.map(it => `
                 <div class="crit-row d-flex justify-content-between align-items-center">
                     <div>
                         <div class="text-white small fw-semibold">${it.itemCode}</div>
                         <div class="text-muted" style="font-size:.72rem">${it.itemName}</div>
                     </div>
-                    <span class="bdg-red" style="white-space:nowrap">${it.criticalDays}× kritis</span>
+                    <span class="bdg-red" style="white-space:nowrap">${it.criticalDays}├ù kritis</span>
                 </div>`).join('');
 
         return `
@@ -495,12 +495,12 @@ function renderCards() {
     }).join('');
 }
 
-// ── Period / level filter ─────────────────────────────────────────────────────
+// ΓöÇΓöÇ Period / level filter ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 function applyFilter(level, period) {
     window.location.href = `/Stock/TrendCriticalStock?level=${level}&period=${period}`;
 }
 
-// ── Manual snapshot ───────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Manual snapshot ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function triggerSnapshot() {
     const btn = document.getElementById('btnTriggerSnapshot');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Mengambil...'; }
@@ -514,13 +514,13 @@ async function triggerSnapshot() {
         const data = await res.json();
 
         if (data.success) {
-            alert(`✅ ${data.message}`);
+            alert(`Γ£à ${data.message}`);
             location.reload();
         } else {
-            alert(`ℹ️ ${data.message}`);
+            alert(`Γä╣∩╕Å ${data.message}`);
         }
     } catch(e) {
-        alert('❌ Gagal trigger snapshot: ' + e.message);
+        alert('Γ¥î Gagal trigger snapshot: ' + e.message);
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-camera me-1"></i>Snapshot Manual'; }
     }
@@ -528,7 +528,7 @@ async function triggerSnapshot() {
 
 document.getElementById('btnTriggerSnapshot')?.addEventListener('click', triggerSnapshot);
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Init ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 renderLegend();
 renderCards();
 </script>

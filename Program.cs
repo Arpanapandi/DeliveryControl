@@ -46,6 +46,10 @@ builder.Services.AddHttpContextAccessor();
 // Add ActivityLogService
 builder.Services.AddScoped<ActivityLogService>();
 
+// Add StockSnapshotService (background service cutoff jam 08:00)
+builder.Services.AddSingleton<StockSnapshotService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<StockSnapshotService>());
+
 var app = builder.Build();
 
 // Initialize database dengan seed data

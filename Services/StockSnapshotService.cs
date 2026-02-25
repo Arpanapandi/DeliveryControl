@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -86,7 +86,7 @@ namespace DeliveryControl.Services
                     }
                 }
 
-                // ── Hitung stock tiap item (logika sama dengan GetStockViewModel) ──
+                // ΓöÇΓöÇ Hitung stock tiap item (logika sama dengan GetStockViewModel) ΓöÇΓöÇ
                 // Ambil semua pulling records & preparation records
                 var pullings = await context.PullingRecords
                     .Include(p => p.Item)
