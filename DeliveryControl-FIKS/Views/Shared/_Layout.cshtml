@@ -1,0 +1,368 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - PPIC Control System</title>
+    <link rel="icon" type="image/png" href="~/images/logo.png" />
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/DeliveryControl.styles.css" asp-append-version="true" />
+</head>
+<body class="futuristic-body">
+        <!-- Top Navbar -->
+        <nav class="navbar navbar-expand-lg navbar-dark top-navbar fixed-top">
+        <div class="container-fluid">
+            <button class="btn btn-toggle-sidebar me-3" id="sidebarToggle">
+                <i class="bi bi-list"></i>
+            </button>
+            <a class="navbar-brand d-flex align-items-center" asp-area="" asp-controller="Home" asp-action="Index">
+                <i class="bi bi-truck-front brand-icon me-2"></i>
+                <span class="brand-text">PPIC Control System</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarContent">
+                <ul class="navbar-nav ms-auto align-items-center">
+                    <li class="nav-item me-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="datetime-container">
+                                <div class="modern-date-badge">
+                                    <i class="bi bi-calendar-event date-badge-icon"></i>
+                                    <span class="date-badge-text">@DateTime.Now.ToString("dddd, dd MMMM yyyy", new System.Globalization.CultureInfo("id-ID"))</span>
+                                </div>
+                                <div class="modern-time-badge">
+                                    <i class="bi bi-clock-fill time-badge-icon"></i>
+                                    <span class="time-badge-text" id="currentTime">00:00:00</span>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-light btn-sm" id="appFullscreenToggle" title="Full Screen">
+                                <i class="bi bi-arrows-fullscreen" id="appFullscreenIcon"></i>
+                            </button>
+                        </div>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link user-profile dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-person-circle fs-4 me-2"></i>
+                            <span>@(Context.Session.GetString("FullName") ?? "User")</span>
+                            @if (Context.Session.GetString("Role") == "Admin")
+                            {
+                                <span class="badge bg-danger ms-2">Admin</span>
+                            }
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <h6 class="dropdown-header">
+                                    <i class="bi bi-person"></i> @(Context.Session.GetString("FullName") ?? "User")
+                                </h6>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" asp-controller="Account" asp-action="Logout">
+                                    <i class="bi bi-box-arrow-right"></i> Logout
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="text-center py-3">
+                <img src="~/images/logo.png" alt="DCS Logo" class="sidebar-logo-img" />
+            </div>
+        </div>
+        <div class="sidebar-menu">
+            @{
+                var username = (Context.Session.GetString("Username") ?? string.Empty).ToLower();
+                var role = Context.Session.GetString("Role") ?? string.Empty;
+            }
+            <!-- DELIVERY -->
+            <div class="sidebar-divider">
+                <span>DELIVERY</span>
+            </div>
+
+            @if (username == "driver")
+            {
+                <!-- Hanya portal Driver -->
+                <a asp-controller="Driver" asp-action="Index" class="sidebar-link sidebar-link-group">
+                    <div class="d-flex align-items-center justify-content-between w-100">
+                        <span class="d-flex align-items-center gap-2">
+                            <i class="bi bi-truck"></i>
+                            <span>Portal Driver</span>
+                        </span>
+                    </div>
+                    <div class="link-glow"></div>
+                </a>
+            }
+            else if (username == "prepare" || username == "preparation")
+            {
+                <!-- Hanya portal Preparation -->
+                <a asp-controller="Preparation" asp-action="Index" class="sidebar-link sidebar-link-group">
+                    <div class="d-flex align-items-center justify-content-between w-100">
+                        <span class="d-flex align-items-center gap-2">
+                            <i class="bi bi-box-arrow-in-right"></i>
+                            <span>Portal Preparation</span>
+                        </span>
+                    </div>
+                    <div class="link-glow"></div>
+                </a>
+            }
+            else
+            {
+                <!-- Menu lengkap untuk Admin / User lain -->
+                <button class="sidebar-link sidebar-link-group" type="button" data-bs-toggle="collapse" data-bs-target="#menuDelivery" aria-expanded="false" aria-controls="menuDelivery">
+                    <div class="d-flex align-items-center justify-content-between w-100">
+                        <span class="d-flex align-items-center gap-2">
+                            <i class="bi bi-truck-front"></i>
+                            <span>DELIVERY</span>
+                        </span>
+                        <i class="bi bi-chevron-down small"></i>
+                    </div>
+                    <div class="link-glow"></div>
+                </button>
+                <div class="collapse" id="menuDelivery">
+                    <a asp-controller="Home" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-speedometer2"></i>
+                        <span>Dashboard Shipping</span>
+                        <div class="link-glow"></div>
+                    </a>
+                    <a asp-controller="Pulling" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-arrow-down-square"></i>
+                        <span>Pulling</span>
+                        <div class="link-glow"></div>
+                    </a>
+                    <a asp-controller="PreparationWorkflow" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-clipboard-check"></i>
+                        <span>Preparation</span>
+                        <div class="link-glow"></div>
+                    </a>
+                    <a asp-controller="PreparationSchedule" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-list-check"></i>
+                        <span>Jadwal Preparation</span>
+                        <div class="link-glow"></div>
+                    </a>
+                    <a asp-controller="Preparation" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                        <span>Portal Preparation</span>
+                        <div class="link-glow"></div>
+                    </a>
+                    <a asp-controller="DeliverySchedules" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-calendar-check"></i>
+                        <span>Jadwal Delivery</span>
+                        <div class="link-glow"></div>
+                    </a>
+                    <a asp-controller="Driver" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-truck"></i>
+                        <span>Portal Driver</span>
+                        <div class="link-glow"></div>
+                    </a>
+                </div>
+            }
+
+            <!-- STOCK -->
+            <div class="sidebar-divider">
+                <span>STOCK</span>
+            </div>
+            <button class="sidebar-link sidebar-link-group" type="button" data-bs-toggle="collapse" data-bs-target="#menuStock" aria-expanded="false" aria-controls="menuStock">
+                <div class="d-flex align-items-center justify-content-between w-100">
+                    <span class="d-flex align-items-center gap-2">
+                        <i class="bi bi-box-seam"></i>
+                        <span>Stock</span>
+                    </span>
+                    <i class="bi bi-chevron-down small"></i>
+                </div>
+                <div class="link-glow"></div>
+            </button>
+            <div class="collapse" id="menuStock">
+                <a asp-controller="Stock" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                    <i class="bi bi-columns-gap"></i>
+                    <span>Dashboard FG</span>
+                    <div class="link-glow"></div>
+                </a>
+                <a asp-controller="Stock" asp-action="Trend" class="sidebar-link sidebar-link-sub">
+                    <i class="bi bi-graph-up"></i>
+                    <span>Grafik Trend</span>
+                    <div class="link-glow"></div>
+                </a>
+                <a asp-controller="Stock" asp-action="Molded" class="sidebar-link sidebar-link-sub">
+                    <i class="bi bi-grid-3x3-gap"></i>
+                    <span>Molded</span>
+                    <div class="link-glow"></div>
+                </a>
+                <a asp-controller="Stock" asp-action="Hose" class="sidebar-link sidebar-link-sub">
+                    <i class="bi bi-layers"></i>
+                    <span>Hose</span>
+                    <div class="link-glow"></div>
+                </a>
+                <a asp-controller="Stock" asp-action="RVI" class="sidebar-link sidebar-link-sub">
+                    <i class="bi bi-cpu"></i>
+                    <span>RVI</span>
+                    <div class="link-glow"></div>
+                </a>
+            </div>
+
+            <!-- PLANNING -->
+            <div class="sidebar-divider">
+                <span>PLANNING</span>
+            </div>
+            <button class="sidebar-link sidebar-link-group" type="button" disabled>
+                <div class="d-flex align-items-center justify-content-between w-100">
+                    <span class="d-flex align-items-center gap-2">
+                        <i class="bi bi-diagram-3"></i>
+                        <span>Planning</span>
+                    </span>
+                    <span class="badge bg-secondary-subtle text-muted" style="font-size: 0.65rem;">Coming Soon</span>
+                </div>
+                <div class="link-glow"></div>
+            </button>
+
+            <!-- MASTER DATA -->
+            @if (role == "Admin")
+            {
+                <div class="sidebar-divider">
+                    <span>MASTER DATA</span>
+                </div>
+                <button class="sidebar-link sidebar-link-group" type="button" data-bs-toggle="collapse" data-bs-target="#menuMasterData" aria-expanded="false" aria-controls="menuMasterData">
+                    <div class="d-flex align-items-center justify-content-between w-100">
+                        <span class="d-flex align-items-center gap-2">
+                            <i class="bi bi-collection"></i>
+                            <span>Master Data</span>
+                        </span>
+                        <i class="bi bi-chevron-down small"></i>
+                    </div>
+                    <div class="link-glow"></div>
+                </button>
+                <div class="collapse" id="menuMasterData">
+                    <a asp-controller="Customers" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-building"></i>
+                        <span>Customer</span>
+                        <div class="link-glow"></div>
+                    </a>
+
+                    <a asp-controller="Items" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-boxes"></i>
+                        <span>Item</span>
+                        <div class="link-glow"></div>
+                    </a>
+                    <a asp-controller="ItemMappings" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-arrow-left-right"></i>
+                        <span>Item Mapping (Customer)</span>
+                        <div class="link-glow"></div>
+                    </a>
+                    <a asp-controller="Users" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-people"></i>
+                        <span>Manajemen User</span>
+                        <div class="link-glow"></div>
+                    </a>
+                    <a asp-controller="Settings" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-gear"></i>
+                        <span>Pengaturan Sistem</span>
+                        <div class="link-glow"></div>
+                    </a>
+                    <a asp-controller="ActivityLogs" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <i class="bi bi-clock-history"></i>
+                        <span>Activity Logs</span>
+                        <div class="link-glow"></div>
+                    </a>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content" id="mainContent">
+        <div class="content-wrapper">
+            @if (TempData["SuccessMessage"] != null)
+            {
+                <div class="alert alert-success alert-dismissible fade show cyber-alert" role="alert">
+                    <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            }
+            @if (TempData["ErrorMessage"] != null)
+            {
+                <div class="alert alert-danger alert-dismissible fade show cyber-alert" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["ErrorMessage"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            }
+            @if (TempData["WarningMessage"] != null)
+            {
+                <div class="alert alert-warning alert-dismissible fade show cyber-alert text-dark" role="alert">
+                    <i class="bi bi-exclamation-circle-fill me-2"></i> @Html.Raw(TempData["WarningMessage"])
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            }
+            @RenderBody()
+        </div>
+        
+        <!-- Footer -->
+        <footer class="futuristic-footer">
+            <div class="container-fluid">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <span>&copy; 2025 PPIC Control System. All rights reserved.</span>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <span class="text-muted">Powered by <i class="bi bi-lightning-charge-fill text-warning"></i> Digitalization Team</span>
+                    </div>
+                </div>
+            </div>
+        </footer>
+        </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/lib/signalr.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const fsToggle = document.getElementById('appFullscreenToggle');
+
+            if (!fsToggle) return;
+
+            function isAppFullscreen() {
+                return document.fullscreenElement === document.documentElement;
+            }
+
+            function updateAppFsButton() {
+                const icon = document.getElementById('appFullscreenIcon');
+                if (!icon || !fsToggle) return;
+
+                if (isAppFullscreen()) {
+                    icon.classList.remove('bi-arrows-fullscreen');
+                    icon.classList.add('bi-fullscreen-exit');
+                    fsToggle.title = 'Exit Full Screen';
+                } else {
+                    icon.classList.remove('bi-fullscreen-exit');
+                    icon.classList.add('bi-arrows-fullscreen');
+                    fsToggle.title = 'Full Screen';
+                }
+            }
+
+            fsToggle.addEventListener('click', async () => {
+                try {
+                    if (!isAppFullscreen()) {
+                        await document.documentElement.requestFullscreen();
+                    } else {
+                        await document.exitFullscreen();
+                    }
+                } catch (e) {
+                    console.error('App fullscreen error:', e);
+                }
+            });
+
+            document.addEventListener('fullscreenchange', updateAppFsButton);
+        });
+    </script>
+    @await RenderSectionAsync("Modals", required: false)
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

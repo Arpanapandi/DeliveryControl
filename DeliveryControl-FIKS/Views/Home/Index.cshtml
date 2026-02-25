@@ -1,0 +1,1779 @@
+﻿@model IEnumerable<DeliveryControl.Models.DeliverySchedule>
+@using System.Text.RegularExpressions
+@using System.Linq
+
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+@functions {
+    private int? ParseRangeToMinutes(string? rangeText)
+    {
+        if (string.IsNullOrWhiteSpace(rangeText))
+            return null;
+
+        var lower = rangeText.ToLower();
+        int totalMinutes = 0;
+        bool found = false;
+
+        var hourMatch = Regex.Match(lower, @"(\d+)\s*(?:j|jam)");
+        if (hourMatch.Success && int.TryParse(hourMatch.Groups[1].Value, out int hours))
+        {
+            totalMinutes += hours * 60;
+            found = true;
+        }
+
+        var minuteMatch = Regex.Match(lower, @"(\d+)\s*(?:m|menit)");
+        if (minuteMatch.Success && int.TryParse(minuteMatch.Groups[1].Value, out int minutes))
+        {
+            totalMinutes += minutes;
+            found = true;
+        }
+
+        if (!found)
+        {
+            var digitsMatch = Regex.Match(lower, @"\d+");
+            if (digitsMatch.Success && int.TryParse(digitsMatch.Value, out int onlyMinutes))
+            {
+                totalMinutes = onlyMinutes;
+                found = true;
+            }
+        }
+
+        return found ? totalMinutes : null;
+    }
+}
+
+@* VERSION: 2.0 - Delay Pickup dipindah ke kolom WAKTU ACTUAL *@
+<script>
+    // Debug information - tampilkan di console secara clean
+    console.group("DASHBOARD v2.0 - MONITORING STARTED");
+    console.log("Total Schedules Today:", @(ViewBag.TodaySchedules ?? 0));
+    console.log("Completed:", @(ViewBag.CompletedCount ?? 0));
+    console.log("In Progress:", @(ViewBag.InProgressCount ?? 0));
+    console.log("DELAY PICKUP:", @(ViewBag.DelayPickupCount ?? 0));
+    console.log("DELAY DOCK IN:", @(ViewBag.NotArrivedCount ?? 0));
+    console.groupEnd();
+</script>
+
+<!-- Page Header -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex align-items-center justify-content-between flex-wrap">
+            <div>
+                <h1 class="display-5 fw-bold mb-2" style="color: var(--primary-blue);">
+                    <i class="bi bi-speedometer2"></i> Dashboard Shipping
+                </h1>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <div id="signalr-status" class="realtime-status-badge status-connecting">
+                    <div class="status-pulse"></div>
+                    <i class="bi bi-circle-fill status-icon"></i>
+                    <span class="status-text">Connecting...</span>
+                </div>
+                <a asp-controller="DeliverySchedules" asp-action="Index" class="btn btn-outline-light px-3">
+                    <i class="bi bi-calendar3"></i> Lihat Semua Schedule
+                </a>
+                <a asp-controller="DeliverySchedules" asp-action="GanttChart" class="btn btn-outline-light px-3">
+                    <i class="bi bi-bar-chart-fill"></i> Gantt Chart
+                </a>
+                <a asp-controller="DeliverySchedules" asp-action="DelayChart" class="btn btn-outline-light px-3">
+                    <i class="bi bi-bar-chart"></i> History Chart
+                </a>
+                <a asp-controller="DeliverySchedules" asp-action="DelayPickupTrend" class="btn btn-outline-light px-3">
+                    <i class="bi bi-graph-up-arrow"></i> Tren Delay Pickup
+                </a>
+                <a asp-controller="System" asp-action="ConsolidateSchedules" class="btn btn-warning px-3" 
+                   onclick="return confirm('APAKAH ANDA YAKIN? Semua kartu persiapan (schedule) aktif yang memiliki Manifest, Customer, dan Rute yang sama akan DIGABUNGKAN menjadi satu kartu.')">
+                    <i class="bi bi-stack"></i> Rapikan Data (Merge)
+                </a>
+                <a asp-controller="System" asp-action="ClearTransactions" class="btn btn-danger px-3" 
+                   onclick="return confirm('APAKAH ANDA YAKIN? Semua data transaksi (Schedule, Pulling, Prep, Log) akan DIHAPUS PERMANEN. Data Master TIDAK akan dihapus.')">
+                    <i class="bi bi-trash"></i> Clear Data
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+@{
+    var totalToday = (int?)ViewBag.TodaySchedules ?? 0;
+    var completed = (int?)ViewBag.CompletedCount ?? 0;
+    var inProgress = (int?)ViewBag.InProgressCount ?? 0;
+    var delayPickup = (int?)ViewBag.DelayPickupCount ?? 0;
+    var notArrived = (int?)ViewBag.NotArrivedCount ?? 0;
+    var prepared = (int?)ViewBag.PreparedCount ?? 0;
+
+    // Jumlah order yang seharusnya sudah delivered berdasarkan ETD sampai jam sekarang
+    var now = DateTime.Now;
+    var shouldBeDelivered = (int?)ViewBag.ShouldBeDeliveredCount 
+        ?? (Model?.Count(x => x.ETD.HasValue && x.ETD.Value <= now) ?? 0);
+    var completedDisplay = totalToday > 0
+        ? $"{completed} / {totalToday}"
+        : completed.ToString();
+
+    double SafePercent(int part, int total)
+    {
+        if (total <= 0 || part <= 0) return 0;
+        var p = (part * 100.0) / total;
+        if (p > 100) p = 100;
+        return p;
+    }
+
+    var completedPct = SafePercent(completed, totalToday);
+    var inProgressPct = SafePercent(inProgress, totalToday);
+    var delayPickupPct = SafePercent(delayPickup, totalToday);
+    var notArrivedPct = SafePercent(notArrived, totalToday);
+    var delayPrepare = (int?)ViewBag.DelayPrepareCount ?? 0;
+    var delayPreparePct = SafePercent(delayPrepare, totalToday);
+}
+<div class="row g-4 mb-4">
+    <div class="col-xl col-md-4 col-sm-6">
+        <div class="cyber-card stat-card stat-card-orange h-100 filter-card active" data-filter="all" onclick="filterSchedules('all')" style="cursor: pointer;">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-muted mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px;">
+                            <i class="bi bi-calendar-check"></i> Delivery Hari Ini
+                        </p>
+                        <h2 class="fw-bold mb-0" style="font-size: 2.5rem; color: #ffa500;">
+                            <span id="totalTodayStatValue">@(ViewBag.TodaySchedules ?? 0)</span> <span class="stat-unit">ORDER</span>
+                        </h2>
+                        <small class="text-muted">
+                            <i class="bi bi-clock"></i> Terjadwal
+                        </small>
+                    </div>
+                    <div class="stat-icon stat-icon-orange">
+                        <i class="bi bi-calendar-check"></i>
+                    </div>
+                </div>
+                <div class="progress mt-3" style="height: 4px; background: rgba(245, 158, 11, 0.2);">
+                    <div class="progress-bar" role="progressbar" style="width: 100%; background: var(--warning-orange);"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl col-md-4 col-sm-6">
+        <div class="cyber-card stat-card stat-card-green h-100 filter-card" data-filter="completed" onclick="filterSchedules('completed')" style="cursor: pointer;">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-muted mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px;">
+                            <i class="bi bi-check-circle"></i> Sudah Delivery
+                        </p>
+                        <h2 class="fw-bold mb-0" style="font-size: 2.5rem; color: var(--success-green);">
+                            <span id="completedStatValue">@completedDisplay</span> <span class="stat-unit">ORDER</span>
+                        </h2>
+                        <small class="text-muted">
+                            <i class="bi bi-check-all"></i> Selesai
+                        </small>
+                    </div>
+                    <div class="stat-icon stat-icon-green">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                </div>
+                <div class="progress mt-3" style="height: 4px; background: rgba(16, 185, 129, 0.2);">
+                    <div class="progress-bar" role="progressbar" style="width: @completedPct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%; background: var(--success-green);"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl col-md-4 col-sm-6">
+        <div class="cyber-card stat-card stat-card-red h-100 filter-card" data-filter="delaypickup" onclick="filterSchedules('delaypickup')" style="cursor: pointer; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); animation: pulse-card 2s ease-in-out infinite;">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-white mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px; opacity: 0.9;">
+                            <i class="bi bi-exclamation-triangle-fill"></i> Delay Pickup
+                        </p>
+                        <h2 class="fw-bold mb-0 text-white" style="font-size: 2.5rem;">
+                            <span id="delayPickupStatValue">@(ViewBag.DelayPickupCount ?? 0)</span> <span class="stat-unit">ORDER</span>
+                        </h2>
+                        <small class="text-white" style="opacity: 0.8;">
+                            <i class="bi bi-clock-history"></i> Terlambat Pickup
+                        </small>
+                    </div>
+                    <div class="stat-icon" style="background: rgba(255, 255, 255, 0.2); color: white;">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                    </div>
+                </div>
+                <div class="progress mt-3" style="height: 4px; background: rgba(255, 255, 255, 0.3);">
+                    <div class="progress-bar" role="progressbar" style="width: @delayPickupPct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%; background: white;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl col-md-4 col-sm-6">
+        <div class="cyber-card stat-card stat-card-red h-100 filter-card" data-filter="notarrived" onclick="filterSchedules('notarrived')" style="cursor: pointer; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); animation: pulse-card 2s ease-in-out infinite;">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-white mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px; opacity: 0.9;">
+                            <i class="bi bi-truck-flatbed"></i> Delay Dock In
+                        </p>
+                        <h2 class="fw-bold mb-0 text-white" style="font-size: 2.5rem;">
+                            <span id="delayDockInStatValue">@(ViewBag.NotArrivedCount ?? 0)</span> <span class="stat-unit">ORDER</span>
+                        </h2>
+                        <small class="text-white" style="opacity: 0.8;">
+                            <i class="bi bi-clock-history"></i> Terlambat Masuk Dock
+                        </small>
+                    </div>
+                    <div class="stat-icon" style="background: rgba(255, 255, 255, 0.2); color: white;">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                    </div>
+                </div>
+                <div class="progress mt-3" style="height: 4px; background: rgba(255, 255, 255, 0.3);">
+                    <div class="progress-bar" role="progressbar" style="width: @notArrivedPct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%; background: white;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DELAY PREPARE CARD -->
+    <div class="col-xl col-md-4 col-sm-6">
+        <div class="cyber-card stat-card stat-card-red h-100 filter-card" data-filter="delayprepare" onclick="filterSchedules('delayprepare')" 
+             style="cursor: pointer; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); animation: pulse-card 2s ease-in-out infinite;">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-white mb-2 text-uppercase" style="font-size: 0.8rem; letter-spacing: 1px; opacity: 0.9;">
+                            <i class="bi bi-hourglass-bottom"></i> Delay Prepare
+                        </p>
+                        <h2 class="fw-bold mb-0 text-white" style="font-size: 2.5rem;">
+                            <span id="delayPrepareStatValue">@(ViewBag.DelayPrepareCount ?? 0)</span> <span class="stat-unit">DELAY</span>
+                        </h2>
+                        <small class="text-white" style="opacity: 0.8;">
+                            <i class="bi bi-clock-history"></i> Terlambat Prepare
+                        </small>
+                    </div>
+                    <div class="stat-icon" style="background: rgba(255, 255, 255, 0.2); color: white;">
+                        <i class="bi bi-hourglass-split"></i>
+                    </div>
+                </div>
+                <div class="progress mt-3" style="height: 4px; background: rgba(255, 255, 255, 0.3);">
+                    <div class="progress-bar" role="progressbar" style="width: @delayPreparePct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%; background: white;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Today's Schedule -->
+<div class="row">
+    <div class="col-12">
+        <div class="cyber-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0 fw-bold">
+                        <i class="bi bi-calendar-day me-2" style="color: var(--primary-blue);"></i>
+                        Jadwal Delivery Hari Ini
+                    </h5>
+                    @{
+                        var tomorrowCountDisplay = (int?)ViewBag.TomorrowScheduleCount ?? 0;
+                        if (tomorrowCountDisplay > 0)
+                        {
+                            <small class="text-muted ms-4" style="font-size: 0.85rem;">
+                                <i class="bi bi-info-circle-fill"></i> Termasuk @tomorrowCountDisplay schedule pickup besok (dari AutoScheduler jam 18:00)
+                            </small>
+                        }
+                    }
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-light" id="refreshBtn" title="Refresh Data" onclick="manualRefresh()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-light" id="autoScrollToggle" title="Toggle Auto Scroll">
+                        <i class="bi bi-arrow-down-up" id="autoScrollIcon"></i>
+                        <span id="autoScrollText">Auto Scroll: ON</span>
+                    </button>
+                    <span class="badge bg-primary" style="font-size: 0.9rem;">
+                        <i class="bi bi-clock-history"></i> Live
+                    </span>
+                </div>
+            </div>
+            <div class="card-body p-0" id="main-card-body">
+                @if (Model != null && Model.Any())
+                {
+                    <div id="table-wrapper">
+                        <!-- Reset Filter Button -->
+                        <div class="d-flex justify-content-end p-3 pb-0">
+                            <button id="resetFilterBtn" class="btn btn-outline-secondary btn-sm" onclick="filterSchedules('all')" style="display: none;">
+                                <i class="bi bi-arrow-clockwise"></i> Reset All Filters
+                            </button>
+                        </div>
+                        <div id="table-container" style="max-height: 600px; overflow-y: auto; overflow-x: auto;">
+                            <table class="table table-hover table-bordered mb-0 align-middle">
+                            <thead class="table-dark" style="position: sticky; top: 0; z-index: 100; background-color: #212529;">
+                                <tr style="font-size: 0.9rem;">
+                                    <th class="text-center" style="width: 120px; background-color: #212529;"><i class="bi bi-building"></i> CUSTOMER</th>
+                                    <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-arrow-repeat"></i> CYCLE</th>
+                                    <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-box-seam"></i> KBN PREP</th>
+                                    <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-hourglass"></i> START PREP</th>
+                                    <th class="text-center" style="width: 80px; background-color: #212529;"><i class="bi bi-hourglass-bottom"></i> END PREP</th>
+                                    <th class="text-center" style="width: 140px; background-color: #212529;"><i class="bi bi-stopwatch"></i> ACT PREPARE</th>
+                                    <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-door-open"></i> STD DOCK IN</th>
+                                    <th class="text-center" style="width: 140px; background-color: #212529;"><i class="bi bi-door-open-fill"></i> ACT DOCK IN</th>
+                                    <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-clock"></i> STD PICKUP</th>
+                                    <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-truck"></i> ACT PICKUP</th>
+                                    <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-geo-alt-fill"></i> ACT DELIVERY</th>
+                                    <th class="text-center" style="width: 110px; background-color: #212529;"><i class="bi bi-check-circle"></i> STATUS</th>
+                                    <th class="text-center" style="width: 90px; background-color: #212529;"><i class="bi bi-gear"></i> ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody style="font-size: 0.85rem;">
+                                @await Html.PartialAsync("_ScheduleTablePartial", Model)
+                            </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Legend Information -->
+                        <div class="legend-container">
+                            <h6 class="legend-title">
+                                <i class="bi bi-info-circle-fill"></i> Keterangan Icon:
+                            </h6>
+                            <div class="d-flex flex-wrap gap-4">
+                                <div class="legend-item-simple">
+                                    <i class="bi bi-door-open text-info"></i>
+                                    <span>Enter Dock (Schedule)</span>
+                                </div>
+                                <div class="legend-item-simple">
+                                    <i class="bi bi-door-open-fill text-success"></i>
+                                    <span>Actual Enter Dock</span>
+                                </div>
+                                <div class="legend-item-simple">
+                                    <i class="bi bi-clock text-primary"></i>
+                                    <span>Pickup Time</span>
+                                </div>
+                                <div class="legend-item-simple">
+                                    <i class="bi bi-arrow-right"></i>
+                                    <span>ETD</span>
+                                </div>
+                                <div class="legend-item-simple">
+                                    <i class="bi bi-geo-alt-fill" style="color: #10b981;"></i>
+                                    <span>Kedatangan</span>
+                                </div>
+                                <div class="legend-item-simple">
+                                    <i class="bi bi-check-circle-fill" style="color: #10b981;"></i>
+                                    <span>Keberangkatan</span>
+                                </div>
+                                <div class="legend-item-simple">
+                                    <span class="badge bg-danger" style="font-size: 0.7rem; padding: 0.25rem 0.5rem;">
+                                        <i class="bi bi-clock text-primary"></i> Delay
+                                    </span>
+                                </div>
+                                <div class="legend-item-simple">
+                                    <span class="badge bg-success" style="font-size: 0.7rem; padding: 0.25rem 0.5rem;">
+                                        <i class="bi bi-check-circle-fill"></i> On Time
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-5">
+                        <div class="empty-state">
+                            <i class="bi bi-calendar-x" style="font-size: 4rem; color: var(--primary-blue); opacity: 0.5;"></i>
+                            <h4 class="mt-3 mb-2">Tidak Ada Jadwal Hari Ini</h4>
+                            <p class="text-muted mb-0">Belum ada jadwal delivery yang terdaftar untuk hari ini.</p>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* ========================================
+       REALTIME STATUS BADGE - Enhanced Styling
+       ======================================== */
+    .realtime-status-badge {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        border-radius: 25px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+        backdrop-filter: blur(10px);
+    }
+
+    .realtime-status-badge .status-pulse {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 25px;
+        opacity: 0;
+        animation: pulse-ring 2s infinite;
+        pointer-events: none;
+    }
+
+    .realtime-status-badge .status-icon {
+        font-size: 0.7rem;
+        filter: drop-shadow(0 0 4px currentColor);
+    }
+
+    .realtime-status-badge .status-text {
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Status: Connecting (Gray) */
+    .status-connecting {
+        background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        border-color: #adb5bd;
+        color: #fff;
+    }
+
+    .status-connecting .status-pulse {
+        background: rgba(108, 117, 125, 0.5);
+    }
+
+    .status-connecting .status-icon {
+        animation: pulse-icon 1.5s infinite;
+    }
+
+    /* Status: Live (Green) */
+    .status-live {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border-color: #34d399;
+        color: #fff;
+        animation: glow-green 2s infinite alternate;
+    }
+
+    .status-live .status-pulse {
+        background: rgba(16, 185, 129, 0.5);
+    }
+
+    .status-live .status-icon {
+        animation: pulse-icon-success 1.5s infinite;
+    }
+
+    /* Status: Reconnecting (Yellow) */
+    .status-reconnecting {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        border-color: #fbbf24;
+        color: #fff;
+        animation: glow-yellow 1s infinite alternate;
+    }
+
+    .status-reconnecting .status-pulse {
+        background: rgba(245, 158, 11, 0.5);
+    }
+
+    .status-reconnecting .status-icon {
+        animation: spin 2s linear infinite;
+    }
+
+    /* Status: Disconnected (Red) */
+    .status-disconnected {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        border-color: #f87171;
+        color: #fff;
+    }
+
+    .status-disconnected .status-pulse {
+        background: rgba(239, 68, 68, 0.5);
+    }
+
+    .status-disconnected .status-icon {
+        animation: blink-icon 1s infinite;
+    }
+
+    /* Animations */
+    @@keyframes pulse-ring {
+        0% {
+            transform: scale(1);
+            opacity: 0.5;
+        }
+        100% {
+            transform: scale(1.2);
+            opacity: 0;
+        }
+    }
+
+    @@keyframes pulse-icon {
+        0%, 100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.5;
+        }
+    }
+
+    @@keyframes pulse-icon-success {
+        0%, 100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+        50% {
+            transform: scale(1.2);
+            opacity: 0.8;
+        }
+    }
+
+    @@keyframes glow-green {
+        0% {
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+        100% {
+            box-shadow: 0 4px 20px rgba(16, 185, 129, 0.8), 0 0 30px rgba(16, 185, 129, 0.4);
+        }
+    }
+
+    @@keyframes glow-yellow {
+        0% {
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+        }
+        100% {
+            box-shadow: 0 4px 20px rgba(245, 158, 11, 0.8);
+        }
+    }
+
+    @@keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    @@keyframes blink-icon {
+        0%, 49% {
+            opacity: 1;
+        }
+        50%, 100% {
+            opacity: 0.3;
+        }
+    }
+
+    /* ========================================
+       EXISTING STYLES
+       ======================================== */
+    .stat-unit {
+        font-size: 1rem;
+        margin-left: 0.25rem;
+    }
+
+    .stat-card {
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .stat-card::after {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .stat-card:hover::after {
+        opacity: 1;
+    }
+
+    .filter-card {
+        border: 3px solid transparent;
+        transition: all 0.3s ease;
+    }
+
+    .filter-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    }
+
+    .filter-card.active {
+        border-color: #ffffff;
+        box-shadow: 0 0 20px rgba(255,255,255,0.5);
+        transform: scale(1.05);
+    }
+
+    .stat-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: rgba(59, 130, 246, 0.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8rem;
+        color: var(--primary-blue);
+    }
+
+    .stat-icon-purple {
+        background: rgba(96, 165, 250, 0.15);
+        color: var(--secondary-blue);
+    }
+
+    .stat-icon-orange {
+        background: rgba(245, 158, 11, 0.15);
+        color: var(--warning-orange);
+    }
+
+    .stat-icon-green {
+        background: rgba(16, 185, 129, 0.15);
+        color: var(--success-green);
+    }
+
+    .schedule-row {
+        transition: all 0.3s ease;
+    }
+
+    .schedule-row:hover {
+        transform: translateX(5px);
+    }
+
+    .schedule-row.hidden {
+        display: none;
+    }
+
+    .customer-avatar {
+        width: 35px;
+        height: 35px;
+        border-radius: 8px;
+        background: var(--primary-blue);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+    }
+
+    .row-number-badge {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.85);
+        font-weight: 600;
+        font-size: 0.9rem;
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .empty-state {
+        padding: 2rem;
+    }
+
+    .badge-delay-pickup {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        color: white;
+        animation: pulse-badge 1.5s ease-in-out infinite;
+    }
+
+    @@keyframes pulse-badge {
+        0%, 100% {
+            box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+        }
+        50% {
+            box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);
+        }
+    }
+
+    .blink-text {
+        animation: blink 1s step-start infinite;
+    }
+
+    @@keyframes blink {
+        0%, 49% {
+            opacity: 1;
+        }
+        50%, 100% {
+            opacity: 0;
+        }
+    }
+
+    @@keyframes pulse-card {
+        0%, 100% {
+            box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+        }
+        50% {
+            box-shadow: 0 0 0 15px rgba(220, 53, 69, 0);
+        }
+    }
+
+    .stat-card-yellow:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(245, 158, 11, 0.5);
+    }
+
+    /* Allow horizontal scroll in table container if needed */
+    #table-container {
+        overflow-x: auto;
+    }
+
+    #table-container table {
+        table-layout: auto;
+        width: 100%;
+        min-width: 1200px;
+    }
+
+    #table-container td, #table-container th {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    /* Specific column adjustments if needed */
+    #table-container td, #table-container th {
+        padding: 8px 4px;
+    }
+
+    /* Legend Styles */
+    .legend-container {
+        background: rgba(30, 41, 59, 0.4);
+        border-top: 2px solid var(--border-color);
+        padding: 1.5rem 2rem;
+        margin-top: 1rem;
+    }
+
+    .legend-title {
+        color: var(--primary-blue);
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 1.2rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .legend-title i {
+        font-size: 1.2rem;
+    }
+
+    .legend-section {
+        background: rgba(59, 130, 246, 0.05);
+        border-left: 3px solid var(--primary-blue);
+        padding: 1rem;
+        border-radius: 8px;
+        height: 100%;
+    }
+
+    .legend-section-title {
+        color: var(--secondary-blue);
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin-bottom: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+        font-size: 0.95rem;
+        color: var(--text-primary);
+    }
+
+    .legend-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .legend-item i {
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    .legend-item .badge {
+        flex-shrink: 0;
+        min-width: fit-content;
+    }
+
+    .legend-item span {
+        line-height: 1.5;
+    }
+
+    .legend-item strong {
+        color: var(--primary-blue);
+        font-weight: 600;
+    }
+
+    /* Simple Legend Item */
+    .legend-item-simple {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        background: rgba(59, 130, 246, 0.08);
+        border-radius: 6px;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        font-size: 0.85rem;
+        color: var(--text-primary);
+        transition: all 0.2s ease;
+    }
+
+    .legend-item-simple:hover {
+        background: rgba(59, 130, 246, 0.15);
+        border-color: rgba(96, 165, 250, 0.4);
+        transform: translateY(-1px);
+    }
+
+    .legend-item-simple i {
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .legend-item-simple .badge {
+        flex-shrink: 0;
+    }
+    
+    /* Schedule Separator Row */
+    .schedule-separator-row {
+        background: rgba(30, 41, 59, 0.3) !important;
+    }
+    
+    .schedule-separator-row td {
+        white-space: normal !important;
+    }
+    
+    .schedule-separator-row:hover {
+        background: rgba(30, 41, 59, 0.3) !important;
+    }
+
+    /* Auto Scroll Toggle Button */
+    #autoScrollToggle {
+        transition: all 0.3s ease;
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+
+    #autoScrollToggle:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    #autoScrollToggle.btn-outline-success {
+        border-color: #198754;
+        color: #198754;
+    }
+
+    #autoScrollToggle.btn-outline-success:hover {
+        background-color: #198754;
+        color: white;
+    }
+
+    #autoScrollToggle.btn-outline-secondary {
+        border-color: #6c757d;
+        color: #6c757d;
+    }
+
+    #autoScrollToggle.btn-outline-secondary:hover {
+        background-color: #6c757d;
+        color: white;
+    }
+
+    /* ===== DELAY PREPARE POPUP ===== */
+    #delayPreparePopup {
+        position: fixed;
+        top: 80px;
+        right: 24px;
+        width: 360px;
+        z-index: 10500;
+        border-radius: 14px;
+        border: 2px solid #ef4444;
+        background: linear-gradient(135deg, #1e1b2e 0%, #2d1515 100%);
+        box-shadow: 0 0 30px rgba(239,68,68,0.55), 0 8px 32px rgba(0,0,0,0.5);
+        display: none;
+        animation: slideInRight 0.35s ease;
+    }
+    @@keyframes slideInRight {
+        from { transform: translateX(120%); opacity: 0; }
+        to   { transform: translateX(0);   opacity: 1; }
+    }
+    #delayPreparePopup .popup-header {
+        background: linear-gradient(90deg, #dc2626, #ef4444);
+        border-radius: 12px 12px 0 0;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    #delayPreparePopup .popup-title {
+        font-weight: 700;
+        font-size: 0.95rem;
+        color: #fff;
+        letter-spacing: 0.5px;
+    }
+    #delayPreparePopup .popup-body {
+        padding: 12px 16px;
+        max-height: 280px;
+        overflow-y: auto;
+    }
+    #delayPreparePopup .delay-item {
+        background: rgba(239,68,68,0.12);
+        border: 1px solid rgba(239,68,68,0.3);
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    #delayPreparePopup .delay-item:last-child { margin-bottom: 0; }
+    #delayPreparePopup .delay-customer {
+        font-weight: 700;
+        color: #fca5a5;
+        font-size: 1rem;
+        min-width: 48px;
+    }
+    #delayPreparePopup .delay-meta {
+        font-size: 0.78rem;
+        color: #e5e7eb;
+    }
+    #delayPreparePopup .popup-footer {
+        padding: 8px 16px 14px;
+        display: flex;
+        gap: 8px;
+    }
+    .popup-blink-icon {
+        animation: blink-red 1s step-start infinite;
+        font-size: 1.3rem;
+    }
+    @@keyframes blink-red {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.2; }
+    }
+</style>
+
+<!-- ===== DELAY PREPARE WARNING POPUP ===== -->
+<div id="delayPreparePopup">
+    <div class="popup-header">
+        <span class="popup-title">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+            DELAY PREPARE TERDETEKSI!
+        </span>
+        <button type="button" class="btn-close btn-close-white btn-sm" id="closeDelayPrepPopup" aria-label="Close"></button>
+    </div>
+    <div class="popup-body" id="delayPrepPopupBody">
+        <!-- filled by JS -->
+    </div>
+    <div class="popup-footer">
+        <button class="btn btn-danger btn-sm w-100" onclick="filterSchedules('delayprepare'); document.getElementById('delayPreparePopup').style.display='none';">
+            <i class="bi bi-funnel-fill me-1"></i> Lihat Detail Delay
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" id="dismissDelayPrepPopup" style="white-space:nowrap;">
+            <i class="bi bi-x-lg"></i> Tutup
+        </button>
+    </div>
+</div>
+
+<script>
+    let currentFilter = 'all';
+
+    // ===== DELAY PREPARE POPUP STATE =====
+    const knownDelayPrepKeys = new Set(); // tracks customer+cycle combos already shown
+    let delayPopupSnoozed = false;        // true while popup is manually dismissed
+
+    function checkDelayPrepareAlerts() {
+        const allDelayRows = document.querySelectorAll('.schedule-row[data-delayprepare="true"]');
+        const newItems = [];
+        allDelayRows.forEach(function(row) {
+            const customer = row.getAttribute('data-customer') || '-';
+            const cycle    = row.getAttribute('data-cycle')    || '-';
+            const startP   = row.getAttribute('data-startprep') || '-';
+            const endP     = row.getAttribute('data-endprep')   || '-';
+            const key = customer + '|' + cycle;
+            if (!knownDelayPrepKeys.has(key)) {
+                knownDelayPrepKeys.add(key);
+                newItems.push({ customer, cycle, startP, endP });
+            }
+        });
+
+        if (newItems.length > 0) {
+            // Build popup item list
+            const body = document.getElementById('delayPrepPopupBody');
+            if (body) {
+                newItems.forEach(function(it) {
+                    const div = document.createElement('div');
+                    div.className = 'delay-item';
+                    div.innerHTML =
+                        '<span class="popup-blink-icon text-danger"><i class="bi bi-exclamation-triangle-fill"></i></span>' +
+                        '<div>' +
+                            '<div class="delay-customer">' + it.customer + ' &mdash; ' + it.cycle + '</div>' +
+                            '<div class="delay-meta"><i class="bi bi-clock-fill me-1 text-warning"></i>Prepare: ' + it.startP + ' – ' + it.endP + ' (Terlambat)</div>' +
+                        '</div>';
+                    body.appendChild(div);
+                });
+            }
+            // Show popup (reset snooze because new item appeared)
+            delayPopupSnoozed = false;
+            const popup = document.getElementById('delayPreparePopup');
+            if (popup) {
+                popup.style.display = 'block';
+                popup.style.animation = 'none';
+                popup.offsetHeight; // reflow
+                popup.style.animation = 'slideInRight 0.35s ease';
+            }
+        }
+    }
+
+    function filterSchedules(filter) {
+        currentFilter = filter;
+        
+        // Update active card
+        document.querySelectorAll('.filter-card').forEach(card => {
+            card.classList.remove('active');
+        });
+        const activeCard = document.querySelector(`[data-filter="${filter}"]`);
+        if (activeCard) {
+            activeCard.classList.add('active');
+        }
+
+        // Show/hide reset button
+        const resetBtn = document.getElementById('resetFilterBtn');
+        if (resetBtn) {
+            resetBtn.style.display = filter === 'all' ? 'none' : 'inline-block';
+        }
+
+        // Filter table rows
+        const rows = document.querySelectorAll('.schedule-row');
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            const status = row.getAttribute('data-status');
+            const hasArrived = row.getAttribute('data-arrived') === 'true';
+            const isDelayPickup = row.getAttribute('data-delaypickup') === 'true';
+            const isDelayPrepare = row.getAttribute('data-delayprepare') === 'true';
+            let shouldShow = false;
+
+            if (filter === 'all') {
+                shouldShow = true;
+            } else if (filter === 'completed') {
+                shouldShow = status === 'completed';
+            } else if (filter === 'inprogress') {
+                shouldShow = status === 'inprogress';
+            } else if (filter === 'delaypickup') {
+                shouldShow = isDelayPickup;
+            } else if (filter === 'delayprepare') {
+                shouldShow = isDelayPrepare === true; // Filter untuk Delay Prepare (Slow Work)
+            } else if (filter === 'notarrived') {
+                shouldShow = row.getAttribute('data-notarrived') === 'true'; // Filter untuk Delay Dock In
+            } else if (filter === 'prepared') {
+                shouldShow = row.getAttribute('data-prepared') === 'true';
+            }
+
+            if (shouldShow) {
+                row.classList.remove('hidden');
+                visibleCount++;
+            } else {
+                row.classList.add('hidden');
+            }
+        });
+        
+        // Debug log untuk Delay Dock In filter
+        if (filter === 'delayprepare' || filter === 'notarrived') {
+            console.log(`🔍 Filter Delay Dock In: ${visibleCount} schedule(s) ditemukan`);
+        }
+
+        // Update row numbers without overriding customer info
+        let rowNumber = 1;
+        rows.forEach(row => {
+            const badge = row.querySelector('.row-number-text');
+            if (!badge)
+                return;
+
+            if (!row.classList.contains('hidden')) {
+                badge.textContent = rowNumber++;
+            }
+            else {
+                badge.textContent = '';
+            }
+        });
+
+        // Show/hide empty state
+        const tableWrapper = document.getElementById('table-wrapper');
+        const cardBody = document.getElementById('main-card-body');
+        
+        // Hapus semua empty state filter yang mungkin ada (cleanup dulu)
+        const existingEmptyStates = document.querySelectorAll('.empty-state-filter-wrapper');
+        existingEmptyStates.forEach(el => el.remove());
+        
+        if (visibleCount === 0) {
+            // Sembunyikan wrapper tabel (termasuk table dan button)
+            if (tableWrapper) {
+                tableWrapper.style.display = 'none';
+            }
+            
+            // Tampilkan empty state baru
+            if (cardBody) {
+                const newEmptyState = document.createElement('div');
+                newEmptyState.className = 'text-center py-5 empty-state-filter-wrapper';
+                newEmptyState.innerHTML = `
+                    <div class="empty-state-filter">
+                        <i class="bi bi-filter-circle" style="font-size: 4rem; color: var(--primary-blue); opacity: 0.5;"></i>
+                        <h4 class="mt-3 mb-2">Tidak Ada Data untuk Filter Ini</h4>
+                        <p class="text-muted mb-4">Klik card lain untuk melihat data yang berbeda.</p>
+                    </div>
+                `;
+                cardBody.appendChild(newEmptyState);
+            }
+        } else {
+            // Tampilkan wrapper tabel (termasuk table dan button)
+            if (tableWrapper) {
+                tableWrapper.style.display = 'block';
+            }
+        }
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        filterSchedules('all');
+        // Check for pre-existing delay prepare on initial load
+        safeSetTimeout(checkDelayPrepareAlerts, 500);
+
+        // Close/dismiss buttons for delay prepare popup
+        document.getElementById('closeDelayPrepPopup')?.addEventListener('click', function() {
+            delayPopupSnoozed = true;
+            document.getElementById('delayPreparePopup').style.display = 'none';
+        });
+        document.getElementById('dismissDelayPrepPopup')?.addEventListener('click', function() {
+            delayPopupSnoozed = true;
+            document.getElementById('delayPreparePopup').style.display = 'none';
+        });
+    });
+</script>
+
+@section Scripts {
+<script>
+    // ============================================
+    // INITIALIZATION - HARUS DI AWAL
+    // ============================================
+    
+    // Initialize timeout tracking array - HARUS di awal sebelum fungsi apapun
+    if (typeof window.dashboardTimeouts === 'undefined') {
+        window.dashboardTimeouts = [];
+    }
+    
+    // Helper untuk track timeout dengan safety check - HARUS didefinisikan di awal
+    function safeSetTimeout(callback, delay) {
+        // Pastikan array selalu terinisialisasi (double-check untuk safety)
+        if (!window.dashboardTimeouts || !Array.isArray(window.dashboardTimeouts)) {
+            window.dashboardTimeouts = [];
+        }
+        
+        const timeoutId = setTimeout(() => {
+            try {
+                callback();
+            } catch (error) {
+                console.error("Error in safeSetTimeout callback:", error);
+            }
+            
+            // Remove dari array setelah execute (dengan safety check)
+            if (window.dashboardTimeouts && Array.isArray(window.dashboardTimeouts)) {
+                const index = window.dashboardTimeouts.indexOf(timeoutId);
+                if (index > -1) {
+                    window.dashboardTimeouts.splice(index, 1);
+                }
+            }
+        }, delay);
+        
+        // Add ke tracking array (dengan safety check)
+        if (window.dashboardTimeouts && Array.isArray(window.dashboardTimeouts)) {
+            window.dashboardTimeouts.push(timeoutId);
+        }
+        
+        return timeoutId;
+    }
+    
+    // ============================================
+    // SIGNALR REAL-TIME UPDATE CONFIGURATION
+    // ============================================
+    
+    console.log("Initializing SignalR connection...");
+    
+    // Build SignalR connection
+    const connection = new signalR.HubConnectionBuilder()
+        .withUrl("/deliveryHub")
+        .withAutomaticReconnect([0, 2000, 5000, 10000, 30000]) // Reconnect intervals
+        .configureLogging(signalR.LogLevel.Information)
+        .build();
+
+    // Connection state management
+    let isConnected = false;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 10;
+    let pollingInterval = null;
+    let usePollingFallback = false;
+
+    // Toast notification function
+    function showToast(message, type = 'info') {
+        const toastHtml = `
+            <div class="position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+                <div class="toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'danger' ? 'danger' : 'info'} border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="bi bi-${type === 'success' ? 'check-circle-fill' : type === 'danger' ? 'exclamation-triangle-fill' : 'info-circle-fill'}"></i> ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('body').append(toastHtml);
+        safeSetTimeout(() => {
+            $('.toast').fadeOut(300, function() { $(this).parent().remove(); });
+        }, 5000);
+    }
+
+    // Update statistics cards dengan error handling dan retry
+    let statisticsRetryCount = 0;
+    const maxStatisticsRetries = 3;
+    
+    function updateStatistics() {
+        var timestamp = new Date().getTime();
+        // Return promise for coordination
+        return $.ajax({
+            url: '@Url.Action("GetDashboardStatistics", "Home")',
+            type: 'GET',
+            cache: false,
+            timeout: 10000, // 10 second timeout
+            data: { _: timestamp },
+            success: function(data) {
+                console.log("📊 Statistics updated:", data);
+                statisticsRetryCount = 0; // Reset retry count on success
+                
+                // Hitung display text untuk card completed (X / Y)
+                var completedDisplay = data.completedCount;
+                if (data.todaySchedules && data.todaySchedules > 0) {
+                    completedDisplay = data.completedCount + ' / ' + data.todaySchedules;
+                }
+
+                // Update card values immediately for speed
+                $('#totalTodayStatValue').text(data.todaySchedules);
+                $('#completedStatValue').text(completedDisplay);
+                $('#delayPickupStatValue').text(data.delayPickupCount);
+                $('#delayDockInStatValue').text(data.notArrivedCount);
+                $('#delayPrepareStatValue').text(data.delayPrepareCount);
+                if ($('#preparedStatValue').length) {
+                    $('#preparedStatValue').text(data.preparedCount);
+                }
+            },
+            error: function(err) {
+                console.error("Failed to update statistics:", err);
+                statisticsRetryCount++;
+                
+                // Retry dengan exponential backoff
+                if (statisticsRetryCount < maxStatisticsRetries) {
+                    const retryDelay = Math.min(1000 * Math.pow(2, statisticsRetryCount), 10000);
+                    console.log(`🔄 Retrying statistics update in ${retryDelay}ms (attempt ${statisticsRetryCount}/${maxStatisticsRetries})`);
+                    safeSetTimeout(updateStatistics, retryDelay);
+                } else {
+                    console.error("Max retries reached for statistics update");
+                    statisticsRetryCount = 0; // Reset untuk next cycle
+                }
+            }
+        });
+    }
+
+    // Update table data dengan error handling dan retry
+    let tableRetryCount = 0;
+    const maxTableRetries = 3;
+    
+    function updateTableData() {
+        var timestamp = new Date().getTime();
+        // Return promise for coordination
+        return $.ajax({
+            url: '@Url.Action("GetScheduleTableData", "Home")',
+            type: 'GET',
+            cache: false,
+            timeout: 15000, // 15 second timeout (lebih lama karena data lebih besar)
+            data: { _: timestamp },
+            success: function(html) {
+                // Update tbody immediately for speed
+                $('#table-container tbody').html(html);
+                // Re-apply current filter after update
+                filterSchedules(currentFilter);
+                // Check for any new delay prepare rows
+                checkDelayPrepareAlerts();
+                console.log("Table update complete");
+            },
+            error: function(err) {
+                console.error("Failed to update table:", err);
+                console.error("Error details:", err.responseText);
+                tableRetryCount++;
+                
+                // Retry dengan exponential backoff
+                if (tableRetryCount < maxTableRetries) {
+                    const retryDelay = Math.min(1000 * Math.pow(2, tableRetryCount), 15000);
+                    console.log(`🔄 Retrying table update in ${retryDelay}ms (attempt ${tableRetryCount}/${maxTableRetries})`);
+                    safeSetTimeout(updateTableData, retryDelay);
+                } else {
+                    console.error("Max retries reached for table update");
+                    tableRetryCount = 0; // Reset untuk next cycle
+                }
+            }
+        });
+    }
+
+    // Helper function to update status badge
+    function updateStatusBadge(status, text) {
+        const badge = $('#signalr-status');
+        badge.removeClass('status-connecting status-live status-reconnecting status-disconnected');
+        badge.addClass(`status-${status}`);
+        badge.find('.status-text').text(text);
+    }
+
+    // SignalR event handlers
+    connection.on("connected", function(connectionId) {
+        console.log("SignalR Connected! Connection ID:", connectionId);
+        isConnected = true;
+        reconnectAttempts = 0;
+        
+        // Update connection indicator
+        updateStatusBadge('live', 'Live');
+    });
+
+    // Listen for Stock updates (often related to preparation)
+    connection.on("updateStock", function() {
+        console.log("Stock update received! Refreshing dashboard...");
+        Promise.all([updateStatistics(), updateTableData()]);
+    });
+
+    connection.on("deliveryUpdated", function(data) {
+        const timestamp = new Date().toLocaleTimeString();
+        console.log(`[${timestamp}] Delivery Update Received:`, data);
+        
+        // Update connection indicator to show work in progress
+        updateStatusBadge('reconnecting', 'Updating...');
+        
+        // Use camelCase for data properties (SignalR default)
+        const action = data.action || data.Action;
+        const message = data.message || data.Message;
+        
+        // Show notification
+        const icon = action === 'arrival' ? '🚚' : (action === 'departure' ? '✅' : '🔄');
+        showToast(`${icon} ${message}`, 'success');
+        
+        // Update dashboard data in parallel
+        Promise.all([updateStatistics(), updateTableData()]).finally(() => {
+            if (isConnected) {
+                updateStatusBadge('live', 'Live');
+            }
+        });
+    });
+
+    // Connection lifecycle events
+    connection.onreconnecting((error) => {
+        console.warn("SignalR reconnecting...", error);
+        isConnected = false;
+        updateStatusBadge('reconnecting', 'Reconnecting...');
+    });
+
+    connection.onreconnected((connectionId) => {
+        console.log("SignalR reconnected! Connection ID:", connectionId);
+        isConnected = true;
+        reconnectAttempts = 0;
+        updateStatusBadge('live', 'Live');
+        
+        // Refresh data after reconnection
+        updateStatistics();
+        updateTableData();
+    });
+
+    connection.onclose((error) => {
+        console.error("SignalR connection closed:", error);
+        isConnected = false;
+        updateStatusBadge('disconnected', 'Disconnected');
+        
+        // Auto reconnect
+        if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            console.log(`🔄 Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`);
+            safeSetTimeout(() => startConnection(), 5000);
+        } else {
+            console.error("❌ Max reconnect attempts reached. Switching to polling fallback.");
+            showToast('SignalR tidak tersedia. Menggunakan polling sebagai fallback.', 'warning');
+            startPollingFallback();
+        }
+    });
+
+    // Start connection function
+    async function startConnection() {
+        try {
+            await connection.start();
+            console.log("✅ SignalR connection started successfully!");
+            isConnected = true;
+            reconnectAttempts = 0;
+            usePollingFallback = false;
+            stopPollingFallback(); // Stop polling if SignalR is working
+        } catch (err) {
+            console.error("❌ SignalR connection failed:", err);
+            isConnected = false;
+            
+            // After max attempts, switch to polling
+            if (reconnectAttempts >= maxReconnectAttempts) {
+                console.warn("⚠️ SignalR failed after max attempts. Using polling fallback.");
+                startPollingFallback();
+            } else {
+                reconnectAttempts++;
+                safeSetTimeout(() => startConnection(), 5000);
+            }
+        }
+    }
+
+    // Polling fallback function (jika SignalR tidak tersedia)
+    function startPollingFallback() {
+        if (usePollingFallback) {
+            console.log("⚠️ Polling fallback already started, skipping...");
+            return; // Already started
+        }
+        
+        // Pastikan SignalR benar-benar stopped sebelum mulai polling
+        if (connection && isConnected) {
+            try {
+                connection.stop().catch(err => console.error("Error stopping SignalR before polling:", err));
+                isConnected = false;
+            } catch (err) {
+                console.error("Error in SignalR stop:", err);
+            }
+        }
+        
+        usePollingFallback = true;
+        console.log("🔄 Starting polling fallback (every 5 seconds)...");
+        updateStatusBadge('reconnecting', 'Polling Mode');
+        
+        // Clear existing interval if any (double-check)
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+        
+        // Immediate update
+        updateStatistics();
+        updateTableData();
+        
+        // Then poll every 5 seconds
+        pollingInterval = setInterval(function() {
+            // Double-check: jika SignalR sudah connect, stop polling
+            if (isConnected) {
+                console.log("✅ SignalR reconnected, stopping polling fallback");
+                stopPollingFallback();
+                return;
+            }
+            
+            // Pastikan polling masih aktif
+            if (!usePollingFallback) {
+                console.log("⚠️ Polling fallback disabled, stopping interval");
+                if (pollingInterval) {
+                    clearInterval(pollingInterval);
+                    pollingInterval = null;
+                }
+                return;
+            }
+            
+            console.log("🔄 Polling update...");
+            updateStatistics();
+            updateTableData();
+        }, 5000);
+    }
+
+    function stopPollingFallback() {
+        console.log("🛑 Stopping polling fallback...");
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+        usePollingFallback = false;
+        console.log("✅ Polling fallback stopped");
+    }
+
+    // Initialize connection on page load
+    startConnection();
+    
+    // Fallback: Jika SignalR tidak connect dalam 10 detik, gunakan polling
+    safeSetTimeout(function() {
+        if (!isConnected && !usePollingFallback) {
+            console.warn("⚠️ SignalR not connected after 10 seconds. Starting polling fallback.");
+            startPollingFallback();
+        }
+    }, 10000);
+
+    // Cleanup on page unload - CRITICAL untuk mencegah memory leak
+    function cleanupAllResources() {
+        console.log("🧹 Cleaning up all resources...");
+        
+        // Stop SignalR connection
+        if (connection) {
+            try {
+                if (isConnected) {
+                    connection.stop().catch(err => console.error("Error stopping SignalR:", err));
+                }
+            } catch (err) {
+                console.error("Error in SignalR cleanup:", err);
+            }
+        }
+        
+        // Clear all intervals
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+        
+        if (autoScrollInterval) {
+            clearInterval(autoScrollInterval);
+            autoScrollInterval = null;
+        }
+        
+        // Clear all pending timeouts (dengan menyimpan reference)
+        if (window.dashboardTimeouts && Array.isArray(window.dashboardTimeouts)) {
+            window.dashboardTimeouts.forEach(timeout => {
+                try {
+                    clearTimeout(timeout);
+                } catch (err) {
+                    console.error("Error clearing timeout:", err);
+                }
+            });
+            window.dashboardTimeouts = [];
+        }
+        
+        console.log("✅ Cleanup complete");
+    }
+    
+    // Cleanup saat page unload
+    window.addEventListener('beforeunload', cleanupAllResources);
+    
+    // Cleanup saat page visibility change (tab hidden/visible)
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            // Tab hidden - bisa pause beberapa operasi untuk hemat resource
+            console.log("📱 Tab hidden - pausing non-critical operations");
+        } else {
+            // Tab visible - resume operations
+            console.log("📱 Tab visible - resuming operations");
+            // Refresh data saat tab kembali visible
+            if (isConnected || usePollingFallback) {
+                updateStatistics();
+                updateTableData();
+            }
+        }
+    });
+
+    // Manual refresh function
+    function manualRefresh() {
+        console.log("🔄 Manual refresh triggered");
+        updateStatusBadge('reconnecting', 'Refreshing...');
+        updateStatistics();
+        updateTableData();
+        
+        // Reset status badge after a moment
+        safeSetTimeout(function() {
+            if (isConnected) {
+                updateStatusBadge('live', 'Live');
+            } else if (usePollingFallback) {
+                updateStatusBadge('reconnecting', 'Polling Mode');
+            } else {
+                updateStatusBadge('disconnected', 'Disconnected');
+            }
+        }, 1000);
+    }
+    
+    // Periodic refresh fallback sudah di-handle oleh polling fallback
+    // Tidak perlu interval tambahan karena polling fallback sudah menangani ini
+
+    console.log("SignalR initialization complete!");
+
+    // ============================================
+    // AUTO-SCROLL VERTICAL TABLE
+    // ============================================
+    let autoScrollInterval = null;
+    let isScrollingDown = true;
+    let isPaused = false;
+    let isAutoScrollEnabled = true; // Default enabled
+    const scrollSpeed = 1; // pixels per frame
+    const scrollDelay = 20; // milliseconds between scrolls
+    const STORAGE_KEY = 'dashboard_autoscroll_enabled';
+
+    // Load state from localStorage
+    function loadAutoScrollState() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved !== null) {
+            isAutoScrollEnabled = saved === 'true';
+        }
+        updateAutoScrollToggleUI();
+    }
+
+    // Update toggle button UI
+    function updateAutoScrollToggleUI() {
+        const toggleBtn = document.getElementById('autoScrollToggle');
+        const toggleIcon = document.getElementById('autoScrollIcon');
+        const toggleText = document.getElementById('autoScrollText');
+        
+        if (toggleBtn && toggleIcon && toggleText) {
+            if (isAutoScrollEnabled) {
+                toggleBtn.classList.remove('btn-outline-secondary');
+                toggleBtn.classList.add('btn-outline-success');
+                toggleIcon.classList.remove('bi-pause-circle', 'bi-arrow-down-up');
+                toggleIcon.classList.add('bi-arrow-down-up');
+                toggleText.textContent = 'Auto Scroll: ON';
+            } else {
+                toggleBtn.classList.remove('btn-outline-success');
+                toggleBtn.classList.add('btn-outline-secondary');
+                toggleIcon.classList.remove('bi-arrow-down-up');
+                toggleIcon.classList.add('bi-pause-circle');
+                toggleText.textContent = 'Auto Scroll: OFF';
+            }
+        }
+    }
+
+    // Toggle auto-scroll on/off
+    function toggleAutoScroll() {
+        isAutoScrollEnabled = !isAutoScrollEnabled;
+        localStorage.setItem(STORAGE_KEY, isAutoScrollEnabled.toString());
+        updateAutoScrollToggleUI();
+        
+        if (isAutoScrollEnabled) {
+            startAutoScroll();
+        } else {
+            stopAutoScroll();
+        }
+    }
+
+    function startAutoScroll() {
+        if (!isAutoScrollEnabled) {
+            console.log("⚠️ Auto-scroll disabled, not starting");
+            return; // Don't start if disabled
+        }
+        
+        const tableContainer = document.getElementById('table-container');
+        if (!tableContainer) {
+            console.log("⚠️ Table container not found, cannot start auto-scroll");
+            return;
+        }
+
+        // Hanya jalankan jika konten lebih tinggi dari container
+        if (tableContainer.scrollHeight <= tableContainer.clientHeight) {
+            console.log("ℹ️ Content doesn't overflow, auto-scroll not needed");
+            return; // Tidak perlu scroll jika konten tidak overflow
+        }
+
+        // Hapus interval yang sudah ada jika ada (prevent duplicate)
+        if (autoScrollInterval) {
+            console.log("⚠️ Auto-scroll interval already exists, clearing first");
+            clearInterval(autoScrollInterval);
+            autoScrollInterval = null;
+        }
+
+        console.log("▶️ Starting auto-scroll");
+        autoScrollInterval = setInterval(function() {
+            // Double-check enabled state
+            if (isPaused || !isAutoScrollEnabled) {
+                return;
+            }
+            
+            // Re-check container existence
+            const container = document.getElementById('table-container');
+            if (!container) {
+                console.log("⚠️ Table container removed, stopping auto-scroll");
+                stopAutoScroll();
+                return;
+            }
+
+            const maxScroll = container.scrollHeight - container.clientHeight;
+            const currentScroll = container.scrollTop;
+
+            if (isScrollingDown) {
+                // Scroll ke bawah
+                if (currentScroll < maxScroll) {
+                    container.scrollTop += scrollSpeed;
+                } else {
+                    // Sudah sampai bawah, mulai scroll ke atas
+                    isScrollingDown = false;
+                }
+            } else {
+                // Scroll ke atas
+                if (currentScroll > 0) {
+                    container.scrollTop -= scrollSpeed;
+                } else {
+                    // Sudah sampai atas, mulai scroll ke bawah
+                    isScrollingDown = true;
+                }
+            }
+        }, scrollDelay);
+    }
+
+    function stopAutoScroll() {
+        if (autoScrollInterval) {
+            console.log("🛑 Stopping auto-scroll");
+            clearInterval(autoScrollInterval);
+            autoScrollInterval = null;
+        }
+    }
+
+    // Initialize auto-scroll setelah DOM ready
+    document.addEventListener('DOMContentLoaded', function() {
+        // Load saved state
+        loadAutoScrollState();
+        
+        // Setup toggle button
+        const toggleBtn = document.getElementById('autoScrollToggle');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', toggleAutoScroll);
+        }
+        
+        // Tunggu sebentar untuk memastikan tabel sudah ter-render
+        safeSetTimeout(function() {
+            if (isAutoScrollEnabled) {
+                startAutoScroll();
+            }
+        }, 1000);
+
+        // Pause saat hover, resume saat tidak hover
+        const tableContainer = document.getElementById('table-container');
+        if (tableContainer) {
+            tableContainer.addEventListener('mouseenter', function() {
+                isPaused = true;
+            });
+
+            tableContainer.addEventListener('mouseleave', function() {
+                isPaused = false;
+            });
+        }
+    });
+
+    // Restart auto-scroll setelah update tabel (untuk SignalR update)
+    const originalUpdateTableData = updateTableData;
+    updateTableData = function() {
+        const promise = originalUpdateTableData();
+        
+        // Restart auto-scroll setelah tabel di-update (dengan delay kecil agar DOM render selesai)
+        if (promise && typeof promise.then === 'function') {
+            promise.then(() => {
+                safeSetTimeout(function() {
+                    stopAutoScroll();
+                    if (isAutoScrollEnabled) {
+                        startAutoScroll();
+                    }
+                }, 500);
+            });
+        } else {
+            safeSetTimeout(function() {
+                stopAutoScroll();
+                if (isAutoScrollEnabled) {
+                    startAutoScroll();
+                }
+            }, 500);
+        }
+        
+        return promise;
+    };
+</script>
+}
