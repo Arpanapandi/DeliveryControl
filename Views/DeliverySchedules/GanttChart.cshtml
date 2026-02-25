@@ -154,14 +154,41 @@ else
                     <div style="display: flex; flex-direction: column;">
                     <table class="table mb-0" style="table-layout: fixed; width: 100%; border-collapse: collapse;">
                         <tbody>
-        @foreach (var schedule in Model)
+        @{
+            var ganttGroups = Model
+                .GroupBy(s => new {
+                    Dock     = s.Customer?.CustomerName ?? "-",
+                    Cycle    = s.Cycle ?? "",
+                    CustId   = s.CustomerId
+                })
+                .OrderBy(g => g.Key.Dock)
+                .ThenBy(g => g.Key.Cycle);
+        }
+        @foreach (var grp in ganttGroups)
                         {
-                            var pickupTime = schedule.PickupTime ?? schedule.ScheduledDate.AddHours(8);
-                            var etdTime = schedule.ETD ?? schedule.ScheduledDate.AddHours(12);
-                            var actualStartTime = schedule.ActualStartTime;
-                            var actualEndTime = schedule.ActualEndTime;
-            var enterDockTime = schedule.EnterDockTime;
-            var actualEnterDockTime = schedule.ActualEnterDockTime;
+                            // Representative schedule (for Customer, Status, ScheduledDate, etc.)
+                            var schedule = grp.OrderBy(s => s.PickupTime ?? s.ScheduledDate).First();
+                            int grpCount = grp.Count();
+
+                            // Aggregate timing across all schedules in the group
+                            var pickupTime = grp.Any(s => s.PickupTime.HasValue)
+                                ? grp.Where(s => s.PickupTime.HasValue).Min(s => s.PickupTime!.Value)
+                                : schedule.ScheduledDate.AddHours(8);
+                            var etdTime = grp.Any(s => s.ETD.HasValue)
+                                ? grp.Where(s => s.ETD.HasValue).Max(s => s.ETD!.Value)
+                                : schedule.ScheduledDate.AddHours(12);
+                            var actualStartTime = grp.Any(s => s.ActualStartTime.HasValue)
+                                ? grp.Where(s => s.ActualStartTime.HasValue).Min(s => s.ActualStartTime)
+                                : (DateTime?)null;
+                            var actualEndTime = grp.Any(s => s.ActualEndTime.HasValue)
+                                ? grp.Where(s => s.ActualEndTime.HasValue).Max(s => s.ActualEndTime)
+                                : (DateTime?)null;
+                            var enterDockTime = grp.Any(s => s.EnterDockTime.HasValue)
+                                ? grp.Where(s => s.EnterDockTime.HasValue).Min(s => s.EnterDockTime)
+                                : (DateTime?)null;
+                            var actualEnterDockTime = grp.Any(s => s.ActualEnterDockTime.HasValue)
+                                ? grp.Where(s => s.ActualEnterDockTime.HasValue).Min(s => s.ActualEnterDockTime)
+                                : (DateTime?)null;
             var estimatedDockTime = enterDockTime?.AddMinutes(15);
             var actualEstimatedDockTime = actualEnterDockTime?.AddMinutes(15);
 
@@ -280,6 +307,35 @@ else
                                 actualWidth = WidthInPercent30(actualDuration);
                             }
 
+                            // --- Planned Prepare Bar ---
+                            // Timeline: H-1 (0-20%) = ScheduledDate 18:00-24:00
+                            //           HARI INI (20-100%) = ScheduledDate+1 00:00-24:00
+                            // Prepare starts at StartPrepareTime and ends at EnterDockTime.
+                            // Use left% + right% (not width%) so cross-midnight bars render correctly.
+                            var prepareStartPercent = 0.0;
+                            var prepareEndPercent   = 0.0;
+                            DateTime? prepareStartTime = null;
+                            DateTime? prepareEndTime = null;
+                            if (schedule.StdPrepareTime > 0)
+                            {
+                                prepareStartTime = schedule.ScheduledDate.Date.AddMinutes(schedule.StartPrepareTime);
+                                // End = absolute clock time (StdPrepareTime = minutes from midnight, same as START PREP column)
+                                prepareEndTime = schedule.ScheduledDate.Date.AddMinutes(schedule.StdPrepareTime);
+                                // If end <= start, it crosses midnight — push end to next day
+                                if (prepareEndTime.Value <= prepareStartTime.Value)
+                                    prepareEndTime = prepareEndTime.Value.AddDays(1);
+
+                                var prepStartHour = prepareStartTime.Value.Hour + (prepareStartTime.Value.Minute / 60.0);
+                                var prepEndHour   = prepareEndTime.Value.Hour   + (prepareEndTime.Value.Minute   / 60.0);
+
+                                // H-1 = ScheduledDate with hour >= 18; HARI INI = next day (hour 0-24)
+                                var isPrepStartInH1 = prepareStartTime.Value.Date == schedule.ScheduledDate.Date && prepStartHour >= 18.0;
+                                var isPrepEndInH1   = prepareEndTime.Value.Date   == schedule.ScheduledDate.Date && prepEndHour   >= 18.0;
+
+                                prepareStartPercent = HourToPercent30(prepStartHour, isPrepStartInH1);
+                                prepareEndPercent   = HourToPercent30(prepEndHour,   isPrepEndInH1);
+                            }
+
                             var displayStatus = (schedule.DriverStatus ?? schedule.Status) ?? "Scheduled";
                             var statusColor = displayStatus switch
                             {
@@ -309,7 +365,12 @@ else
                                             </div>
                                         </div>
                                         <div class="d-flex align-items-center justify-content-between">
-                                            <small style="color: #94a3b8; font-size: 0.7rem;">@schedule.ScheduleNumber</small>
+                                            <small style="color: #94a3b8; font-size: 0.7rem;">
+                                                @(string.IsNullOrEmpty(grp.Key.Cycle) ? "-" : grp.Key.Cycle)
+                                                @if (grpCount > 1) {
+                                                    <span class="badge bg-secondary ms-1" style="font-size: 0.6rem;">@grpCount sch</span>
+                                                }
+                                            </small>
                                             <span class="badge badge-gantt bg-@statusColor" style="font-size: 0.65rem; padding: 0.25rem 0.5rem;">
                                                 @if (displayStatus == "Completed")
                                                 {
@@ -327,7 +388,7 @@ else
                                         </div>
                                     </div>
                                 </td>
-                                <td class="gantt-timeline-cell" style="flex: 1; position: relative; height: 100px; padding: 0; background: #1e293b; border-bottom: none;">
+                                <td class="gantt-timeline-cell" style="flex: 1; position: relative; height: 120px; padding: 0; background: #1e293b; border-bottom: none;">
                                     <!-- Timeline Grid dengan garis vertikal (30 hours: 18:00 H-1 to 23:00 H) -->
                                     <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: grid; grid-template-columns: repeat(30, 1fr); z-index: 0; pointer-events: none;">
                                         @for (int i = 0; i < 30; i++)
@@ -348,11 +409,37 @@ else
                                         }
                                     </div>
 
-                    <!-- Enter Dock Bar (Scheduled) - Baris 1 -->
+                    <!-- Planned Prepare Bar - Baris 1 (orange, spans StartPrepare → EnterDockTime) -->
+                    @if (prepareStartTime.HasValue && prepareEndPercent > prepareStartPercent)
+                    {
+                        <div style="position: absolute;
+                                    top: 3px;
+                                    left: @prepareStartPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%;
+                                    right: @((100 - prepareEndPercent).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))%;
+                                    height: 16px;
+                                    min-width: 50px;
+                                    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+                                    border-radius: 4px;
+                                    border: 2px solid #f97316;
+                                    display: flex;
+                                    align-items: center;
+                                    padding: 0 6px;
+                                    box-shadow: 0 2px 8px rgba(249, 115, 22, 0.5), inset 0 1px 0 rgba(255,255,255,0.2);
+                                    opacity: 0.9;
+                                    z-index: 1;
+                                    overflow: hidden;">
+                            <i class="bi bi-boxes" style="font-size: 0.65rem; color: white; margin-right: 3px; flex-shrink: 0;"></i>
+                            <span style="font-size: 0.65rem; color: white; font-weight: 600; white-space: nowrap;">
+                                @prepareStartTime.Value.ToString("HH:mm") - @prepareEndTime!.Value.ToString("HH:mm")
+                            </span>
+                        </div>
+                    }
+
+                    <!-- Enter Dock Bar (Scheduled) - Baris 2 -->
                     @if (enterDockTime.HasValue && estimatedDockTime.HasValue && enterDockWidth > 0)
                     {
                         <div style="position: absolute; 
-                                    top: 3px; 
+                                    top: 24px; 
                                     left: @enterDockPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
                                     z-index: 1;">
                             <div class="gantt-bar gantt-dock-scheduled" 
@@ -382,7 +469,7 @@ else
                         </div>
                     }
 
-                    <!-- Actual Enter Dock Bar - Baris 2 -->
+                    <!-- Actual Enter Dock Bar - Baris 3 -->
                     @if (actualEnterDockTime.HasValue && actualEstimatedDockTime.HasValue && actualEnterDockWidth > 0)
                     {
                         var dockBarColor = isDockDelay ? "linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)" : (isDockEarly ? "linear-gradient(135deg, #22c55e 0%, #15803d 100%)" : "linear-gradient(135deg, #22c55e 0%, #15803d 100%)");
@@ -391,7 +478,7 @@ else
                         var dockIcon = isDockDelay ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill";
                         
                         <div style="position: absolute; 
-                                    top: 25px; 
+                                    top: 45px; 
                                     left: @actualEnterDockPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
                                     z-index: 2;">
                             <div class="gantt-bar gantt-dock-actual" 
@@ -436,9 +523,9 @@ else
                         </div>
                     }
 
-                    <!-- Schedule Bar (Planned) - Baris 3 -->
+                    <!-- Schedule Bar (Planned Pickup-ETD) - Baris 4 -->
                                     <div style="position: absolute; 
-                                                top: 47px; 
+                                                top: 68px; 
                                                 left: @pickupPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
                                                 z-index: 1;">
                                         <div class="gantt-bar gantt-planned" 
@@ -461,7 +548,7 @@ else
                                         </div>
                                     </div>
 
-                                    <!-- Actual Bar - Baris 4 -->
+                                    <!-- Actual Bar - Baris 5 -->
                                     @if (actualStartTime.HasValue && actualEndTime.HasValue)
                                     {
                                         var isLate = actualStartTime.Value > pickupTime || actualEndTime.Value > etdTime;
@@ -471,7 +558,7 @@ else
                                         var actualIconClass = isLate ? "gantt-bar-danger" : "gantt-bar-success";
                                         
                                         <div style="position: absolute; 
-                                                    top: 69px; 
+                                                    top: 92px; 
                                                     left: @actualStartPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
                                                     z-index: 2;">
                                             <div class="gantt-bar gantt-actual @actualIconClass" 
@@ -512,7 +599,7 @@ else
                                         
                                         <div class="gantt-bar gantt-inprogress" 
                                              style="position: absolute; 
-                                                    top: 69px; 
+                                                    top: 92px; 
                                                     left: @actualStartPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
                                                     min-width: 60px; 
                                                     height: 20px; 
@@ -553,28 +640,32 @@ else
                 <div class="d-flex flex-wrap gap-4">
                     <!-- Legend untuk bar timeline -->
                     <div class="legend-item-simple">
+                        <i class="bi bi-boxes" style="color:#f97316"></i>
+                        <span>Planned Prepare (Baris 1)</span>
+                    </div>
+                    <div class="legend-item-simple">
                         <i class="bi bi-door-open text-info"></i>
-                        <span>Enter Dock Schedule (Baris 1)</span>
+                        <span>Enter Dock Schedule (Baris 2)</span>
                     </div>
                     <div class="legend-item-simple">
                         <i class="bi bi-door-open-fill text-success"></i>
-                        <span>Actual Enter Dock (Baris 2)</span>
-                    </div>
-                    <div class="legend-item-simple">
-                        <i class="bi bi-calendar-check text-primary"></i>
-                        <span>Schedule (Baris 3)</span>
+                        <span>Actual Enter Dock (Baris 3)</span>
                     </div>
                     <div class="legend-item-simple">
                         <i class="bi bi-exclamation-triangle-fill text-danger"></i>
-                        <span>Actual Dock Delay (Baris 2)</span>
+                        <span>Actual Dock Delay (Baris 3)</span>
+                    </div>
+                    <div class="legend-item-simple">
+                        <i class="bi bi-calendar-check text-primary"></i>
+                        <span>Schedule Pickup-ETD (Baris 4)</span>
                     </div>
                     <div class="legend-item-simple">
                         <i class="bi bi-check-circle-fill text-success"></i>
-                        <span>Actual On Time (Baris 4)</span>
+                        <span>Actual On Time (Baris 5)</span>
                     </div>
                     <div class="legend-item-simple">
                         <i class="bi bi-arrow-right-circle-fill text-warning"></i>
-                        <span>In Progress (Baris 4)</span>
+                        <span>In Progress (Baris 5)</span>
                     </div>
 
                     <!-- Legend untuk icon status di kolom customer -->

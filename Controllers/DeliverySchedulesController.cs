@@ -10,7 +10,6 @@ using System.Globalization;
 
 namespace DeliveryControl.Controllers
 {
-    [DeliveryControl.Filters.AuthorizeAdmin]
     public class DeliverySchedulesController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -35,8 +34,6 @@ namespace DeliveryControl.Controllers
 
             var query = _context.DeliverySchedules
                 .Include(s => s.Customer)
-                .Include(s => s.DeliveryItems)
-                    .ThenInclude(di => di.Item)
                 .Where(s => s.ScheduledDate.Date >= scheduleDate.Date && s.ScheduledDate.Date <= endScheduleDate.Date)
                 .AsQueryable();
 
@@ -74,8 +71,6 @@ namespace DeliveryControl.Controllers
             var query = _context.DeliverySchedules
                 .AsNoTracking()
                 .Include(s => s.Customer)
-                .Include(s => s.DeliveryItems)
-                    .ThenInclude(di => di.Item)
                 .Where(s => s.ScheduledDate.Date >= rangeStart && s.ScheduledDate.Date <= rangeEnd);
 
             if (customerId.HasValue)
@@ -592,8 +587,6 @@ namespace DeliveryControl.Controllers
             var todaySchedules = await _context.DeliverySchedules
                 .AsNoTracking()
                 .Include(d => d.Customer)
-                .Include(d => d.DeliveryItems)
-                    .ThenInclude(di => di.Item)
                 .Where(s => s.ScheduledDate.Date == today)
                 .OrderBy(s => s.ETD)
                 .ToListAsync();
@@ -1314,7 +1307,7 @@ namespace DeliveryControl.Controllers
         // POST: DeliverySchedules/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(int id, int pageNumber = 1, DateTime? startDate = null, DateTime? endDate = null, int? customerId = null, string? status = null)
+        public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var schedule = await _context.DeliverySchedules
                 .Include(s => s.DeliveryItems)
@@ -1358,13 +1351,7 @@ namespace DeliveryControl.Controllers
                 }
             }
 
-            return RedirectToAction(nameof(Index), new { 
-                pageNumber = pageNumber, 
-                startDate = startDate, 
-                endDate = endDate, 
-                customerId = customerId, 
-                status = status 
-            });
+            return RedirectToAction(nameof(Index));
         }
 
         private bool ScheduleExists(int id)

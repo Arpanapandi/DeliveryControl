@@ -156,33 +156,6 @@ namespace DeliveryControl.Models
             }
         }
 
-        // Calculated Kanban
-        [NotMapped]
-        public double CalculatedKanbanTarget
-        {
-            get
-            {
-                // Ensure we have items to sum. If not loaded, we can't calculate accurately, 
-                // but we should return 0 rather than potentially misleading numbers.
-                if (DeliveryItems == null || !DeliveryItems.Any()) return 0;
-                
-                // Sum the Kanban Target from all items in this schedule
-                return (double)DeliveryItems.Sum(di => di.CalculatedKanbanTarget);
-            }
-        }
-
-        [NotMapped]
-        public double CalculatedKanbanActual
-        {
-            get
-            {
-                if (DeliveryItems == null || !DeliveryItems.Any()) return 0;
-                
-                // Sum the Kanban Actual from all items in this schedule
-                return (double)DeliveryItems.Sum(di => di.CalculatedKanbanActual);
-            }
-        }
-
         // Navigation properties
         [ForeignKey("CustomerId")]
         public virtual Customer? Customer { get; set; }

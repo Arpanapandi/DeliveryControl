@@ -880,10 +880,151 @@
         background-color: #6c757d;
         color: white;
     }
+
+    /* ===== DELAY PREPARE POPUP ===== */
+    #delayPreparePopup {
+        position: fixed;
+        top: 80px;
+        right: 24px;
+        width: 360px;
+        z-index: 10500;
+        border-radius: 14px;
+        border: 2px solid #ef4444;
+        background: linear-gradient(135deg, #1e1b2e 0%, #2d1515 100%);
+        box-shadow: 0 0 30px rgba(239,68,68,0.55), 0 8px 32px rgba(0,0,0,0.5);
+        display: none;
+        animation: slideInRight 0.35s ease;
+    }
+    @@keyframes slideInRight {
+        from { transform: translateX(120%); opacity: 0; }
+        to   { transform: translateX(0);   opacity: 1; }
+    }
+    #delayPreparePopup .popup-header {
+        background: linear-gradient(90deg, #dc2626, #ef4444);
+        border-radius: 12px 12px 0 0;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    #delayPreparePopup .popup-title {
+        font-weight: 700;
+        font-size: 0.95rem;
+        color: #fff;
+        letter-spacing: 0.5px;
+    }
+    #delayPreparePopup .popup-body {
+        padding: 12px 16px;
+        max-height: 280px;
+        overflow-y: auto;
+    }
+    #delayPreparePopup .delay-item {
+        background: rgba(239,68,68,0.12);
+        border: 1px solid rgba(239,68,68,0.3);
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    #delayPreparePopup .delay-item:last-child { margin-bottom: 0; }
+    #delayPreparePopup .delay-customer {
+        font-weight: 700;
+        color: #fca5a5;
+        font-size: 1rem;
+        min-width: 48px;
+    }
+    #delayPreparePopup .delay-meta {
+        font-size: 0.78rem;
+        color: #e5e7eb;
+    }
+    #delayPreparePopup .popup-footer {
+        padding: 8px 16px 14px;
+        display: flex;
+        gap: 8px;
+    }
+    .popup-blink-icon {
+        animation: blink-red 1s step-start infinite;
+        font-size: 1.3rem;
+    }
+    @@keyframes blink-red {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.2; }
+    }
 </style>
+
+<!-- ===== DELAY PREPARE WARNING POPUP ===== -->
+<div id="delayPreparePopup">
+    <div class="popup-header">
+        <span class="popup-title">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+            DELAY PREPARE TERDETEKSI!
+        </span>
+        <button type="button" class="btn-close btn-close-white btn-sm" id="closeDelayPrepPopup" aria-label="Close"></button>
+    </div>
+    <div class="popup-body" id="delayPrepPopupBody">
+        <!-- filled by JS -->
+    </div>
+    <div class="popup-footer">
+        <button class="btn btn-danger btn-sm w-100" onclick="filterSchedules('delayprepare'); document.getElementById('delayPreparePopup').style.display='none';">
+            <i class="bi bi-funnel-fill me-1"></i> Lihat Detail Delay
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" id="dismissDelayPrepPopup" style="white-space:nowrap;">
+            <i class="bi bi-x-lg"></i> Tutup
+        </button>
+    </div>
+</div>
 
 <script>
     let currentFilter = 'all';
+
+    // ===== DELAY PREPARE POPUP STATE =====
+    const knownDelayPrepKeys = new Set(); // tracks customer+cycle combos already shown
+    let delayPopupSnoozed = false;        // true while popup is manually dismissed
+
+    function checkDelayPrepareAlerts() {
+        const allDelayRows = document.querySelectorAll('.schedule-row[data-delayprepare="true"]');
+        const newItems = [];
+        allDelayRows.forEach(function(row) {
+            const customer = row.getAttribute('data-customer') || '-';
+            const cycle    = row.getAttribute('data-cycle')    || '-';
+            const startP   = row.getAttribute('data-startprep') || '-';
+            const endP     = row.getAttribute('data-endprep')   || '-';
+            const key = customer + '|' + cycle;
+            if (!knownDelayPrepKeys.has(key)) {
+                knownDelayPrepKeys.add(key);
+                newItems.push({ customer, cycle, startP, endP });
+            }
+        });
+
+        if (newItems.length > 0) {
+            // Build popup item list
+            const body = document.getElementById('delayPrepPopupBody');
+            if (body) {
+                newItems.forEach(function(it) {
+                    const div = document.createElement('div');
+                    div.className = 'delay-item';
+                    div.innerHTML =
+                        '<span class="popup-blink-icon text-danger"><i class="bi bi-exclamation-triangle-fill"></i></span>' +
+                        '<div>' +
+                            '<div class="delay-customer">' + it.customer + ' &mdash; ' + it.cycle + '</div>' +
+                            '<div class="delay-meta"><i class="bi bi-clock-fill me-1 text-warning"></i>Prepare: ' + it.startP + ' – ' + it.endP + ' (Terlambat)</div>' +
+                        '</div>';
+                    body.appendChild(div);
+                });
+            }
+            // Show popup (reset snooze because new item appeared)
+            delayPopupSnoozed = false;
+            const popup = document.getElementById('delayPreparePopup');
+            if (popup) {
+                popup.style.display = 'block';
+                popup.style.animation = 'none';
+                popup.offsetHeight; // reflow
+                popup.style.animation = 'slideInRight 0.35s ease';
+            }
+        }
+    }
 
     function filterSchedules(filter) {
         currentFilter = filter;
@@ -996,6 +1137,18 @@
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
         filterSchedules('all');
+        // Check for pre-existing delay prepare on initial load
+        safeSetTimeout(checkDelayPrepareAlerts, 500);
+
+        // Close/dismiss buttons for delay prepare popup
+        document.getElementById('closeDelayPrepPopup')?.addEventListener('click', function() {
+            delayPopupSnoozed = true;
+            document.getElementById('delayPreparePopup').style.display = 'none';
+        });
+        document.getElementById('dismissDelayPrepPopup')?.addEventListener('click', function() {
+            delayPopupSnoozed = true;
+            document.getElementById('delayPreparePopup').style.display = 'none';
+        });
     });
 </script>
 
@@ -1149,6 +1302,8 @@
                 $('#table-container tbody').html(html);
                 // Re-apply current filter after update
                 filterSchedules(currentFilter);
+                // Check for any new delay prepare rows
+                checkDelayPrepareAlerts();
                 console.log("Table update complete");
             },
             error: function(err) {

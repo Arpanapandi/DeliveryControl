@@ -64,8 +64,23 @@
     var groupTotalActual = schedules.Sum(s => s.TotalActualQuantity);
     
     // Aggregate Kanban counts for the entire group
-    var totalKanbanTarget = schedules.Sum(s => s.CalculatedKanbanTarget);
-    var totalKanbanActual = schedules.Sum(s => s.CalculatedKanbanActual);
+    double totalKanbanTarget = 0;
+    double totalKanbanActual = 0;
+    foreach(var s in schedules)
+    {
+        if (s.DeliveryItems != null)
+        {
+            foreach(var di in s.DeliveryItems)
+            {
+                var qpc = di.Item?.QtyLot ?? 1;
+                if (qpc > 0)
+                {
+                    totalKanbanTarget += Math.Ceiling((double)di.Quantity / qpc);
+                    totalKanbanActual += (double)(di.ActualQuantity ?? 0) / qpc;
+                }
+            }
+        }
+    }
 
     // Determine representative status
     string displayStatus = "Scheduled";
@@ -187,13 +202,22 @@
         if (diff.TotalMinutes > 0) { isPrepareEarly = true; prepareEarlyMinutes = (int)diff.TotalMinutes; }
     }
 
+    var startPrepDisp = item.StartPrepareTime > 0 ? item.StartPrepareTime : (item.Customer?.StartPrepareTime ?? 0);
+    var endPrepDisp   = item.StdPrepareTime > 0   ? item.StdPrepareTime   : (item.Customer?.StdPrepareTime ?? 0);
+    var startPrepStr  = $"{startPrepDisp / 60:D2}:{startPrepDisp % 60:D2}";
+    var endPrepStr    = $"{endPrepDisp / 60:D2}:{endPrepDisp % 60:D2}";
+
     <tr class="schedule-row @(isCompleted ? "opacity-75" : "")" 
         data-status="@normalizedStatus" 
         data-arrived="@(item.ActualStartTime.HasValue ? "true" : "false")" 
         data-delaypickup="@(isDelayPickup ? "true" : "false")" 
         data-delayprepare="@(isDelayPrepare ? "true" : "false")" 
         data-notarrived="@(isDelayDockIn ? "true" : "false")"
-        data-prepared="@(schedules.All(s => s.PreparationStatus == "Prepared") ? "true" : "false")">
+        data-prepared="@(schedules.All(s => s.PreparationStatus == "Prepared") ? "true" : "false")"
+        data-customer="@item.Customer.CustomerCode"
+        data-cycle="@(item.Cycle ?? "-")"
+        data-startprep="@startPrepStr"
+        data-endprep="@endPrepStr">
         <td class="text-center align-middle">
             <div class="fw-bold">@item.Customer.CustomerCode</div>
             <div class="small text-muted" style="font-size: 0.7rem;">@dock</div>
