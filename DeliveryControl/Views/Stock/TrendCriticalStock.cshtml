@@ -1,0 +1,535 @@
+@{
+    ViewData["Title"] = "Trend Critical Stock";
+    var allPlants      = ViewBag.AllPlants as List<string> ?? new List<string>();
+    var selectedLevel  = ViewBag.SelectedLevel as string ?? "1.5D";
+    var selectedPeriod = ViewBag.SelectedPeriod as string ?? "30d";
+    var plantBreakdown = ViewBag.PlantBreakdown as string ?? "[]";
+    var dateLabels     = ViewBag.DateLabels as string ?? "[]";
+    var todayBelow1D   = (int)(ViewBag.TodayBelow1D  ?? 0);
+    var todayBelow1_5D = (int)(ViewBag.TodayBelow1_5D ?? 0);
+    var todayTotal     = (int)(ViewBag.TodayTotal ?? 0);
+    var lastSnapshot   = ViewBag.LastSnapshot as DateTime?;
+}
+
+<style>
+    .tcs-card         { background: #0f1929; border: 1px solid #1e3a5f; border-radius: 12px; }
+    .tcs-card-red     { border-left: 4px solid #ef4444; }
+    .tcs-card-orange  { border-left: 4px solid #f97316; }
+    .tcs-card-blue    { border-left: 4px solid #3b82f6; }
+
+    .tcs-stat-num { font-size: 2.5rem; font-weight: 700; line-height: 1; }
+    .tcs-label    { font-size: .72rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; }
+
+    .tcs-filter-btn {
+        background: #1e3a5f; border: 1px solid #2d5a8e; color: #94a3b8;
+        padding: 6px 16px; border-radius: 6px; cursor: pointer;
+        transition: all .2s; font-size: .84rem; outline: none;
+    }
+    .tcs-filter-btn:hover   { background: #2d5a8e; color: #fff; }
+    .tcs-filter-btn.active  { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+
+    .level-toggle { background: #0a1628; border: 1px solid #1e3a5f; border-radius: 10px; padding: 4px; display: inline-flex; gap: 4px; }
+    .level-btn {
+        border: none; border-radius: 7px; padding: 9px 26px; font-size: .88rem;
+        font-weight: 600; cursor: pointer; transition: all .25s; color: #64748b; background: transparent;
+    }
+    .level-btn.red    { background: #ef4444; color: #fff; box-shadow: 0 0 14px rgba(239,68,68,.45); }
+    .level-btn.orange { background: #f97316; color: #fff; box-shadow: 0 0 14px rgba(249,115,22,.45); }
+    .level-btn:not(.red):not(.orange):hover { background: #1e3a5f; color: #cbd5e1; }
+
+    .chart-wrap { position: relative; height: 380px; }
+
+    .plant-card {
+        background: #0a1628; border: 1px solid #1e3a5f; border-radius: 10px;
+        padding: 16px; transition: border-color .2s;
+    }
+    .plant-card:hover { border-color: #3b82f6; }
+
+    .bdg-red    { background: rgba(239,68,68,.15);  color: #ef4444; border: 1px solid rgba(239,68,68,.3);  border-radius: 5px; padding: 2px 8px; font-size: .72rem; }
+    .bdg-orange { background: rgba(249,115,22,.15); color: #f97316; border: 1px solid rgba(249,115,22,.3); border-radius: 5px; padding: 2px 8px; font-size: .72rem; }
+
+    .snap-info { background: #0a1628; border: 1px solid #1e3a5f; border-radius: 8px; padding: 8px 14px; }
+    .crit-row  { border-bottom: 1px solid #1e3a5f; padding: 6px 0; }
+    .crit-row:last-child { border-bottom: none; }
+
+    .legend-pill {
+        display: flex; align-items: center; gap: 8px; cursor: pointer;
+        background: #0a1628; border: 1px solid #1e3a5f; border-radius: 8px;
+        padding: 6px 14px; transition: opacity .2s;
+    }
+    .legend-pill.hidden-series { opacity: .35; }
+    .legend-line { width: 28px; height: 3px; border-radius: 2px; }
+
+    /* ========================================
+       DASHBOARD SUB-MENU NAV STYLING
+       ======================================== */
+    .dashboard-nav-wrapper {
+        border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    .nav-links-container {
+        display: flex;
+        align-items: center;
+        gap: 25px;
+    }
+
+    .nav-link-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #94a3b8;
+        text-decoration: none;
+        padding: 10px 0px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        position: relative;
+        border-bottom: 2px solid transparent;
+    }
+
+    .nav-link-item i {
+        font-size: 1rem;
+    }
+
+    .nav-link-item:hover {
+        color: #fff;
+    }
+
+    .nav-link-item.active {
+        color: #3b82f6;
+        border-bottom-color: #3b82f6;
+    }
+
+    .nav-link-item.active i {
+        color: #3b82f6;
+    }
+</style>
+
+<div class="header-main-row mb-3">
+    <div class="header-title-section">
+        <i class="bi bi-graph-down-arrow fs-4 text-danger"></i>
+        <h1 class="h5 fw-bold mb-0 text-white text-nowrap">Trend Critical Stock</h1>
+    </div>
+</div>
+
+<div class="col-12 mt-2">
+    <div class="dashboard-nav-wrapper mb-2">
+        <div class="nav-links-container">
+            <a asp-controller="Stock" asp-action="Index"
+               class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")">
+                <i class="bi bi-columns-gap"></i><span>Overall Stock</span>
+            </a>
+            <a asp-controller="Stock" asp-action="Molded"
+               class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Molded" ? "active" : "")">
+                <i class="bi bi-grid-3x3-gap"></i><span>Transaction Molded</span>
+            </a>
+            <a asp-controller="Stock" asp-action="Hose"
+               class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Hose" ? "active" : "")">
+                <i class="bi bi-layers"></i><span>Transaction Hose</span>
+            </a>
+            <a asp-controller="Stock" asp-action="RVI"
+               class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "RVI" ? "active" : "")">
+                <i class="bi bi-cpu"></i><span>Transaction RVI</span>
+            </a>
+            <a asp-controller="Stock" asp-action="Trend"
+               class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Trend" ? "active" : "")">
+                <i class="bi bi-graph-up"></i><span>Trend Stock</span>
+            </a>
+            <a asp-controller="Stock" asp-action="TrendCriticalStock"
+               class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "TrendCriticalStock" ? "active" : "")">
+                <i class="bi bi-graph-down-arrow"></i><span>Critical Stock</span>
+            </a>
+        </div>
+    </div>
+    <hr class="mt-0 opacity-25" />
+</div>
+
+<div class="container-fluid px-0">
+
+    <div class="tcs-card p-3 mb-4 d-flex flex-wrap gap-3 align-items-center justify-content-between">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <span class="tcs-label me-1"><i class="bi bi-calendar3 me-1"></i>Periode:</span>
+            @foreach (var (val, lbl) in new[] { ("7d","7 Hari"), ("14d","14 Hari"), ("30d","30 Hari"), ("90d","90 Hari") })
+            {
+                <button class="tcs-filter-btn @(selectedPeriod == val ? "active" : "")"
+                        onclick="applyFilter('@selectedLevel','@val')">@lbl</button>
+            }
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            @if (lastSnapshot.HasValue)
+            {
+                <div class="snap-info">
+                    <small class="text-muted">
+                        <i class="bi bi-clock-history me-1"></i>Snapshot terakhir:
+                        <span class="text-info fw-semibold">@lastSnapshot.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                        <span class="text-muted ms-1">(auto jam 08:00)</span>
+                    </small>
+                </div>
+            }
+            else
+            {
+                <div class="snap-info">
+                    <small class="text-muted"><i class="bi bi-clock-history me-1"></i>Belum ada snapshot otomatis</small>
+                </div>
+            }
+            <button class="btn btn-sm btn-outline-warning" id="btnTriggerSnapshot">
+                <i class="bi bi-camera me-1"></i>Snapshot Manual
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="tcs-card tcs-card-red p-4">
+                <div class="tcs-label mb-2">
+                    <i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>
+                    CRITICAL &lt;1 DAY — HARI INI
+                </div>
+                <div class="tcs-stat-num text-danger">@todayBelow1D</div>
+                <div class="text-muted small mt-1">Item dengan stock &lt; 1 hari</div>
+                @if (todayTotal > 0)
+                {
+                    var pct = Math.Round((double)todayBelow1D / todayTotal * 100, 1);
+                    <div class="progress mt-2" style="height:4px;background:#1e3a5f">
+                        <div class="progress-bar bg-danger" style="width:@pct%"></div>
+                    </div>
+                    <small class="text-muted">@pct% dari @todayTotal item</small>
+                }
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="tcs-card tcs-card-orange p-4">
+                <div class="tcs-label mb-2">
+                    <i class="bi bi-exclamation-circle-fill text-warning me-1"></i>
+                    WARNING &lt;1.5 DAYS — HARI INI
+                </div>
+                <div class="tcs-stat-num text-warning">@todayBelow1_5D</div>
+                <div class="text-muted small mt-1">Item dengan stock &lt; 1.5 hari</div>
+                @if (todayTotal > 0)
+                {
+                    var pct = Math.Round((double)todayBelow1_5D / todayTotal * 100, 1);
+                    <div class="progress mt-2" style="height:4px;background:#1e3a5f">
+                        <div class="progress-bar bg-warning" style="width:@pct%"></div>
+                    </div>
+                    <small class="text-muted">@pct% dari @todayTotal item</small>
+                }
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="tcs-card tcs-card-blue p-4">
+                <div class="tcs-label mb-2">
+                    <i class="bi bi-box-seam text-info me-1"></i>
+                    TOTAL ITEM TERMONITOR
+                </div>
+                <div class="tcs-stat-num text-info">@todayTotal</div>
+                <div class="text-muted small mt-1">
+                    @(lastSnapshot.HasValue ? lastSnapshot.Value.ToString("dd/MM/yyyy HH:mm") : "Belum ada snapshot")
+                </div>
+                @if (todayTotal > 0)
+                {
+                    var safe = todayTotal - todayBelow1_5D;
+                    var pct  = Math.Round((double)safe / todayTotal * 100, 1);
+                    <div class="progress mt-2" style="height:4px;background:#1e3a5f">
+                        <div class="progress-bar bg-info" style="width:@pct%"></div>
+                    </div>
+                    <small class="text-muted">@pct% item aman (≥1.5D)</small>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="tcs-card p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+            <div>
+                <h6 class="text-white mb-1 fw-semibold">
+                    <i class="bi bi-graph-up me-2 text-primary"></i>
+                    Trend Jumlah Item Kritis per Plant
+                </h6>
+                <small class="text-muted">Setiap garis = 1 plant &nbsp;|&nbsp; Filter level di kanan</small>
+            </div>
+            <div class="level-toggle">
+                <button class="level-btn @(selectedLevel == "1D" ? "red" : "")"
+                        id="btnLv1D" onclick="switchLevel('1D')">
+                    <i class="bi bi-exclamation-triangle me-1"></i>&lt; 1 Day
+                </button>
+                <button class="level-btn @(selectedLevel == "1.5D" ? "orange" : "")"
+                        id="btnLv1_5D" onclick="switchLevel('1.5D')">
+                    <i class="bi bi-exclamation-circle me-1"></i>&lt; 1.5 Days
+                </button>
+            </div>
+        </div>
+
+        <div class="chart-wrap">
+            <canvas id="mainChart"></canvas>
+        </div>
+
+        <div id="chartLegend" class="d-flex flex-wrap gap-2 mt-3"></div>
+    </div>
+
+    @if (allPlants.Any())
+    {
+        <h6 class="text-white mb-3 fw-semibold">
+            <i class="bi bi-building me-2 text-primary"></i>Breakdown per Plant — Hari Ini
+        </h6>
+        <div id="plantCards" class="row g-3 mb-4"></div>
+    }
+
+    @if (todayTotal == 0)
+    {
+        <div class="tcs-card p-5 text-center">
+            <i class="bi bi-database-x" style="font-size:3rem;color:#334155"></i>
+            <p class="text-muted mt-3 mb-1 fw-semibold">Belum ada data snapshot</p>
+            <p class="text-muted small mb-3">
+                Snapshot otomatis berjalan setiap <strong class="text-info">jam 08:00</strong>.<br>
+                Gunakan tombol <strong class="text-warning">Snapshot Manual</strong> untuk mengambil data sekarang.
+            </p>
+            <button class="btn btn-warning btn-sm" onclick="triggerSnapshot()">
+                <i class="bi bi-camera me-1"></i>Ambil Snapshot Sekarang
+            </button>
+        </div>
+    }
+
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// ── Data dari server ──────────────────────────────────────────────────────────
+const PLANT_BREAKDOWN = @Html.Raw(plantBreakdown);
+const DATE_LABELS     = @Html.Raw(dateLabels);
+
+// ── Warna tetap per plant (konsisten dengan existing pages) ──────────────────
+const PLANT_COLORS = {
+    'Hose'   : '#3b82f6',   // biru
+    'Molded' : '#a855f7',   // ungu
+    'RVI'    : '#06b6d4',   // cyan
+};
+const FALLBACK = ['#84cc16','#eab308','#ec4899','#14b8a6','#f97316'];
+
+function plantColor(name, idx) {
+    return PLANT_COLORS[name] ?? FALLBACK[idx % FALLBACK.length];
+}
+
+function hexRgba(hex, a) {
+    const r = parseInt(hex.slice(1,3),16),
+          g = parseInt(hex.slice(3,5),16),
+          b = parseInt(hex.slice(5,7),16);
+    return `rgba(${r},${g},${b},${a})`;
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let currentLevel = '@selectedLevel';
+
+Chart.defaults.color       = '#94a3b8';
+Chart.defaults.borderColor = '#1e3a5f';
+
+// ── Build datasets sesuai level ───────────────────────────────────────────────
+function buildDatasets(level) {
+    return PLANT_BREAKDOWN.map((p, i) => {
+        const color = plantColor(p.plant, i);
+        const data  = p.trend.map(t => t.hasSnapshot
+            ? (level === '1D' ? t.below1D : t.below1_5D)
+            : null);
+        return {
+            label               : p.plant,
+            data,
+            borderColor         : color,
+            backgroundColor     : hexRgba(color, 0.08),
+            borderWidth         : 2.5,
+            pointBackgroundColor: color,
+            pointBorderColor    : '#0f1929',
+            pointBorderWidth    : 2,
+            pointRadius         : 4,
+            pointHoverRadius    : 7,
+            fill                : true,
+            tension             : 0.35,
+            spanGaps            : false,
+        };
+    });
+}
+
+// ── Chart init ────────────────────────────────────────────────────────────────
+const ctx = document.getElementById('mainChart').getContext('2d');
+const mainChart = new Chart(ctx, {
+    type : 'line',
+    data : { labels: DATE_LABELS, datasets: buildDatasets(currentLevel) },
+    options: {
+        responsive          : true,
+        maintainAspectRatio : false,
+        interaction         : { mode: 'index', intersect: false },
+        plugins: {
+            legend : { display: false },  // custom legend
+            tooltip: {
+                backgroundColor: '#0a1628',
+                borderColor    : '#1e3a5f',
+                borderWidth    : 1,
+                titleColor     : '#e2e8f0',
+                bodyColor      : '#94a3b8',
+                padding        : 12,
+                callbacks: {
+                    title : items => `📅 ${items[0].label}`,
+                    label : item  => {
+                        const lbl = currentLevel === '1D' ? '< 1 Day' : '< 1.5 Days';
+                        const val = item.raw !== null ? item.raw : '—';
+                        return ` ${item.dataset.label}: ${val} item ${lbl}`;
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero : true,
+                grid        : { color: '#1e3a5f' },
+                ticks       : { stepSize: 1, color: '#94a3b8' },
+                title       : { display: true, text: 'Jumlah Item', color: '#64748b' }
+            },
+            x: {
+                grid  : { color: '#162032' },
+                ticks : { maxRotation: 45, color: '#94a3b8' }
+            }
+        }
+    }
+});
+
+// ── Custom legend (clickable hide/show per plant) ─────────────────────────────
+function renderLegend() {
+    const el = document.getElementById('chartLegend');
+    el.innerHTML = PLANT_BREAKDOWN.map((p, i) => {
+        const color    = plantColor(p.plant, i);
+        const todayVal = currentLevel === '1D' ? p.totalBelow1D : p.totalBelow1_5D;
+        const bdgClass = currentLevel === '1D' ? 'bdg-red' : 'bdg-orange';
+        return `
+        <div class="legend-pill" id="leg-${i}" onclick="togglePlant(${i})">
+            <div class="legend-line" style="background:${color}"></div>
+            <span class="text-white small fw-semibold">${p.plant}</span>
+            <span class="${bdgClass}">${todayVal} hari ini</span>
+        </div>`;
+    }).join('');
+}
+
+function togglePlant(idx) {
+    const meta = mainChart.getDatasetMeta(idx);
+    meta.hidden = !meta.hidden;
+    mainChart.update();
+    document.getElementById(`leg-${idx}`)
+        ?.classList.toggle('hidden-series', !!meta.hidden);
+}
+
+// ── Switch level ──────────────────────────────────────────────────────────────
+function switchLevel(lv) {
+    currentLevel = lv;
+    document.getElementById('btnLv1D')  .className = 'level-btn' + (lv === '1D'   ? ' red'    : '');
+    document.getElementById('btnLv1_5D').className = 'level-btn' + (lv === '1.5D' ? ' orange' : '');
+
+    mainChart.data.datasets = buildDatasets(lv);
+    mainChart.update('active');
+
+    renderLegend();
+    renderCards();
+
+    const url = new URL(window.location);
+    url.searchParams.set('level', lv);
+    window.history.replaceState({}, '', url);
+}
+
+// ── Breakdown cards ───────────────────────────────────────────────────────────
+function renderCards() {
+    const el = document.getElementById('plantCards');
+    if (!el) return;
+
+    el.innerHTML = PLANT_BREAKDOWN.map((p, i) => {
+        const color    = plantColor(p.plant, i);
+        const todayVal = currentLevel === '1D' ? p.totalBelow1D : p.totalBelow1_5D;
+        const bdgClass = currentLevel === '1D' ? 'bdg-red' : 'bdg-orange';
+        const bdgLabel = currentLevel === '1D' ? '&lt;1D' : '&lt;1.5D';
+
+        // Sparkline 7 hari terakhir
+        const last7  = p.trend.slice(-7);
+        const maxVal = Math.max(...last7.map(t => currentLevel === '1D' ? t.below1D : t.below1_5D), 1);
+        const bars   = last7.map(t => {
+            const v = currentLevel === '1D' ? t.below1D : t.below1_5D;
+            const h = maxVal > 0 ? Math.round((v / maxVal) * 36) : 0;
+            const c = v === 0 ? '#1e3a5f' : (currentLevel === '1D' ? '#ef4444' : '#f97316');
+            return `<div title="${t.date}: ${v} item"
+                        style="width:9px;height:${Math.max(h,3)}px;background:${c};
+                               border-radius:2px;align-self:flex-end;flex-shrink:0"></div>`;
+        }).join('');
+
+        const critHtml = p.criticalItems.length === 0
+            ? '<p class="text-muted small mb-0 mt-2">Tidak ada item kritis periode ini 🎉</p>'
+            : p.criticalItems.map(it => `
+                <div class="crit-row d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-white small fw-semibold">${it.itemCode}</div>
+                        <div class="text-muted" style="font-size:.72rem">${it.itemName}</div>
+                    </div>
+                    <span class="bdg-red" style="white-space:nowrap">${it.criticalDays}× kritis</span>
+                </div>`).join('');
+
+        return `
+        <div class="col-md-6 col-xl-4">
+            <div class="plant-card" style="border-left:3px solid ${color}">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold mb-0" style="color:${color}">
+                        <i class="bi bi-building me-1"></i>${p.plant}
+                    </h6>
+                    <span class="${bdgClass} px-2 py-1">
+                        ${todayVal} item ${bdgLabel} hari ini
+                    </span>
+                </div>
+                <div class="d-flex align-items-flex-end gap-1 p-2 mb-3"
+                     style="background:#060f1e;border-radius:6px;height:50px;overflow:hidden">
+                    ${bars}
+                    <small class="text-muted ms-auto" style="font-size:.65rem;align-self:flex-end;white-space:nowrap">
+                        7 hari
+                    </small>
+                </div>
+                <div class="mb-1">
+                    <small class="text-muted text-uppercase" style="font-size:.68rem;letter-spacing:.05em">
+                        Top item paling sering kritis (&lt;1D)
+                    </small>
+                </div>
+                ${critHtml}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// ── Period / level filter ─────────────────────────────────────────────────────
+function applyFilter(level, period) {
+    window.location.href = `/Stock/TrendCriticalStock?level=${level}&period=${period}`;
+}
+
+// ── Manual snapshot ───────────────────────────────────────────────────────────
+async function triggerSnapshot() {
+    const btn = document.getElementById('btnTriggerSnapshot');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Mengambil...'; }
+
+    try {
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+        const res   = await fetch('/Stock/TriggerSnapshot', {
+            method : 'POST',
+            headers: { 'RequestVerificationToken': token }
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            alert(`✅ ${data.message}`);
+            location.reload();
+        } else {
+            alert(`ℹ️ ${data.message}`);
+        }
+    } catch(e) {
+        alert('❌ Gagal trigger snapshot: ' + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-camera me-1"></i>Snapshot Manual'; }
+    }
+}
+
+document.getElementById('btnTriggerSnapshot')?.addEventListener('click', triggerSnapshot);
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+renderLegend();
+renderCards();
+</script>
+}
