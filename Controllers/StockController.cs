@@ -354,7 +354,8 @@ namespace DeliveryControl.Controllers
             var preparationQueryAll = _context.PreparationRecords.AsNoTracking().AsQueryable();
             if (plant != "Overall") preparationQueryAll = preparationQueryAll.Where(r => r.Plant == plant);
 
-            // 3. Preparation (DISPLAY/ACTIVITY): Filter by date for the "Recent Activity" list and "Counts"
+            // 3. Preparation & Pulling (DISPLAY/ACTIVITY): Filter by date for the "Recent Activity" list and "Counts"
+            var pullingQueryInRange = pullingQueryAll.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
             var preparationQueryFiltered = preparationQueryAll.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
 
             // Execute queries
@@ -362,6 +363,7 @@ namespace DeliveryControl.Controllers
             // Critical Change: Fetch ALL preparations for calculation
             var allPreparationAllTime = await preparationQueryAll.OrderBy(r => r.CreatedDate).ThenBy(r => r.PreparationId).ToListAsync(); 
             // Fetch filtered for display
+            var allPullingInRange = await pullingQueryInRange.OrderBy(r => r.CreatedDate).ThenBy(r => r.PullingId).ToListAsync();
             var allPreparationInRange = await preparationQueryFiltered.OrderBy(r => r.CreatedDate).ThenBy(r => r.PreparationId).ToListAsync();
 
             var consumedPullingIds = new HashSet<int>();
@@ -469,6 +471,12 @@ namespace DeliveryControl.Controllers
             var totalItems = stockDetails.Count;
             int pageSize = 20;
 
+            // IF IN TRANSACTION LOG VIEW (Plant != Overall), total items = max count between In and Out logs
+            if (plant != "Overall")
+            {
+                totalItems = Math.Max(allPullingInRange.Count, allPreparationInRange.Count);
+            }
+
             var pagedStockDetails = stockDetails
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
@@ -488,12 +496,8 @@ namespace DeliveryControl.Controllers
             return new StockDashboardViewModel
             {
                 PlantName = plant, StockDetails = pagedStockDetails, ShortageCount = shortageCount, NormalCount = normalCount, OverCount = overCount, SearchDate = searchDate,
-                RecentPulling = isFilteredByDate 
-                    ? inStockPieces.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PullingId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList() 
-                    : inStockPieces.OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PullingId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList(),
-                RecentPreparation = isFilteredByDate 
-                    ? allPreparationInRange.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate).OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PreparationId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList() 
-                    : allPreparationInRange.OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PreparationId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList(),
+                RecentPulling = allPullingInRange.OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PullingId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList(),
+                RecentPreparation = allPreparationInRange.OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.PreparationId).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList(),
                 TotalPullingToday = await _context.PullingRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= startDate && r.CreatedDate <= endDate),
                 TotalPreparationToday = await _context.PreparationRecords.CountAsync(r => (plant == "Overall" || r.Plant == plant) && r.CreatedDate >= startDate && r.CreatedDate <= endDate),
                 Period = period
