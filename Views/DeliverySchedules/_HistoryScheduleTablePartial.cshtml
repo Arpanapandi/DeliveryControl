@@ -12,9 +12,24 @@
     var isPrepared = schedules.All(s => s.PreparationStatus == "Prepared");
     var groupMaxReadyTime = schedules.Max(s => s.ReadyToDockTime);
     
-    // Aggregates for Kanban
-    var totalKbnTarget = schedules.Sum(s => s.CalculatedKanbanTarget);
-    var totalKbnActual = schedules.Sum(s => s.CalculatedKanbanActual);
+    // Aggregates for Kanban (sama dengan dashboard _ScheduleTablePartial)
+    double totalKbnTarget = 0;
+    double totalKbnActual = 0;
+    foreach (var s in schedules)
+    {
+        if (s.DeliveryItems != null)
+        {
+            foreach (var di in s.DeliveryItems)
+            {
+                var qpc = di.Item?.QtyLot ?? 1;
+                if (qpc > 0)
+                {
+                    totalKbnTarget += Math.Ceiling((double)di.Quantity / qpc);
+                    totalKbnActual += (double)(di.ActualQuantity ?? 0) / qpc;
+                }
+            }
+        }
+    }
 
     // Time Aggregates (Representative times)
     var pickupTime = schedules.Min(s => s.PickupTime);

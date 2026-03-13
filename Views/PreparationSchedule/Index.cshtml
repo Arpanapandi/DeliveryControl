@@ -5,6 +5,92 @@
 }
 
 <div class="container-fluid pt-4">
+
+    @* TempData Messages *@
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+            <i class="bi bi-check-circle me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["InfoMessage"] != null)
+    {
+        <div class="alert alert-info alert-dismissible fade show mb-3" role="alert">
+            <i class="bi bi-info-circle me-2"></i>@TempData["InfoMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+            <i class="bi bi-exclamation-triangle me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["WarningMessage"] != null)
+    {
+        <div class="alert alert-warning alert-dismissible fade show mb-3" role="alert">
+            <i class="bi bi-exclamation-circle me-2"></i>@TempData["WarningMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Modal Daftar Pending Preparation -->
+    <div class="modal fade" id="pendingPrepModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content" style="background:#0d1b35;border:1px solid #f59e0b;border-radius:12px;color:#fff;">
+                <div class="modal-header" style="border-bottom:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.1);">
+                    <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
+                        <i class="bi bi-clock-history text-warning"></i>
+                        <span>Daftar Preparation <span class="text-warning">PENDING</span></span>
+                        <span class="badge bg-warning text-dark ms-1" id="pendingModalCount">@ViewBag.PendingPrepCount</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="px-3 py-2" style="background:rgba(245,158,11,0.06);border-bottom:1px solid rgba(245,158,11,0.15);font-size:0.8rem;color:#fcd34d;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Data ini belum terikat ke jadwal manapun. Gunakan <strong>Sync Sekarang</strong> untuk menghubungkan ke jadwal yang sesuai.
+                    </div>
+                    <div style="max-height:420px;overflow-y:auto;">
+                        <table class="table table-sm table-hover mb-0" style="color:#cbd5e1;">
+                            <thead style="position:sticky;top:0;z-index:10;">
+                                <tr style="background:#1a2a4a;border-bottom:2px solid #f59e0b;">
+                                    <th class="px-3 py-2" style="font-size:0.75rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">#</th>
+                                    <th class="px-3 py-2" style="font-size:0.75rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Waktu Scan</th>
+                                    <th class="px-3 py-2" style="font-size:0.75rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">VIN / TAG</th>
+                                    <th class="px-3 py-2" style="font-size:0.75rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Label</th>
+                                    <th class="px-3 py-2" style="font-size:0.75rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Kanban</th>
+                                    <th class="px-3 py-2" style="font-size:0.75rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Operator</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pendingPrepBody">
+                                <tr><td colspan="6" class="text-center text-muted py-4">
+                                    <div class="spinner-border spinner-border-sm me-2"></div>Memuat data...
+                                </td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Pagination -->
+                    <div id="pendingPagination" class="d-flex justify-content-between align-items-center px-3 py-2" style="border-top:1px solid rgba(245,158,11,0.2);display:none!important;">
+                        <span id="pendingPageInfo" style="font-size:0.78rem;color:#94a3b8;"></span>
+                        <div class="d-flex gap-1" id="pendingPageBtns"></div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top:1px solid rgba(245,158,11,0.3);">
+                    <form asp-action="SyncPendingNow" method="post" class="mb-0">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-warning fw-bold">
+                            <i class="bi bi-arrow-repeat me-1"></i>Sync Sekarang
+                        </button>
+                    </form>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row g-3 align-items-center mb-4">
         <div class="col-12 col-xl-4">
              <h4 class="mb-1 text-white fw-bold d-flex align-items-center"><i class="bi bi-calendar-check me-2"></i> Jadwal
@@ -16,6 +102,41 @@
         </div>
         <div class="col-12 col-xl-8">
             <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-xl-end align-items-center">
+                <!-- Pending Alert Compact (full width, di atas search bar) -->
+                @if (ViewBag.PendingPrepCount > 0)
+                {
+                    <div id="pendingPrepAlert" style="
+                        width:100%;
+                        background:rgba(245,158,11,0.1);
+                        border:1px solid rgba(245,158,11,0.45);
+                        border-radius:8px;
+                        padding:7px 14px;
+                        display:flex;
+                        align-items:center;
+                        gap:8px;
+                        font-size:0.85rem;
+                        color:#fcd34d;
+                        box-sizing:border-box;
+                    ">
+                        <i class="bi bi-clock-history" style="font-size:1rem;flex-shrink:0;"></i>
+                        <span style="flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            <strong style="color:#f59e0b;">@ViewBag.PendingPrepCount</strong>
+                            preparation <strong>PENDING</strong> — belum terikat jadwal.
+                        </span>
+                        <button type="button" onclick="openPendingModal()"
+                            style="background:none;border:none;padding:0 4px;color:#f59e0b;font-weight:700;font-size:0.82rem;cursor:pointer;text-decoration:underline;white-space:nowrap;flex-shrink:0;">
+                            <i class="bi bi-table me-1"></i>Lihat daftar
+                        </button>
+                        <span style="flex:1;min-width:0;"></span>
+                        <form asp-action="SyncPendingNow" method="post" class="mb-0" style="flex-shrink:0;">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-warning btn-sm fw-bold py-1 px-3" style="font-size:0.82rem;">
+                                <i class="bi bi-arrow-repeat me-1"></i>Sync
+                            </button>
+                        </form>
+                    </div>
+                }
+
                 <!-- Search Bar & Date Filter -->
                 <form method="get" id="filterForm" class="d-flex align-items-center gap-2 me-md-2 flex-grow-1 flex-md-grow-0" style="min-width: 500px;">
                     <div class="input-group input-group-sm flex-grow-1">
@@ -31,22 +152,31 @@
 
                 <!-- Actions -->
                 <div class="d-flex flex-wrap gap-2 flex-grow-1 flex-xl-grow-0">
-                    <a asp-action="DownloadTemplate" class="btn btn-sm btn-outline-secondary d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center">
-                        <i class="bi bi-download me-2"></i> <span>Template</span>
-                    </a>
-                    <button type="button" class="btn btn-sm btn-success d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center" data-bs-toggle="modal" data-bs-target="#importModal">
-                        <i class="bi bi-file-earmark-excel me-2"></i> <span>Import</span>
-                    </button>
-                    <a asp-action="BulkCreate" class="btn btn-sm btn-info text-dark d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center">
-                        <i class="bi bi-calendar-plus me-2"></i> <span>Bulk</span>
-                    </a>
-                    <a asp-action="Create" class="btn btn-sm btn-primary d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center">
-                        <i class="bi bi-plus-lg me-2"></i> <span>New</span>
-                    </a>
-                    <a asp-controller="System" asp-action="ConsolidateSchedules" class="btn btn-sm btn-warning text-dark d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center"
-                       onclick="return confirm('APAKAH ANDA YAKIN? Semua kartu persiapan (schedule) aktif yang memiliki Manifest, Customer, dan Rute yang sama akan DIGABUNGKAN menjadi satu kartu.')">
-                        <i class="bi bi-stack me-2"></i> <span>Merge Duplicates</span>
-                    </a>
+                    @if (Context.Session.GetString("Role") == "Admin")
+                    {
+                        <a asp-action="DownloadTemplate" class="btn btn-sm btn-outline-secondary d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center">
+                            <i class="bi bi-download me-2"></i> <span>Template</span>
+                        </a>
+                        <button type="button" class="btn btn-sm btn-success d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center" data-bs-toggle="modal" data-bs-target="#importModal">
+                            <i class="bi bi-file-earmark-excel me-2"></i> <span>Import</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-warning d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center" data-bs-toggle="modal" data-bs-target="#smartImportModal">
+                            <i class="bi bi-magic me-2"></i> <span>Smart Import</span>
+                        </button>
+                        <a asp-action="BulkCreate" class="btn btn-sm btn-info text-dark d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center">
+                            <i class="bi bi-calendar-plus me-2"></i> <span>Bulk</span>
+                        </a>
+                        <a asp-action="Create" class="btn btn-sm btn-primary d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center">
+                            <i class="bi bi-plus-lg me-2"></i> <span>New</span>
+                        </a>
+                        <a asp-controller="System" asp-action="ConsolidateSchedules" class="btn btn-sm btn-warning text-dark d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center"
+                           onclick="return confirm('APAKAH ANDA YAKIN? Semua kartu persiapan (schedule) aktif yang memiliki Manifest, Customer, dan Rute yang sama akan DIGABUNGKAN menjadi satu kartu.')">
+                            <i class="bi bi-stack me-2"></i> <span>Merge Duplicates</span>
+                        </a>
+                        <button type="button" onclick="showClearScheduleModal('@ViewBag.FilterDate')" class="btn btn-sm btn-danger d-flex align-items-center flex-fill flex-xl-grow-0 justify-content-center">
+                            <i class="bi bi-trash3-fill me-2"></i> <span>Clear Data</span>
+                        </button>
+                    }
                 </div>
             </div>
         </div>
@@ -89,7 +219,7 @@
                                 <td>
                                     <div class="small text-muted mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">DOCK</div>
                                     <span class="badge bg-secondary">
-                                        @(string.IsNullOrEmpty(schedule.Area) ? (schedule.Customer?.Docking ?? "-") : schedule.Area)
+                                        @(schedule.Customer?.CustomerName ?? "-")
                                     </span>
                                 </td>
                                 <td>
@@ -173,11 +303,14 @@
                                                 <i class="bi bi-box-seam"></i> 
                                             </a>
                                         }
-                                        <form asp-action="Delete" asp-route-id="@schedule.ScheduleId" asp-route-pageNumber="@ViewBag.CurrentPage" asp-route-filterDate="@ViewBag.FilterDate" method="post" onsubmit="return confirm('Yakin ingin menghapus schedule ini?');" style="display:inline;">
-                                            <button type="submit" class="btn btn-sm btn-danger" title="Delete">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </form>
+                                        @if (Context.Session.GetString("Role") == "Admin")
+                                        {
+                                            <form asp-action="Delete" asp-route-id="@schedule.ScheduleId" asp-route-pageNumber="@ViewBag.CurrentPage" asp-route-filterDate="@ViewBag.FilterDate" method="post" onsubmit="return confirm('Yakin ingin menghapus schedule ini?');" style="display:inline;">
+                                                <button type="submit" class="btn btn-sm btn-danger" title="Delete">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        }
                                     </div>
                                 </td>
                             </tr>
@@ -213,7 +346,7 @@
                         <div>
                             <span class="text-info fw-bold"><i class="bi bi-hash"></i> @schedule.ScheduleNumber</span>
                             <span class="badge bg-secondary ms-2">
-                                <i class="bi bi-geo-alt"></i> @(string.IsNullOrEmpty(schedule.Area) ? (schedule.Customer?.Docking ?? "-") : schedule.Area)
+                                <i class="bi bi-geo-alt"></i> @(schedule.Customer?.CustomerName ?? "-")
                             </span>
                         </div>
                         @{
@@ -280,11 +413,14 @@
                             <a asp-controller="PreparationWorkflow" asp-action="Index" class="btn btn-primary flex-grow-1">
                                 <i class="bi bi-box-seam me-2"></i> Process Scan
                             </a>
-                            <form asp-action="Delete" asp-route-id="@schedule.ScheduleId" asp-route-pageNumber="@ViewBag.CurrentPage" asp-route-filterDate="@ViewBag.FilterDate" method="post" onsubmit="return confirm('Yakin ingin menghapus schedule ini?');">
-                                <button type="submit" class="btn btn-danger">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </form>
+                            @if (Context.Session.GetString("Role") == "Admin")
+                            {
+                                <form asp-action="Delete" asp-route-id="@schedule.ScheduleId" asp-route-pageNumber="@ViewBag.CurrentPage" asp-route-filterDate="@ViewBag.FilterDate" method="post" onsubmit="return confirm('Yakin ingin menghapus schedule ini?');">
+                                    <button type="submit" class="btn btn-danger">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            }
                         </div>
                     </div>
                 </div>
@@ -312,12 +448,13 @@
             <div class="modal-body">
                 <form asp-action="ImportExcel" method="post" enctype="multipart/form-data">
                     <div class="mb-4">
-                        <label for="customerId" class="form-label text-info fw-bold"><i class="bi bi-person-badge me-1"></i> Pilih Customer</label>
+                        <label for="customerId" class="form-label text-info fw-bold"><i class="bi bi-person-badge me-1"></i> Override Customer <span class="text-muted fw-normal small">(opsional)</span></label>
                         <div class="input-group">
                             <span class="input-group-text bg-secondary border-0 text-white"><i class="bi bi-search"></i></span>
                             <input type="text" id="customerSearch" class="form-control bg-secondary text-white border-0" placeholder="Cari Dock atau Nama Customer..." autocomplete="off">
                         </div>
-                        <select class="form-select bg-secondary text-white border-0 mt-2" id="customerId" name="customerId" required size="5">
+                        <select class="form-select bg-secondary text-white border-0 mt-2" id="customerId" name="customerId" size="5">
+                            <option value="">(Tidak dipilih — gunakan Customer dari template)</option>
                             @if (ViewBag.Customers != null)
                             {
                                 foreach (var item in (IEnumerable<SelectListItem>)ViewBag.Customers)
@@ -326,7 +463,7 @@
                                 }
                             }
                         </select>
-                        <div class="form-text text-muted small mt-1">Pilih satu customer untuk dikaitkan dengan rincian manifest di Excel.</div>
+                        <div class="form-text text-muted small mt-1">Kosongkan jika upload template multi-sheet per customer. Isi hanya jika ingin override semua sheet ke 1 customer.</div>
                     </div>
 
                     <div class="mb-3">
@@ -336,8 +473,8 @@
                     </div>
                     
                     <div class="alert alert-info bg-opacity-10 border-info text-info rounded-3 p-2 small m-0 mb-3">
-                        <i class="bi bi-info-circle me-1"></i> Dock, Route, dan Cycle otomatis dari Master Customer. 
-                        <a asp-action="DownloadTemplate" class="text-info fw-bold text-decoration-underline ms-1">Download Template Minimalis</a>
+                        <i class="bi bi-info-circle me-1"></i> Template berisi satu sheet per customer. Isi data pada sheet yang ingin di-upload, lalu simpan dan upload. 
+                        <a asp-action="DownloadTemplate" class="text-info fw-bold text-decoration-underline ms-1">Download Template Per Customer</a>
                     </div>
 
                     <div class="d-flex justify-content-end gap-2 border-top border-secondary pt-3 mt-2">
@@ -347,6 +484,148 @@
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Smart Import Modal -->
+<div class="modal fade" id="smartImportModal" tabindex="-1" aria-labelledby="smartImportModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content modal-cyber text-white">
+            <div class="modal-header border-warning py-2">
+                <h6 class="modal-title fw-bold text-warning mb-0" id="smartImportModalLabel">
+                    <i class="bi bi-magic me-2"></i> SMART IMPORT
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Step 1: Upload -->
+                <div id="smartStep1">
+                    <div class="text-center mb-2">
+                        <small class="text-info">
+                            <i class="bi bi-info-circle-fill me-1"></i>
+                            Upload file pesanan customer → sistem auto-detect customer & baca <b>Manifest, Part No, Qty</b>.
+                        </small>
+                    </div>
+                    
+                    <!-- Drop zone -->
+                    <div id="smartDropZone" class="border border-2 border-dashed border-secondary rounded-3 p-4 text-center mb-2"
+                         style="cursor:pointer; transition: all 0.3s;">
+                        <i class="bi bi-cloud-arrow-up display-4 text-secondary mb-1 d-block"></i>
+                        <p class="mb-0 text-secondary small">Drag & drop file, atau klik untuk memilih</p>
+                        <small class="text-muted" style="font-size:0.7rem">PDF, Excel, CSV, TXT — Max 10MB</small>
+                        <input type="file" id="smartFile" accept=".pdf,.xlsx,.xls,.csv,.txt" class="d-none" />
+                    </div>
+                    
+                    <!-- Upload progress -->
+                    <div id="smartProgress" class="d-none">
+                        <div class="d-flex align-items-center gap-3 p-3 bg-dark rounded-3">
+                            <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
+                            <div>
+                                <span class="text-warning fw-bold">Menganalisa file...</span>
+                                <br><small class="text-muted" id="smartProgressText">Mendeteksi customer dan membaca data...</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Preview & Confirm -->
+                <div id="smartStep2" class="d-none">
+                    <!-- Detection Result -->
+                    <div class="row g-2 mb-2">
+                        <div class="col-4">
+                            <div class="bg-dark rounded-2 p-2">
+                                <small class="text-muted d-block" style="font-size:0.65rem">Customer</small>
+                                <span id="smartDetectedCustomer" class="fw-bold text-success small">—</span>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="bg-dark rounded-2 p-2">
+                                <small class="text-muted d-block" style="font-size:0.65rem">Manifest</small>
+                                <span id="smartDetectedManifest" class="fw-bold text-info small">—</span>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="bg-dark rounded-2 p-2">
+                                <small class="text-muted d-block" style="font-size:0.65rem">Format</small>
+                                <span id="smartParserInfo" class="fw-bold text-secondary small">—</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Warnings -->
+                    <div id="smartWarnings" class="d-none mb-2"></div>
+                    
+                    <!-- Dock Selection (WAJIB) — single grid with scroll -->
+                    <div class="mb-2">
+                        <label class="form-label text-warning fw-bold small mb-1">
+                            <i class="bi bi-geo-alt-fill me-1"></i> Pilih Dock <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group input-group-sm mb-1">
+                            <span class="input-group-text bg-dark border-secondary text-secondary py-0"><i class="bi bi-search"></i></span>
+                            <input type="text" id="smartDockSearch" class="form-control form-control-sm bg-secondary text-white border-0 py-1" 
+                                   placeholder="Cari dock..." autocomplete="off" style="font-size:0.75rem">
+                        </div>
+                        <div id="smartDockGrid" class="border border-secondary rounded-2" style="max-height:120px; overflow-y:auto; background:#0d1b2a;">
+                            <!-- Dock items rendered by JS -->
+                        </div>
+                        <input type="hidden" id="smartSelectedDockId" value="">
+                    </div>
+                    
+                    <!-- Manifest Override -->
+                    <div class="mb-2">
+                        <label class="form-label text-info fw-bold small mb-1"><i class="bi bi-hash me-1"></i> Override Manifest <span class="text-muted fw-normal" style="font-size:0.7rem">(opsional)</span></label>
+                        <input type="text" class="form-control form-control-sm bg-secondary text-white border-0 py-1" id="smartManifestOverride" placeholder="Kosongkan = pakai manifest terdeteksi" style="font-size:0.8rem">
+                    </div>
+                    
+                    <!-- Items Table -->
+                    <div class="table-responsive" style="max-height: 200px;">
+                        <table class="table table-dark table-sm table-hover mb-0 align-middle" style="font-size:0.78rem">
+                            <thead class="sticky-top bg-dark">
+                                <tr class="text-uppercase text-secondary" style="font-size:0.7rem">
+                                    <th style="width:30px">
+                                        <input type="checkbox" id="smartSelectAll" checked class="form-check-input">
+                                    </th>
+                                    <th>#</th>
+                                    <th>MANIFEST</th>
+                                    <th>PART NO</th>
+                                    <th>PART NAME</th>
+                                    <th class="text-center">QTY</th>
+                                    <th class="text-center" style="width:40px">
+                                        <i class="bi bi-trash text-danger"></i>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="smartItemsBody">
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between align-items-center mt-2 px-1">
+                        <small class="text-muted">
+                            <span id="smartItemCount">0</span> items — Total Qty: <span id="smartTotalQty" class="text-warning fw-bold">0</span>
+                        </small>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="smartImportReset()">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i> Upload Lain
+                            </button>
+                            <button type="button" class="btn btn-sm btn-warning text-dark fw-bold px-4" onclick="smartImportConfirm()">
+                                <i class="bi bi-check-lg me-1"></i> Confirm & Import
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Result -->
+                <div id="smartStep3" class="d-none text-center p-4">
+                    <div id="smartResultIcon" class="display-1 mb-3"></div>
+                    <h4 id="smartResultTitle" class="fw-bold"></h4>
+                    <p id="smartResultMessage" class="text-muted"></p>
+                    <button type="button" class="btn btn-warning text-dark px-4 mt-2" onclick="location.reload()">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Refresh Halaman
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -375,20 +654,10 @@
 
             connection.on("deliveryUpdated", function (data) {
                 console.log("Prep update received", data);
-                
-                const toastHtml = `
-                    <div class="position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 9999">
-                        <div class="toast show align-items-center text-white bg-success border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
-                            <div class="d-flex">
-                                <div class="toast-body fs-6">
-                                    <i class="bi bi-cloud-download-fill me-2"></i> Data Updated! Reloading...
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                $('body').append(toastHtml);
-                setTimeout(() => window.location.reload(), 1500);
+                if (window.showUpdateNotification) {
+                    window.showUpdateNotification('Jadwal preparation diperbarui.', 'prep', 4000);
+                }
+                setTimeout(() => window.location.reload(), 2500);
             });
 
             connection.onreconnecting(error => {
@@ -444,7 +713,102 @@
                 
                 // If search result is only 1, auto-select it or just let user click
             });
+
+            // ============================================
+            // MODAL DAFTAR PENDING PREPARATION
+            // ============================================
+            // Handler "connected" dari DeliveryHub (mencegah SignalR warning)
+            connection.on("connected", function (connectionId) {
+                console.log("DeliveryHub connected:", connectionId);
+            });
         });
+
+        // openPendingModal() harus di luar $(document).ready agar bisa dipanggil dari onclick HTML
+        var _pendingModal = null;
+        var _pendingData = [];
+        var _pendingPage = 1;
+        var _pendingPageSize = 20;
+
+        function renderPendingPage(page) {
+            _pendingPage = page;
+            var tbody = document.getElementById('pendingPrepBody');
+            var pageInfo = document.getElementById('pendingPageInfo');
+            var pageBtns = document.getElementById('pendingPageBtns');
+            var pagination = document.getElementById('pendingPagination');
+
+            var totalPages = Math.ceil(_pendingData.length / _pendingPageSize);
+            var start = (page - 1) * _pendingPageSize;
+            var end = Math.min(start + _pendingPageSize, _pendingData.length);
+            var pageData = _pendingData.slice(start, end);
+
+            tbody.innerHTML = pageData.map(function(r, i) {
+                return '<tr>' +
+                    '<td class="px-3 py-2 text-muted" style="font-size:0.78rem;">' + (start + i + 1) + '</td>' +
+                    '<td class="px-3 py-2 text-nowrap" style="font-size:0.82rem;">' + r.createdDate + '</td>' +
+                    '<td class="px-3 py-2"><span class="badge bg-primary" style="font-size:0.8rem;">' + r.tag + '</span></td>' +
+                    '<td class="px-3 py-2" style="font-size:0.82rem;">' + r.label + '</td>' +
+                    '<td class="px-3 py-2" style="font-size:0.82rem;">' + r.kanban + '</td>' +
+                    '<td class="px-3 py-2" style="font-size:0.82rem;">' + r.createdBy + '</td>' +
+                    '</tr>';
+            }).join('');
+
+            // Show/hide pagination
+            if (_pendingData.length > _pendingPageSize) {
+                pagination.style.display = 'flex';
+                pageInfo.textContent = 'Menampilkan ' + (start + 1) + '–' + end + ' dari ' + _pendingData.length + ' data';
+
+                var btns = '';
+                // Prev
+                btns += '<button onclick="renderPendingPage(' + (page - 1) + ')" class="btn btn-sm btn-outline-warning py-0 px-2" style="font-size:0.75rem;"' + (page <= 1 ? ' disabled' : '') + '><i class="bi bi-chevron-left"></i></button>';
+                // Page numbers (show max 5 around current)
+                var pStart = Math.max(1, page - 2);
+                var pEnd = Math.min(totalPages, pStart + 4);
+                pStart = Math.max(1, pEnd - 4);
+                for (var p = pStart; p <= pEnd; p++) {
+                    var active = (p === page) ? 'btn-warning text-dark' : 'btn-outline-warning';
+                    btns += '<button onclick="renderPendingPage(' + p + ')" class="btn btn-sm ' + active + ' py-0 px-2" style="font-size:0.75rem;">' + p + '</button>';
+                }
+                // Next
+                btns += '<button onclick="renderPendingPage(' + (page + 1) + ')" class="btn btn-sm btn-outline-warning py-0 px-2" style="font-size:0.75rem;"' + (page >= totalPages ? ' disabled' : '') + '><i class="bi bi-chevron-right"></i></button>';
+                pageBtns.innerHTML = btns;
+            } else {
+                pagination.style.display = 'none';
+            }
+        }
+
+        function openPendingModal() {
+            var modalEl = document.getElementById('pendingPrepModal');
+            if (!modalEl) return;
+            if (!_pendingModal) {
+                _pendingModal = new bootstrap.Modal(modalEl);
+            }
+            // Reset state
+            var tbody = document.getElementById('pendingPrepBody');
+            var countBadge = document.getElementById('pendingModalCount');
+            var pagination = document.getElementById('pendingPagination');
+            pagination.style.display = 'none';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">' +
+                '<div class="spinner-border spinner-border-sm me-2"></div>Memuat data...</td></tr>';
+
+            _pendingModal.show();
+
+            fetch('/PreparationWorkflow/GetPendingPreparations')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    _pendingData = data;
+                    countBadge.textContent = data.length;
+                    if (!data.length) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">' +
+                            '<i class="bi bi-inbox me-2"></i>Tidak ada data pending.</td></tr>';
+                        return;
+                    }
+                    renderPendingPage(1);
+                })
+                .catch(function() {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-danger text-center py-3">' +
+                        '<i class="bi bi-exclamation-triangle me-2"></i>Gagal memuat data.</td></tr>';
+                });
+        }
     </script>
 }
 
@@ -457,3 +821,581 @@
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 </style>
+
+<partial name="_ClearDataModal" />
+
+<!-- Modal Clear Data Jadwal Preparation (per tanggal / semua) -->
+<div class="modal fade" id="clearScheduleModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:480px;">
+        <div class="modal-content" style="background:#0d1b35;border:1px solid #3b2a2a;border-radius:14px;color:#fff;">
+            <div class="modal-header" style="border-bottom:1px solid #3b2a2a;padding:16px 20px;">
+                <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
+                    <span style="font-size:20px;">🗑️</span>
+                    <span class="text-danger">Hapus Data Jadwal Preparation</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding:20px;">
+
+                <!-- Pilihan Mode -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold" style="color:#fcd34d;font-size:13px;">Pilih yang ingin dihapus:</label>
+                    <div class="d-flex gap-2">
+                        <button type="button" id="btnModeDate" onclick="setClearMode('date')"
+                            class="btn btn-sm flex-fill fw-bold"
+                            style="background:#1e3a5f;border:2px solid #3b82f6;color:#93c5fd;border-radius:8px;padding:10px 0;font-size:13px;">
+                            <i class="bi bi-calendar3 me-1"></i> Per Tanggal
+                        </button>
+                        <button type="button" id="btnModeAll" onclick="setClearMode('all')"
+                            class="btn btn-sm flex-fill fw-bold"
+                            style="background:#1c1010;border:2px solid #4b2020;color:#fca5a5;border-radius:8px;padding:10px 0;font-size:13px;">
+                            <i class="bi bi-trash3 me-1"></i> Semua Data
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Input Tanggal (hanya muncul mode Per Tanggal) -->
+                <div id="clearDateSection" class="mb-3">
+                    <label style="font-size:13px;color:#94a3b8;font-weight:600;display:block;margin-bottom:6px;">
+                        <i class="bi bi-calendar2-week me-1"></i> Pilih Tanggal:
+                    </label>
+                    <input type="date" id="clearDateInput"
+                           style="width:100%;background:#0a1628;border:1px solid #2a3a5a;color:#fff;border-radius:8px;padding:10px 14px;font-size:14px;outline:none;" />
+                    <div id="clearDateInfo" class="mt-2" style="font-size:12px;color:#64748b;"></div>
+                </div>
+
+                <!-- Warning -->
+                <div class="mb-4 p-3" style="background:#1c1010;border-left:4px solid #f44336;border-radius:6px;font-size:13px;color:#ffcdd2;">
+                    ⚠️ Tindakan ini <strong>tidak dapat dibatalkan</strong>. Data jadwal dan preparation yang dihapus tidak bisa dikembalikan.
+                </div>
+
+                <!-- Konfirmasi Ketik HAPUS -->
+                <label style="font-size:13px;color:#ffb300;font-weight:600;display:block;margin-bottom:6px;">
+                    Ketik <strong style="color:#f44336;font-size:14px;">HAPUS</strong> untuk konfirmasi:
+                </label>
+                <input type="text" id="clearScheduleConfirmInput" autocomplete="off"
+                       style="width:100%;background:#0a1628;border:1px solid #2a3a5a;color:#fff;border-radius:8px;padding:10px 14px;font-size:15px;outline:none;transition:border 0.2s;"
+                       placeholder="Ketik HAPUS di sini..." />
+            </div>
+            <div class="modal-footer" style="border-top:1px solid #3b2a2a;padding:14px 20px;">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-radius:8px;">Batal</button>
+                <button type="button" id="btnDoClearSchedule" class="btn btn-danger fw-bold" disabled
+                        style="border-radius:8px;padding:8px 22px;opacity:0.5;transition:opacity 0.2s;">
+                    <i class="bi bi-trash3-fill me-1"></i> Hapus Sekarang
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var _clearMode = 'date'; // 'date' atau 'all'
+    var _clearModalInstance = null;
+
+    function getModal() {
+        if (!_clearModalInstance)
+            _clearModalInstance = new bootstrap.Modal(document.getElementById('clearScheduleModal'));
+        return _clearModalInstance;
+    }
+
+    window.showClearScheduleModal = function (currentFilterDate) {
+        // Reset state
+        _clearMode = 'date';
+        document.getElementById('clearScheduleConfirmInput').value = '';
+        document.getElementById('btnDoClearSchedule').disabled = true;
+        document.getElementById('btnDoClearSchedule').style.opacity = '0.5';
+
+        // Set tanggal default = filter date yang sedang aktif
+        var dateInput = document.getElementById('clearDateInput');
+        dateInput.value = currentFilterDate || new Date().toISOString().split('T')[0];
+        updateDateInfo();
+        updateModeUI();
+        getModal().show();
+        setTimeout(function () { document.getElementById('clearScheduleConfirmInput').focus(); }, 400);
+    };
+
+    window.setClearMode = function (mode) {
+        _clearMode = mode;
+        document.getElementById('clearScheduleConfirmInput').value = '';
+        document.getElementById('btnDoClearSchedule').disabled = true;
+        document.getElementById('btnDoClearSchedule').style.opacity = '0.5';
+        updateModeUI();
+    };
+
+    function updateModeUI() {
+        var isDate = _clearMode === 'date';
+        // Toggle date section visibility
+        document.getElementById('clearDateSection').style.display = isDate ? 'block' : 'none';
+
+        // Button Per Tanggal - active style
+        var btnDate = document.getElementById('btnModeDate');
+        btnDate.style.background    = isDate ? '#1e3a8a' : '#1e3a5f';
+        btnDate.style.borderColor   = isDate ? '#60a5fa' : '#3b82f6';
+        btnDate.style.color         = isDate ? '#fff'    : '#93c5fd';
+
+        // Button Semua Data - active style
+        var btnAll = document.getElementById('btnModeAll');
+        btnAll.style.background   = !isDate ? '#450a0a' : '#1c1010';
+        btnAll.style.borderColor  = !isDate ? '#f44336' : '#4b2020';
+        btnAll.style.color        = !isDate ? '#fff'    : '#fca5a5';
+    }
+
+    function updateDateInfo() {
+        var val = document.getElementById('clearDateInput').value;
+        var info = document.getElementById('clearDateInfo');
+        if (val) {
+            var d = new Date(val + 'T00:00:00');
+            var opts = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            info.textContent = '📅 ' + d.toLocaleDateString('id-ID', opts);
+        } else {
+            info.textContent = '';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var input   = document.getElementById('clearScheduleConfirmInput');
+        var btn     = document.getElementById('btnDoClearSchedule');
+        var dateInp = document.getElementById('clearDateInput');
+
+        if (!input || !btn) return;
+
+        dateInp.addEventListener('change', updateDateInfo);
+
+        input.addEventListener('input', function () {
+            var ok = this.value.trim().toUpperCase() === 'HAPUS';
+            btn.disabled = !ok;
+            btn.style.opacity = ok ? '1' : '0.5';
+        });
+        input.addEventListener('focus', function () { this.style.border = '1px solid #f44336'; });
+        input.addEventListener('blur',  function () { this.style.border = '1px solid #2a3a5a'; });
+
+        btn.addEventListener('click', function () {
+            var self = this;
+            self.disabled = true;
+            self.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Menghapus...';
+
+            var token = '';
+            var tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            if (tokenInput) token = tokenInput.value;
+
+            var body = { mode: _clearMode };
+            if (_clearMode === 'date') {
+                body.date = document.getElementById('clearDateInput').value;
+            }
+
+            fetch('/PreparationSchedule/ClearPreparationData', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': token
+                },
+                body: JSON.stringify(body)
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                getModal().hide();
+                if (res.success) {
+                    if (window.showUpdateNotification)
+                        window.showUpdateNotification(res.message || 'Data berhasil dihapus.', 'success', 5000);
+                    setTimeout(function () { location.reload(); }, 1200);
+                } else {
+                    if (window.showUpdateNotification)
+                        window.showUpdateNotification(res.message || 'Gagal menghapus data.', 'danger', 6000);
+                    self.disabled = false;
+                    self.style.opacity = '1';
+                    self.innerHTML = '<i class="bi bi-trash3-fill me-1"></i> Hapus Sekarang';
+                }
+            })
+            .catch(function () {
+                getModal().hide();
+                if (window.showUpdateNotification)
+                    window.showUpdateNotification('Terjadi kesalahan koneksi.', 'danger', 6000);
+                self.disabled = false;
+                self.style.opacity = '1';
+                self.innerHTML = '<i class="bi bi-trash3-fill me-1"></i> Hapus Sekarang';
+            });
+        });
+    });
+})();
+</script>
+
+<!-- Smart Import JavaScript -->
+<script>
+(function() {
+    var _smartData = null; // holds preview response
+
+    // === Drop Zone ===
+    var dropZone = document.getElementById('smartDropZone');
+    var fileInput = document.getElementById('smartFile');
+
+    if (dropZone && fileInput) {
+        dropZone.addEventListener('click', function() { fileInput.click(); });
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            dropZone.style.borderColor = '#ffc107';
+            dropZone.style.background = 'rgba(255,193,7,0.05)';
+        });
+        dropZone.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            dropZone.style.borderColor = '';
+            dropZone.style.background = '';
+        });
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            dropZone.style.borderColor = '';
+            dropZone.style.background = '';
+            if (e.dataTransfer.files.length > 0) {
+                fileInput.files = e.dataTransfer.files;
+                smartImportUpload(e.dataTransfer.files[0]);
+            }
+        });
+        fileInput.addEventListener('change', function() {
+            if (this.files.length > 0) smartImportUpload(this.files[0]);
+        });
+    }
+
+    // === Upload & Preview ===
+    window.smartImportUpload = function(file) {
+        var maxSize = 10 * 1024 * 1024;
+        if (file.size > maxSize) {
+            alert('File terlalu besar! Maksimal 10MB.');
+            return;
+        }
+        var allowed = ['.pdf','.xlsx','.xls','.csv','.txt'];
+        var ext = '.' + file.name.split('.').pop().toLowerCase();
+        if (allowed.indexOf(ext) < 0) {
+            alert('Format tidak didukung! Gunakan PDF, Excel, CSV, atau TXT.');
+            return;
+        }
+
+        // Show progress
+        document.getElementById('smartStep1').querySelector('#smartDropZone').classList.add('d-none');
+        document.getElementById('smartProgress').classList.remove('d-none');
+        document.getElementById('smartProgressText').textContent = 'Menganalisa ' + file.name + '...';
+
+        var formData = new FormData();
+        formData.append('file', file);
+
+        fetch('/PreparationSchedule/SmartImportPreview', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.success) {
+                alert('Error: ' + (data.errorMessage || 'Gagal memproses file.'));
+                smartImportReset();
+                return;
+            }
+            _smartData = data;
+            showSmartPreview(data);
+        })
+        .catch(function(err) {
+            alert('Error koneksi: ' + err.message);
+            smartImportReset();
+        });
+    };
+
+    function showSmartPreview(data) {
+        // Hide step 1, show step 2
+        document.getElementById('smartStep1').classList.add('d-none');
+        document.getElementById('smartStep2').classList.remove('d-none');
+
+        // Detection info
+        var custEl = document.getElementById('smartDetectedCustomer');
+        if (data.customerId) {
+            custEl.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>' + (data.detectedCustomerCode || data.detectedCustomer);
+            custEl.className = 'fw-bold text-success small';
+        } else {
+            custEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i>' + (data.detectedCustomer || 'UNKNOWN');
+            custEl.className = 'fw-bold text-warning small';
+        }
+
+        document.getElementById('smartDetectedManifest').textContent = data.detectedManifest || '(tidak terdeteksi)';
+
+        // Tampilkan route/cycle yang terdeteksi dari file
+        var parserInfo = (data.fileFormat || '').toUpperCase() + ' / ' + (data.parserUsed || 'GENERIC');
+        if (data.detectedRoute) parserInfo += '  |  Route: <b class="text-info">' + escapeHtml(data.detectedRoute) + '</b>';
+        if (data.detectedCycle) parserInfo += '  Cycle: <b class="text-info">' + escapeHtml(data.detectedCycle) + '</b>';
+        document.getElementById('smartParserInfo').innerHTML = parserInfo;
+
+        // Simpan detected route/cycle untuk highlight dock
+        window._smartDetectedRoute = (data.detectedRoute || '').trim().toUpperCase();
+        window._smartDetectedCycle = (data.detectedCycle || '').trim().toUpperCase();
+
+        // Warnings
+        var warnDiv = document.getElementById('smartWarnings');
+        if (data.warnings && data.warnings.length > 0) {
+            var warnHtml = '<div class="alert alert-warning bg-opacity-10 border-warning text-warning rounded-3 p-2 small">';
+            for (var i = 0; i < data.warnings.length; i++) {
+                warnHtml += '<i class="bi bi-exclamation-triangle me-1"></i>' + data.warnings[i] + '<br>';
+            }
+            warnHtml += '</div>';
+            warnDiv.innerHTML = warnHtml;
+            warnDiv.classList.remove('d-none');
+        } else {
+            warnDiv.classList.add('d-none');
+        }
+
+        // Dock grid — single scrollable list
+        var dockGrid = document.getElementById('smartDockGrid');
+        var hiddenDockId = document.getElementById('smartSelectedDockId');
+        dockGrid.innerHTML = '';
+        hiddenDockId.value = '';
+        window._smartDockItems = []; // store for search filtering
+
+        // Build dock list from matchedDocks (priority) or customerList
+        var dockList = (data.matchedDocks && data.matchedDocks.length > 0) ? data.matchedDocks : (data.customerList || []);
+        var preselectedId = data.customerId || null;
+
+        for (var i = 0; i < dockList.length; i++) {
+            (function(d, idx) {
+                var row = document.createElement('div');
+                row.className = 'smart-dock-row d-flex align-items-center px-2 py-1 border-bottom border-secondary';
+                row.style.cssText = 'cursor:pointer; font-size:0.78rem; transition:background .15s;';
+                row.setAttribute('data-dock-id', d.customerId);
+                row.setAttribute('data-search', ((d.dockName||'') + ' ' + (d.customerCode||'') + ' ' + (d.route||'')).toLowerCase());
+
+                // Cek apakah dock ini cocok dengan route yang terdeteksi dari file
+                var detectedRoute = window._smartDetectedRoute || '';
+                var dRoute = (d.route || '').trim().toUpperCase();
+                var dDocking = (d.docking || '').trim().toUpperCase();
+                var dName = (d.dockName || '').trim().toUpperCase();
+                var isRouteMatch = detectedRoute && (
+                    dRoute.indexOf(detectedRoute) > -1 ||
+                    dDocking.indexOf(detectedRoute) > -1 ||
+                    dName.indexOf(detectedRoute) > -1
+                );
+
+                var icon = isRouteMatch
+                    ? '<i class="bi bi-geo-alt-fill text-warning me-1" style="font-size:0.7rem"></i>'
+                    : '<i class="bi bi-geo-alt text-info me-1" style="font-size:0.7rem"></i>';
+
+                var info = '<b>' + escapeHtml(d.dockName || d.customerName || '') + '</b>';
+                info += ' <span class="text-muted">— ' + escapeHtml(d.customerCode || '') + '</span>';
+                if (d.route) {
+                    var rClass = isRouteMatch ? 'text-warning fw-bold' : 'text-secondary';
+                    info += ' <span class="' + rClass + ' ms-1" style="font-size:0.7rem">R:' + escapeHtml(d.route) + '</span>';
+                }
+                if (d.cycle) info += ' <span class="text-secondary" style="font-size:0.7rem">C:' + escapeHtml(d.cycle) + '</span>';
+                if (d.docking) info += ' <span class="text-secondary" style="font-size:0.7rem">D:' + escapeHtml(d.docking) + '</span>';
+
+                // Badge "✓ Route Match" jika cocok
+                if (isRouteMatch) {
+                    info += ' <span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem">Route Match</span>';
+                }
+
+                row.innerHTML = icon + '<span class="flex-grow-1">' + info + '</span>';
+
+                // Pre-select
+                if (preselectedId && d.customerId == preselectedId) {
+                    row.style.background = '#1a5276';
+                    hiddenDockId.value = d.customerId;
+                }
+
+                row.addEventListener('mouseenter', function() { if (hiddenDockId.value != d.customerId) this.style.background = '#1c2e3f'; });
+                row.addEventListener('mouseleave', function() { if (hiddenDockId.value != d.customerId) this.style.background = ''; });
+                row.addEventListener('click', function() {
+                    dockGrid.querySelectorAll('.smart-dock-row').forEach(function(r) { r.style.background = ''; });
+                    this.style.background = '#1a5276';
+                    hiddenDockId.value = d.customerId;
+                });
+
+                dockGrid.appendChild(row);
+                window._smartDockItems.push(row);
+            })(dockList[i], i);
+        }
+
+        if (dockList.length === 0) {
+            dockGrid.innerHTML = '<div class="text-muted text-center py-2 small">Tidak ada dock tersedia</div>';
+        }
+
+        // Dock search filter
+        var dockSearch = document.getElementById('smartDockSearch');
+        if (dockSearch) {
+            dockSearch.value = '';
+            dockSearch.oninput = function() {
+                var q = this.value.toLowerCase();
+                window._smartDockItems.forEach(function(row) {
+                    row.style.display = row.getAttribute('data-search').indexOf(q) > -1 ? '' : 'none';
+                });
+            };
+        }
+
+        // Manifest override
+        document.getElementById('smartManifestOverride').value = data.detectedManifest || '';
+
+        // Items table
+        var tbody = document.getElementById('smartItemsBody');
+        tbody.innerHTML = '';
+        var totalQty = 0;
+        var items = data.items || [];
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            totalQty += item.qty;
+            var tr = document.createElement('tr');
+            // Part No cell: show part no + VIN below (if resolved)
+            var vinHtml = item.vin
+                ? '<div class="text-success" style="font-size:0.68rem;line-height:1.2">/ ' + escapeHtml(item.vin) + '</div>'
+                : '<div class="text-secondary" style="font-size:0.68rem;line-height:1.2">VIN not mapped</div>';
+            // Simpan vin di data-attribute agar bisa dibaca saat Confirm tanpa parsing DOM
+            tr.setAttribute('data-vin', item.vin || '');
+            tr.innerHTML =
+                '<td><input type="checkbox" class="form-check-input smart-item-check" data-idx="' + i + '" checked></td>' +
+                '<td class="text-muted small">' + (i + 1) + '</td>' +
+                '<td><input type="text" class="form-control form-control-sm bg-dark text-white border-0 smart-manifest" value="' + escapeHtml(item.manifesting || '') + '" style="width:130px;font-size:0.75rem"></td>' +
+                '<td><code class="text-info" style="font-size:0.78rem">' + escapeHtml(item.partNo) + '</code>' + vinHtml + '</td>' +
+                '<td class="small text-muted">' + escapeHtml(item.partName || '') + '</td>' +
+                '<td class="text-center"><input type="number" class="form-control form-control-sm bg-dark text-white border-0 text-center smart-qty" value="' + item.qty + '" min="1" style="width:70px;font-size:0.78rem"></td>' +
+                '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger border-0 py-0" onclick="this.closest(\'tr\').remove();updateSmartCounts();"><i class="bi bi-x-lg" style="font-size:0.7rem"></i></button></td>';
+            tbody.appendChild(tr);
+        }
+
+        // Warn if some Part Nos have no VIN mapping
+        var unmapped = items.filter(function(i) { return !i.vin; });
+        if (unmapped.length > 0) {
+            var warnDiv = document.getElementById('smartWarnings');
+            var existing = warnDiv.innerHTML;
+            warnDiv.innerHTML = existing +
+                '<div class="alert alert-warning bg-opacity-10 border-warning text-warning rounded-2 p-2 small mt-1">' +
+                '<i class="bi bi-exclamation-triangle me-1"></i>' +
+                '<b>' + unmapped.length + ' Part No</b> belum terpetakan ke VIN internal. ' +
+                'Import tetap bisa dilanjutkan, tapi tambahkan mapping di <a href="/ItemMappings" target="_blank" class="text-warning">Item Mappings</a> agar sistem bisa mencocokkan part saat proses picking.' +
+                '</div>';
+            warnDiv.classList.remove('d-none');
+        }
+
+        updateSmartCounts();
+    }
+
+    window.updateSmartCounts = function() {
+        var rows = document.querySelectorAll('#smartItemsBody tr');
+        var count = 0, total = 0;
+        rows.forEach(function(tr) {
+            var chk = tr.querySelector('.smart-item-check');
+            if (chk && chk.checked) {
+                count++;
+                var qtyInput = tr.querySelector('.smart-qty');
+                total += parseInt(qtyInput.value) || 0;
+            }
+        });
+        document.getElementById('smartItemCount').textContent = count;
+        document.getElementById('smartTotalQty').textContent = total;
+    };
+
+    // Select all checkbox
+    var selectAll = document.getElementById('smartSelectAll');
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            var checked = this.checked;
+            document.querySelectorAll('.smart-item-check').forEach(function(cb) { cb.checked = checked; });
+            updateSmartCounts();
+        });
+    }
+
+    // Delegate change on checkboxes and qty inputs
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('smart-item-check') || e.target.classList.contains('smart-qty'))
+            updateSmartCounts();
+    });
+
+    // === Reset ===
+    window.smartImportReset = function() {
+        _smartData = null;
+        document.getElementById('smartStep1').classList.remove('d-none');
+        document.getElementById('smartStep1').querySelector('#smartDropZone').classList.remove('d-none');
+        document.getElementById('smartProgress').classList.add('d-none');
+        document.getElementById('smartStep2').classList.add('d-none');
+        document.getElementById('smartStep3').classList.add('d-none');
+        document.getElementById('smartFile').value = '';
+        document.getElementById('smartDockGrid').innerHTML = '';
+        document.getElementById('smartSelectedDockId').value = '';
+        var dockSearch = document.getElementById('smartDockSearch');
+        if (dockSearch) dockSearch.value = '';
+        window._smartDockItems = [];
+    };
+
+    // === Confirm & Import ===
+    window.smartImportConfirm = function() {
+        var custId = parseInt(document.getElementById('smartSelectedDockId').value) || null;
+        if (!custId) {
+            alert('Pilih Dock terlebih dahulu!');
+            return;
+        }
+
+        var manifestOverride = document.getElementById('smartManifestOverride').value.trim();
+        var rows = document.querySelectorAll('#smartItemsBody tr');
+        var items = [];
+        rows.forEach(function(tr) {
+            var chk = tr.querySelector('.smart-item-check');
+            if (!chk || !chk.checked) return;
+            var partNo = tr.querySelector('code').textContent;
+            // Ambil VIN yang sudah di-resolve saat preview (tersimpan di data-vin attribute)
+            var vin = tr.getAttribute('data-vin') || '';
+            var manifest = tr.querySelector('.smart-manifest').value.trim() || manifestOverride || '';
+            var qty = parseInt(tr.querySelector('.smart-qty').value) || 0;
+            if (partNo && qty > 0) {
+                items.push({ manifesting: manifest, partNo: partNo, vin: vin, qty: qty });
+            }
+        });
+
+        if (items.length === 0) {
+            alert('Tidak ada item yang dipilih!');
+            return;
+        }
+
+        // Get selected dock name for confirm message
+        var selectedRow = document.querySelector('.smart-dock-row[data-dock-id="' + custId + '"]');
+        var dockLabel = selectedRow ? selectedRow.textContent.trim() : 'ID:' + custId;
+        console.log('[SmartImport] Confirm: customerId=' + custId + ', dock=' + dockLabel + ', items=' + items.length);
+        if (!confirm('Import ' + items.length + ' items ke jadwal preparation hari ini?\n\nDock: ' + dockLabel + '\nCustomer ID: ' + custId)) return;
+
+        // Show step 3 loading
+        document.getElementById('smartStep2').classList.add('d-none');
+        document.getElementById('smartStep3').classList.remove('d-none');
+        document.getElementById('smartResultIcon').innerHTML = '<div class="spinner-border text-warning" style="width:3rem;height:3rem"></div>';
+        document.getElementById('smartResultTitle').textContent = 'Menyimpan data...';
+        document.getElementById('smartResultMessage').textContent = '';
+
+        fetch('/PreparationSchedule/SmartImportConfirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customerId: custId, items: items })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (res.success) {
+                document.getElementById('smartResultIcon').innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
+                document.getElementById('smartResultTitle').textContent = 'Import Berhasil!';
+                document.getElementById('smartResultTitle').className = 'fw-bold text-success';
+            } else {
+                document.getElementById('smartResultIcon').innerHTML = '<i class="bi bi-x-circle-fill text-danger"></i>';
+                document.getElementById('smartResultTitle').textContent = 'Import Gagal';
+                document.getElementById('smartResultTitle').className = 'fw-bold text-danger';
+            }
+            document.getElementById('smartResultMessage').textContent = res.message || '';
+        })
+        .catch(function(err) {
+            document.getElementById('smartResultIcon').innerHTML = '<i class="bi bi-x-circle-fill text-danger"></i>';
+            document.getElementById('smartResultTitle').textContent = 'Error';
+            document.getElementById('smartResultTitle').className = 'fw-bold text-danger';
+            document.getElementById('smartResultMessage').textContent = err.message;
+        });
+    };
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str || ''));
+        return div.innerHTML;
+    }
+
+    // Reset on modal close
+    var smartModal = document.getElementById('smartImportModal');
+    if (smartModal) {
+        smartModal.addEventListener('hidden.bs.modal', function() {
+            smartImportReset();
+        });
+    }
+})();
+</script>

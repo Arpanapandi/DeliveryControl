@@ -32,5 +32,18 @@ namespace DeliveryControl.Models
 
         [StringLength(100)]
         public string? CreatedBy { get; set; }
+
+        /// <summary>
+        /// Remark: "Match" = normal (affect stock), "Mismatch" = log only (no stock impact)
+        /// </summary>
+        [StringLength(20)]
+        public string Remark { get; set; } = "Match";
+
+        /// <summary>
+        /// Flag sementara (tidak disimpan ke DB): bypass validasi stock habis di rak.
+        /// Diisi dari request body saat toggle "Skip Stock Validation" aktif.
+        /// </summary>
+        [NotMapped]
+        public bool SkipStockValidation { get; set; } = false;
     }
 }

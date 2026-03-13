@@ -50,6 +50,8 @@ namespace DeliveryControl.Controllers
                     .ThenInclude(uda => uda.Dock)
                 .OrderBy(u => u.Username)
                 .ToListAsync();
+
+            ViewBag.TotalDockCount = await _context.Docks.CountAsync();
             
             return View(users);
         }
@@ -85,7 +87,7 @@ namespace DeliveryControl.Controllers
                 return RedirectToAction("Login", "Account");
             }
 
-            ViewBag.Roles = new SelectList(new[] { "Admin", "User", "Pulling", "Preparation" });
+            ViewBag.Roles = new SelectList(new[] { "Admin", "User", "Pulling", "Preparation", "Leader", "Driver" });
             
             // Sync Docks from Customers if empty
             if (!await _context.Docks.AnyAsync())
@@ -120,7 +122,7 @@ namespace DeliveryControl.Controllers
         // POST: Users/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Username,Password,FullName,Email,Role,IsActive,ConfirmPassword")] User user, int[] selectedDockIds)
+        public async Task<IActionResult> Create([Bind("Username,Password,FullName,Email,Role,IsActive,HasAllDockAccess,ConfirmPassword")] User user, int[] selectedDockIds)
         {
             if (!IsAuthenticated() || !IsAdmin())
             {
@@ -148,8 +150,8 @@ namespace DeliveryControl.Controllers
                 _context.Add(user);
                 await _context.SaveChangesAsync();
 
-                // Save Dock Access — hanya untuk role Preparation
-                if (user.Role == "Preparation" && selectedDockIds != null && selectedDockIds.Length > 0)
+                // Save Dock Access — hanya jika tidak HasAllDockAccess
+                if (!user.HasAllDockAccess && selectedDockIds != null && selectedDockIds.Length > 0)
                 {
                     foreach (var dockId in selectedDockIds)
                     {
@@ -167,7 +169,7 @@ namespace DeliveryControl.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            ViewBag.Roles = new SelectList(new[] { "Admin", "User", "Pulling", "Preparation" }, user.Role);
+            ViewBag.Roles = new SelectList(new[] { "Admin", "User", "Pulling", "Preparation", "Leader", "Driver" }, user.Role);
             
             // Reload docks if validation fails
             ViewBag.AllDocks = (await _context.Docks.Include(d => d.Customer).OrderBy(d => d.DockCode).ToListAsync())
@@ -198,7 +200,7 @@ namespace DeliveryControl.Controllers
 
             // Jangan tampilkan password yang sudah di-hash
             user.Password = "";
-            ViewBag.Roles = new SelectList(new[] { "Admin", "User", "Pulling", "Preparation" }, user.Role);
+            ViewBag.Roles = new SelectList(new[] { "Admin", "User", "Pulling", "Preparation", "Leader", "Driver" }, user.Role);
 
             // Sync Docks if empty
             if (!await _context.Docks.AnyAsync())
@@ -240,7 +242,7 @@ namespace DeliveryControl.Controllers
         // POST: Users/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("UserId,Username,Password,FullName,Email,Role,IsActive,ConfirmPassword")] User user, int[] selectedDockIds)
+        public async Task<IActionResult> Edit(int id, [Bind("UserId,Username,Password,FullName,Email,Role,IsActive,HasAllDockAccess,ConfirmPassword")] User user, int[] selectedDockIds)
         {
             if (!IsAuthenticated() || !IsAdmin())
             {
@@ -274,6 +276,7 @@ namespace DeliveryControl.Controllers
                     existingUser.Email = user.Email;
                     existingUser.Role = user.Role;
                     existingUser.IsActive = user.IsActive;
+                    existingUser.HasAllDockAccess = user.HasAllDockAccess;
                     existingUser.UpdatedDate = DateTime.Now;
 
                     // Update password hanya jika diisi
@@ -284,14 +287,16 @@ namespace DeliveryControl.Controllers
 
                     await _context.SaveChangesAsync();
 
-                    // Update Dock Access — hanya untuk role Preparation
+                    // Update Dock Access — hanya jika tidak HasAllDockAccess
                     var existingAccess = await _context.UserDockAccesses
                         .Where(uda => uda.UserId == id)
                         .ToListAsync();
                     
                     _context.UserDockAccesses.RemoveRange(existingAccess);
 
-                    if (user.Role == "Preparation" && selectedDockIds != null && selectedDockIds.Length > 0)
+                    // Jika HasAllDockAccess = true, tidak perlu simpan individual dock
+                    // Jika HasAllDockAccess = false, simpan dock yang dipilih
+                    if (!user.HasAllDockAccess && selectedDockIds != null && selectedDockIds.Length > 0)
                     {
                         foreach (var dockId in selectedDockIds)
                         {
@@ -322,7 +327,7 @@ namespace DeliveryControl.Controllers
                 }
             }
 
-            ViewBag.Roles = new SelectList(new[] { "Admin", "User", "Pulling", "Preparation" }, user.Role);
+            ViewBag.Roles = new SelectList(new[] { "Admin", "User", "Pulling", "Preparation", "Leader", "Driver" }, user.Role);
             
             // Reload Docks if validation fails
             ViewBag.AllDocks = (await _context.Docks.Include(d => d.Customer).OrderBy(d => d.DockCode).ToListAsync())

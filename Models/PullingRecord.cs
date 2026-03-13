@@ -36,5 +36,18 @@ namespace DeliveryControl.Models
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal Quantity { get; set; } = 1;
+
+        /// <summary>True jika record ini dibuat via Manual Adjust (bukan scan)</summary>
+        public bool IsManualAdjust { get; set; } = false;
+
+        /// <summary>Alasan/catatan untuk manual adjust</summary>
+        [StringLength(500)]
+        public string? AdjustNote { get; set; }
+
+        /// <summary>
+        /// Remark: "Match" = normal (affect stock), "Mismatch" = log only (no stock impact)
+        /// </summary>
+        [StringLength(20)]
+        public string Remark { get; set; } = "Match";
     }
 }

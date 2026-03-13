@@ -1,5 +1,6 @@
 @{
     ViewData["Title"] = "Pulling Process";
+    bool isUserRolePulling = ViewData["IsUser"] is bool u && u;
 }
 
 <div class="row mb-4">
@@ -11,20 +12,48 @@
 <div class="row justify-content-center">
     <!-- Single Full-Width Card -->
     <div class="col-12">
+        @if (isUserRolePulling)
+        {
+            <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
+                <i class="bi bi-eye me-2 fs-5"></i>
+                <span>Anda login sebagai <strong>User</strong> — halaman ini hanya dapat dilihat, tidak dapat melakukan input pulling.</span>
+            </div>
+        }
         <div class="cyber-card p-4">
-            <h5 class="mb-4 fw-bold border-bottom pb-2"><i class="bi bi-pencil-square me-2"></i> Form Input Pulling</h5>
+            <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-2">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-pencil-square me-2"></i> Form Input Pulling</h5>
+                @if (ViewData["IsAdmin"] is bool isAdminPulling && isAdminPulling)
+                {
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="manualInputMode" style="background-color:#ef4444;border-color:#ef4444;">
+                        <label class="form-check-label small fw-bold" style="color:#ef4444;" for="manualInputMode"><i class="bi bi-keyboard me-1"></i>MODE KETIK MANUAL</label>
+                    </div>
+                }
+            </div>
             
             <div class="mx-auto">
+                <!-- Manual Mode Indicator (Admin Only) -->
+                @if (ViewData["IsAdmin"] is bool isAdminIndicatorP && isAdminIndicatorP)
+                {
+                <div id="manualModeIndicator" style="display:none;" class="mb-3">
+                    <span style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.5);border-radius:8px;padding:8px 16px;display:inline-flex;align-items:center;gap:8px;">
+                        <i class="bi bi-keyboard" style="color:#ef4444;font-size:1.1rem;"></i>
+                        <span style="color:#ef4444;font-weight:700;font-size:0.85rem;">MODE KETIK MANUAL AKTIF</span>
+                        <span style="color:#94a3b8;font-size:0.8rem;">&#8212; Validasi suffix X &amp; cross-check Label dinonaktifkan (Admin Only)</span>
+                    </span>
+                </div>
+                }
+
                 <!-- 1. Identifikasi Produk (Tag & Label) -->
                 <div class="mb-4">
                     <!-- Tag Input Group -->
                     <div class="mb-4">
-                    <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input VIN (TAG MASTER) <span class="text-danger">*</span></label>
+                    <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Scan Barcode Rak <span class="text-danger">*</span></label>
                         <div class="custom-cyber-input-group" id="tagGroup">
                             <div class="input-icon-left">
                                 <i class="bi bi-tag-fill"></i>
                             </div>
-                            <input type="text" class="form-control cyber-field" id="tagInput" placeholder="Scan VIN..." readonly>
+                            <input type="text" class="form-control cyber-field" id="tagInput" placeholder="Scan Barcode Rak..." readonly>
                             <button type="button" class="btn-scan-trigger" data-target="tagInput" title="Start Scanning">
                                 <i class="bi bi-qr-code-scan"></i>
                             </button>
@@ -85,12 +114,12 @@
 
                     <!-- Label Input Group -->
                     <div class="mb-4">
-                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Input Label (Unique) <span class="text-danger">*</span></label>
+                        <label class="form-label mb-2 text-white-50 small fw-bold text-uppercase">Scan Barcode Label <span class="text-danger">*</span></label>
                         <div class="custom-cyber-input-group" id="labelGroup">
                             <div class="input-icon-left">
                                 <i class="bi bi-upc-scan"></i>
                             </div>
-                            <input type="text" class="form-control cyber-field" id="labelInput" placeholder="Scan Label unik..." disabled readonly>
+                            <input type="text" class="form-control cyber-field" id="labelInput" placeholder="Scan Barcode Label..." disabled readonly>
                             <button type="button" class="btn-scan-trigger" data-target="labelInput" title="Start Scanning" disabled>
                                 <i class="bi bi-qr-code-scan"></i>
                             </button>
@@ -164,14 +193,170 @@
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
         $(document).ready(function () {
-            // Toast Helper Function
+            const isReadOnly = @(isUserRolePulling ? "true" : "false"); // Role User: view only
+            let manualMode = false; // Admin-only: bypass scan validations
+
+            // Jika read-only (role User): sembunyikan form input, hanya tampilkan tabel riwayat
+            if (isReadOnly) {
+                $('#tagInput, #labelInput').prop('disabled', true).prop('readonly', true);
+                $('.btn-scan-trigger').prop('disabled', true);
+                $('#btnSavePulling').prop('disabled', true).hide();
+            }
+
+            // Error Modal (untuk danger) — MANUAL CLOSE ONLY (tidak auto-close)
+            const $errModal = $('<div class="modal fade" id="scanErrorModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" style="z-index:2100"><div class="modal-dialog modal-dialog-centered"><div class="modal-content" style="background:#1e293b;border:2px solid #ef4444;border-radius:12px;"><div class="modal-body text-center py-4 px-4"><div style="font-size:3rem;color:#ef4444;" class="mb-3"><i class="bi bi-x-circle-fill"></i></div><h5 class="fw-bold text-white mb-3">SCAN TIDAK VALID</h5><p class="text-white-50 mb-3" id="scanErrorMsg"></p><button type="button" class="btn btn-danger px-5 py-2 fw-bold" id="btnCloseScanError"><i class="bi bi-check-lg me-2"></i>Tutup</button></div></div></div></div>');
+            $('body').append($errModal);
+            const scanErrorModal = new bootstrap.Modal(document.getElementById('scanErrorModal'));
+            $('#btnCloseScanError').on('click', function() { 
+                scanErrorModal.hide(); 
+            });
+
+            // ================================================================
+            // SCAN QUEUE SYSTEM FOR PULLING
+            // Rapid scan support — semua scan masuk antrian, diproses berurutan
+            // ================================================================
+            const PullQueue = (() => {
+                const _q = [];
+                let _running = false;
+                let _badgeEl = null;
+
+                function push(payload) {
+                    _q.push(payload);
+                    _refreshBadge();
+                    if (!_running) _next();
+                }
+
+                async function _next() {
+                    if (_q.length === 0) {
+                        _running = false;
+                        _refreshBadge();
+                        return;
+                    }
+                    _running = true;
+                    const item = _q.shift();
+                    _refreshBadge();
+
+                    try {
+                        await _execute(item);
+                    } catch (e) {
+                        logNGScan('Pulling', item.Tag || '', item.Label || '', '', "Koneksi Error (Queue): " + e.message);
+                        showScannerToast('🔌 Koneksi error: ' + e.message, 'danger');
+                    }
+
+                    await _sleep(80);
+                    _next();
+                }
+
+                async function _execute(payload) {
+                    const res = await fetch('/Pulling/Save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+
+                    if (data.success) {
+                        showScannerToast('✅ ' + data.message, 'success');
+                        // Reset semua field setelah sukses → siap scan item rak berikutnya
+                        resetAll();
+                    } else {
+                        showScannerToast('❌ ' + data.message, 'danger');
+                        // Catat ke NG Log saat server menolak scan Pulling
+                        logNGScan('Pulling', payload.Tag || '', payload.Label || '', '', data.message || 'Scan gagal');
+                        // Reset label only on error — tag stays valid, user scan ulang label saja
+                        resetLabelOnly();
+                    }
+                }
+
+                function _refreshBadge() {
+                    if (!_badgeEl) {
+                        _badgeEl = document.createElement('div');
+                        _badgeEl.id = '_pqBadge';
+                        _badgeEl.style.cssText = [
+                            'position:fixed', 'bottom:80px', 'right:20px', 'z-index:9999',
+                            'background:#f59e0b', 'color:#1a1a2e', 'font-weight:700',
+                            'font-size:13px', 'border-radius:20px', 'padding:7px 16px',
+                            'box-shadow:0 4px 12px rgba(0,0,0,.5)', 'display:none',
+                            'pointer-events:none'
+                        ].join(';');
+                        document.body.appendChild(_badgeEl);
+                    }
+                    if (_q.length > 0 || _running) {
+                        _badgeEl.textContent = _running
+                            ? '⚡ Menyimpan... (' + _q.length + ' antrian)'
+                            : '⏳ Antrian: ' + _q.length + ' scan';
+                        _badgeEl.style.display = 'block';
+                    } else {
+                        _badgeEl.style.display = 'none';
+                    }
+                }
+
+                function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+                return { push, get busy() { return _running; }, get size() { return _q.length; } };
+            })();
+
+            // Reset label only (untuk error label — tag tetap agar tidak perlu scan ulang)
+            function resetLabelOnly() {
+                $('#labelInput').val('').removeClass('active-scan');
+                if (!manualMode) {
+                    $('#labelInput').prop('readonly', true);
+                }
+                $('#labelInput').focus();
+            }
+
+            // Reset semua field (setelah save sukses — siap scan item rak berikutnya)
+            function resetAll() {
+                $('#tagInput, #labelInput').val('').removeClass('active-scan');
+                isItemValid = false;
+                if (!manualMode) {
+                    $('#tagInput').prop('readonly', true);
+                    $('#labelInput').prop('readonly', true).prop('disabled', true);
+                    $('.btn-scan-trigger[data-target="labelInput"]').prop('disabled', true);
+                    $('#labelHint').fadeOut();
+                }
+                $('#tagInput').focus();
+            }
+
+            // Notification Helper
             function showScannerToast(message, type = 'primary') {
+                if (type === 'danger') {
+                    // Tampilkan error modal — scan otomatis diblokir selama modal open
+                    $('#scanErrorMsg').text(message);
+                    scanErrorModal.show();
+                    return;
+                }
                 const $toast = $('#scannerToast');
                 if (!$toast.length) return;
                 $toast.removeClass('bg-primary bg-success bg-danger bg-warning');
                 $toast.addClass('bg-' + type);
                 $('#scannerToastBody').text(message);
-                const toast = new bootstrap.Toast($toast[0], { delay: 3000 });
+                const toast = new bootstrap.Toast($toast[0], { delay: 3000, autohide: true });
+                toast.show();
+            }
+
+            function logNGScan(module, tag, label, kanban, reason) {
+                fetch('@Url.Action("LogNG", "Pulling")', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        Module: module, 
+                        Tag: tag, 
+                        Label: label, 
+                        Kanban: kanban, 
+                        Reason: reason 
+                    })
+                }).catch(() => {}); // silent — jangan block UI
+            }
+
+            // Warning toast — untuk mismatch yang TETAP dikirim ke server (tidak block)
+            function showScannerToastWarning(message) {
+                const $toast = $('#scannerToast');
+                if (!$toast.length) return;
+                $toast.removeClass('bg-primary bg-success bg-danger bg-warning');
+                $toast.addClass('bg-warning');
+                $('#scannerToastBody').html('<span style="color:#1a1a2e;font-weight:600;">' + message + '</span>');
+                const toast = new bootstrap.Toast($toast[0], { delay: 5000, autohide: true });
                 toast.show();
             }
 
@@ -253,12 +438,12 @@
             function onDetected(code) {
                 if (activeInputId) {
                     const currentId = activeInputId;
-                    const trimmedCode = code.trim(); // Keep original case for now, validation will handle upper
+                    const trimmedCode = code.trim();
 
-                    // Apply validation and processing based on target input
                     if (currentId === 'tagInput') {
-                        // Validation for tagInput (VIN) must have 'X' suffix
+                        // Validation for tagInput (VIN) must have 'X' suffix — dilewati di manual mode
                         if (!trimmedCode.toUpperCase().endsWith('X')) {
+                            logNGScan('Pulling', trimmedCode, '', '', 'KODE TIDAK VALID: Wajib scan dari Label asli (Missing X)');
                             showScannerToast("KODE TIDAK VALID: Wajib scan dari Label asli (Missing X)", "danger");
                             $(`#${currentId}`).val('');
                             scannerModal.hide();
@@ -269,22 +454,22 @@
                         scannerModal.hide();
                         lookupItem(trimmedCode);
                     } else if (currentId === 'labelInput') {
-                        // 1. Validation for labelInput must NOT have 'X' suffix
+                        // 1. Must NOT have 'X' suffix
                         if (trimmedCode.toUpperCase().endsWith('X')) {
+                            logNGScan('Pulling', $('#tagInput').val().trim(), trimmedCode, '', 'KODE TIDAK VALID: Label tidak boleh mengandung suffix X');
                             showScannerToast("KODE TIDAK VALID: Label tidak boleh mengandung suffix X", "danger");
                             $(`#${currentId}`).val('');
                             scannerModal.hide();
                             return;
                         }
 
-                        // 2. Cross-validation: Label must contain the normalized Tag (VIN)
+                        // 2. Cross-validation: Label harus mengandung VIN
                         const tagVal = $('#tagInput').val();
                         const normTag = normalizeVin(tagVal);
                         const normLabel = normalizeVin(trimmedCode);
-
                         if (!normLabel.includes(normTag)) {
-                            showScannerToast(`LABEL TIDAK SESUAI: Label harus mengandung kode ${normTag}`, "danger");
-                            $(`#${currentId}`).val('');
+                            logNGScan('Pulling', tagVal, trimmedCode, '', `Label tidak mengandung VIN: ${normTag}`);
+                            showScannerToast(`⚠️ LABEL TIDAK VALID! Label harus mengandung kode VIN: "${normTag}". Scan ulang label yang benar.`, "danger");
                             scannerModal.hide();
                             return;
                         }
@@ -292,10 +477,7 @@
                         $(`#${currentId}`).val(trimmedCode).addClass('active-scan');
                         setTimeout(() => $(`#${currentId}`).removeClass('active-scan'), 500);
                         scannerModal.hide();
-                        // AUTOMATION: Auto Submit after Label Scan
-                        setTimeout(() => {
-                           triggerAutoSave();
-                        }, 300);
+                        setTimeout(() => { triggerAutoSave(); }, 300);
                     }
                 }
             }
@@ -313,10 +495,13 @@
             // --- GLOBAL SCANNER HANDLER (ANTI-MANUAL & READONLY SUPPORT) ---
             let scanBuffer = "";
             let lastKeyTime = Date.now();
-            const SCAN_INTERVAL = 50; // ms (Scanner is very fast, Human is slow)
+            const SCAN_INTERVAL = 120; // ms — dinaikkan dari 50ms agar seluruh karakter barcode terbaca sebelum buffer di-reset
 
             window.addEventListener('keydown', function (e) {
                 const currentTime = Date.now();
+
+                // In manual mode, let the individual input fields handle their own events
+                if (manualMode) return;
                 
                 // If focus is on a normal interactive element (like a modal or another input), don't intercept
                 if (e.target.tagName === "INPUT" && !$(e.target).hasClass('cyber-field')) return;
@@ -353,6 +538,7 @@
                 if (!$('#tagInput').val()) {
                     // --- VIN VALIDATION (Must have X) ---
                     if (!codeUpper.endsWith('X')) {
+                        logNGScan('Pulling', code, '', '', 'KODE TIDAK VALID: Wajib scan dari Label asli (Missing X)');
                         showScannerToast("KODE TIDAK VALID: Wajib scan dari Label asli (Missing X)", "danger");
                         return;
                     }
@@ -364,17 +550,18 @@
                     
                     // 1. Must NOT have X
                     if (codeUpper.endsWith('X')) {
+                        logNGScan('Pulling', $('#tagInput').val().trim(), code, '', 'KODE TIDAK VALID: Label tidak boleh mengandung suffix X');
                         showScannerToast("KODE TIDAK VALID: Label tidak boleh mengandung suffix X", "danger");
                         return;
                     }
 
-                    // 2. Cross-validation: Label must contain the normalized Tag (VIN)
+                    // 2. Cross-validation: Label harus mengandung VIN
                     const tagVal = $('#tagInput').val();
                     const normTag = normalizeVin(tagVal);
                     const normLabel = normalizeVin(code);
-
                     if (!normLabel.includes(normTag)) {
-                        showScannerToast(`LABEL TIDAK SESUAI: Label harus mengandung kode ${normTag}`, "danger");
+                        logNGScan('Pulling', tagVal, code, '', `Label tidak mengandung VIN: ${normTag}`);
+                        showScannerToast(`⚠️ LABEL TIDAK VALID! Label harus mengandung kode VIN: "${normTag}". Scan ulang label yang benar.`, "danger");
                         return;
                     }
 
@@ -406,11 +593,13 @@
                         } else {
                             isItemValid = false;
                             disableLabelInput();
+                            logNGScan('Pulling', tag, '', '', response.message || "Item tidak ditemukan.");
                             showScannerToast("ERROR: " + (response.message || "Item tidak ditemukan."), "danger");
                             $('#tagInput').val(''); // --- AUTO RESET ---
                         }
                     },
                     error: function() {
+                        logNGScan('Pulling', tag, '', '', "Gagal menghubungi server untuk lookup item (Koneksi Error)");
                         showScannerToast("Gagal menghubungi server untuk lookup item.", "danger");
                         $('#tagInput').val(''); // --- AUTO RESET ---
                     }
@@ -457,8 +646,42 @@
             // Removed: $('#labelInput').on('change keypress', function(e) { ... }); // Global handler takes over
 
             function triggerAutoSave() {
-                 if ($('#btnSavePulling').prop('disabled')) return;
-                 $('#btnSavePulling').click();
+                const tag = $('#tagInput').val().trim();
+                const label = $('#labelInput').val().trim();
+
+                if (!tag || !label) return;
+
+                // VALIDASI SEBELUM MASUK QUEUE
+                const codeUpper = label.toUpperCase();
+                
+                // 1. Label must NOT have X
+                if (codeUpper.endsWith('X')) {
+                    logNGScan('Pulling', tag, label, '', 'KODE TIDAK VALID: Label tidak boleh mengandung suffix X');
+                    showScannerToast("KODE TIDAK VALID: Label tidak boleh mengandung suffix X", "danger");
+                    $('#labelInput').val('').focus();
+                    return;
+                }
+
+                // 2. Cross-validation: Label harus mengandung VIN
+                const normTag = normalizeVin(tag);
+                const normLabel = normalizeVin(label);
+                if (!normLabel.includes(normTag)) {
+                    logNGScan('Pulling', tag, label, '', `Label tidak mengandung VIN: ${normTag}`);
+                    showScannerToast(`⚠️ LABEL TIDAK VALID! Label harus mengandung kode VIN: "${normTag}". Scan ulang label yang benar.`, "danger");
+                    $('#labelInput').val('').focus();
+                    return;
+                }
+
+                // Push ke queue — server proses di background
+                PullQueue.push({
+                    Tag: tag,
+                    Label: label,
+                    Quantity: 1
+                });
+
+                // Reset label SEGERA agar scanner tidak double-input (tag masih terisi)
+                // Tag akan di-reset oleh resetAll() setelah server konfirmasi sukses
+                $('#labelInput').val('').removeClass('active-scan');
             }
 
             // Save Data (AJAX)
@@ -498,11 +721,13 @@
                             disableLabelInput();
                             $('#tagInput').focus(); // Ready for next scan
                         } else {
+                            logNGScan('Pulling', data.Tag, data.Label, '', response.message || 'Server error (Manual Mode)');
                             showScannerToast('GAGAL: ' + response.message, 'danger');
                             $('#labelInput').val('').focus();
                         }
                     },
                     error: function () {
+                        logNGScan('Pulling', data.Tag, data.Label, '', "Connection Error (Manual Save)");
                         showScannerToast('Terjadi kesalahan koneksi.', 'danger');
                     },
                     complete: function() {
@@ -527,6 +752,47 @@
                 $(this).closest('.custom-cyber-input-group').addClass('selected-glow');
             }).on('blur', function() {
                 $(this).closest('.custom-cyber-input-group').removeClass('selected-glow');
+            });
+
+            // --- MANUAL INPUT MODE (Admin Only) ---
+            // Handle Enter key on individual fields when in manual mode
+            $('#tagInput').on('keypress', function(e) {
+                if (!manualMode) return;
+                if (e.which !== 13) return;
+                e.preventDefault();
+                const tag = $(this).val().trim();
+                if (tag) lookupItem(tag);
+            });
+
+            $('#labelInput').on('keypress', function(e) {
+                if (!manualMode) return;
+                if (e.which !== 13) return;
+                e.preventDefault();
+                const label = $(this).val().trim();
+                if (label) triggerAutoSave();
+            });
+
+            $('#manualInputMode').change(function() {
+                manualMode = $(this).is(':checked');
+                if (manualMode) {
+                    $('#manualModeIndicator').slideDown();
+                    // Buka semua field agar bisa diketik
+                    $('#tagInput, #labelInput').prop('readonly', false).prop('disabled', false);
+                    $('.btn-scan-trigger').prop('disabled', false);
+                    $('#labelHint').fadeOut();
+                    $('#tagInput').attr('placeholder', 'Ketik Barcode Rak...');
+                    $('#labelInput').attr('placeholder', 'Ketik Barcode Label...');
+                    $('#tagInput').focus();
+                } else {
+                    $('#manualModeIndicator').slideUp();
+                    // Kembalikan ke mode scan: tag editable via scanner, label disabled sampai tag valid
+                    $('#tagInput').prop('readonly', true).attr('placeholder', 'Scan Barcode Rak...');
+                    $('#labelInput').prop('readonly', true).prop('disabled', true).attr('placeholder', 'Scan Barcode Label...');
+                    $('.btn-scan-trigger[data-target="labelInput"]').prop('disabled', true);
+                    $('#tagInput, #labelInput').val('');
+                    $('#labelHint').fadeOut();
+                    $('#tagInput').focus();
+                }
             });
         });
 </script>
@@ -803,5 +1069,63 @@
         backdrop-filter: blur(8px);
         background: rgba(15, 23, 42, 0.9);
         box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    /* Responsive mobile styles */
+    @@media (max-width: 576px) {
+        .container-fluid {
+            padding-left: 8px;
+            padding-right: 8px;
+        }
+        .custom-cyber-input-group {
+            border-radius: 8px;
+        }
+        .cyber-field {
+            padding: 12px 14px !important;
+            font-size: 0.95rem;
+        }
+        .input-icon-left {
+            padding: 0 12px;
+            font-size: 1rem;
+        }
+        .btn-scan-trigger {
+            padding: 0 14px;
+            font-size: 1.2rem;
+        }
+        .detail-item {
+            padding: 10px 12px;
+        }
+        .detail-item .detail-label {
+            font-size: 0.7rem;
+        }
+        .detail-item .detail-value {
+            font-size: 0.85rem;
+        }
+        .rack-segmented-bar {
+            height: 8px;
+        }
+        .badge {
+            font-size: 0.7rem;
+            padding: 4px 8px;
+        }
+        h5.text-white {
+            font-size: 1.1rem;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .card-body {
+            padding: 15px;
+        }
+        .detail-card {
+            margin-bottom: 15px;
+        }
+        .scanning-animation {
+            width: 200px;
+            height: 200px;
+        }
+        #reader {
+            max-width: 100% !important;
+        }
     }
 </style>

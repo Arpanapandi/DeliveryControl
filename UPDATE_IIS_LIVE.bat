@@ -7,17 +7,15 @@ echo ===================================================
 echo.
 
 :: KONFIGURASI (Sesuaikan jika perlu)
-set "SOURCE_DIR=C:\Deploy\DeliveryControl_Published"
+set "SOURCE_DIR=%~dp0DeliveryControl"
 set "DEST_DIR=C:\inetpub\wwwroot\DeliveryControl"
 set "APP_POOL_NAME=DeliveryControl"
 
 :: Cek Administrator
 net session >nul 2>&1
 if %errorLevel% neq 0 (
-    echo [ERROR] Harap jalankan script ini sebagai ADMINISTRATOR!
-    echo Klik kanan -> Run as Administrator
-    pause
-    exit /b
+    echo [WARNING] Script mungkin butuh akses ADMINISTRATOR!
+    echo Jika error, klik kanan -^> Run as Administrator
 )
 
 echo 1. Memeriksa folder source...
@@ -44,7 +42,7 @@ echo 4. Menyalin file update...
 :: Gunakan Robocopy untuk copy file (Mirroring - menghapus yang tidak ada di source, kecuali config tertentu jika di-exclude)
 :: /MIR = Mirror directory tree
 :: /XF = Exclude Files (Kita exclude appsettings.Production.json agar tidak tertimpa default dari build jika user sudah edit di server)
-robocopy "%SOURCE_DIR%" "%DEST_DIR%" /MIR /IS /XF appsettings.Production.json web.config
+robocopy "%SOURCE_DIR%" "%DEST_DIR%" /MIR /IS /XF appsettings.Production.json
 
 echo 5. Mengembalikan konfigurasi (jika perlu)...
 :: Jika file config tidak ada di tujuan (baru deploy pertama), copy dari source

@@ -4,9 +4,12 @@ using DeliveryControl.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using DeliveryControl.Services;
+using DeliveryControl.Filters;
 
 namespace DeliveryControl.Controllers
 {
+    [DeliveryControl.Filters.AuthorizeRoles("Admin", "Pulling", "Leader", "User")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public class StockController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -18,11 +21,13 @@ namespace DeliveryControl.Controllers
             _snapshotService = snapshotService;
         }
 
-        public async Task<IActionResult> Index(string plant = "Overall", DateTime? date = null, string period = "Day", int pageNumber = 1)
+        [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+        public async Task<IActionResult> Index(string plant = "Overall", DateTime? date = null, string period = "Day", int pageNumber = 1, string status = "All")
         {
-            return View(await GetStockViewModel(plant, date, period, pageNumber));
+            return View(await GetStockViewModel(plant, date, period, pageNumber, status));
         }
 
+        [Microsoft.AspNetCore.Authorization.AllowAnonymous]
         public async Task<IActionResult> Molded(DateTime? date, string period = "Day", int pageNumber = 1)
         {
             ViewBag.SelectedDate = date?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
@@ -30,6 +35,7 @@ namespace DeliveryControl.Controllers
             return View(await GetStockViewModel("Molded", date, period, pageNumber));
         }
 
+        [Microsoft.AspNetCore.Authorization.AllowAnonymous]
         public async Task<IActionResult> Hose(DateTime? date, string period = "Day", int pageNumber = 1)
         {
             ViewBag.SelectedDate = date?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
@@ -37,11 +43,122 @@ namespace DeliveryControl.Controllers
             return View(await GetStockViewModel("Hose", date, period, pageNumber));
         }
 
+        [Microsoft.AspNetCore.Authorization.AllowAnonymous]
         public async Task<IActionResult> RVI(DateTime? date, string period = "Day", int pageNumber = 1)
         {
             ViewBag.SelectedDate = date?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
             ViewBag.SelectedPeriod = period;
             return View(await GetStockViewModel("RVI", date, period, pageNumber));
+        }
+
+        [DeliveryControl.Filters.AuthorizeRoles("Admin", "User")]
+        public async Task<IActionResult> LogScanNG(DateTime? date, string period = "Day", int pageNumber = 1, string search = "")
+        {
+            var today = DateTime.Today;
+            var filterDate = date ?? today;
+            ViewBag.SelectedDate = filterDate.ToString("yyyy-MM-dd");
+            ViewBag.SelectedPeriod = period;
+            ViewBag.Search = search;
+
+            DateTime startDate, endDate;
+            if (period == "Week")
+            {
+                startDate = filterDate.Date.AddDays(-6);
+                endDate = filterDate.Date.AddDays(1).AddSeconds(-1);
+            }
+            else if (period == "Month")
+            {
+                startDate = new DateTime(filterDate.Year, filterDate.Month, 1);
+                endDate = startDate.AddMonths(1).AddSeconds(-1);
+            }
+            else if (period == "Year")
+            {
+                startDate = new DateTime(filterDate.Year, 1, 1);
+                endDate = startDate.AddYears(1).AddSeconds(-1);
+            }
+            else // Day
+            {
+                startDate = filterDate.Date;
+                endDate = startDate.AddDays(1).AddSeconds(-1);
+            }
+
+            int pageSize = 25;
+
+            var ngPullingQuery = _context.ScanNGLogs.AsNoTracking()
+                .Where(r => r.Module == "Pulling" && r.CreatedDate >= startDate && r.CreatedDate <= endDate);
+
+            var ngPreparationQuery = _context.ScanNGLogs.AsNoTracking()
+                .Where(r => r.Module == "Preparation" && r.CreatedDate >= startDate && r.CreatedDate <= endDate);
+
+            // Apply search filter
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim().ToLower();
+                ngPullingQuery = ngPullingQuery.Where(r =>
+                    r.Tag.ToLower().Contains(s) ||
+                    r.Label.ToLower().Contains(s) ||
+                    r.CreatedBy.ToLower().Contains(s));
+                ngPreparationQuery = ngPreparationQuery.Where(r =>
+                    r.Tag.ToLower().Contains(s) ||
+                    r.Label.ToLower().Contains(s) ||
+                    r.Kanban.ToLower().Contains(s) ||
+                    r.CreatedBy.ToLower().Contains(s));
+            }
+
+            ngPullingQuery = ngPullingQuery.OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.Id);
+            ngPreparationQuery = ngPreparationQuery.OrderByDescending(r => r.CreatedDate).ThenByDescending(r => r.Id);
+
+            var totalNGPulling = await ngPullingQuery.CountAsync();
+            var totalNGPreparation = await ngPreparationQuery.CountAsync();
+            var totalItems = totalNGPulling + totalNGPreparation;
+
+            ViewBag.CurrentPage = pageNumber;
+            ViewBag.TotalPages = (int)Math.Ceiling(Math.Max(totalNGPulling, totalNGPreparation) / (double)pageSize);
+            ViewBag.TotalItems = totalItems;
+            ViewBag.RouteData = new Dictionary<string, string>
+            {
+                { "date", date?.ToString("yyyy-MM-dd") },
+                { "period", period },
+                { "search", search }
+            };
+
+            var viewModel = new StockDashboardViewModel
+            {
+                PlantName = "Overall",
+                SearchDate = date,
+                Period = period,
+                NGPulling = await ngPullingQuery.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync(),
+                NGPreparation = await ngPreparationQuery.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync(),
+                TotalNGPulling = totalNGPulling,
+                TotalNGPreparation = totalNGPreparation
+            };
+
+            return View(viewModel);
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        [DeliveryControl.Filters.AuthorizeRoles("Admin", "Pulling", "Leader", "User", "Preparation")]
+        public async Task<IActionResult> LogNG([FromBody] NGLogRequest req)
+        {
+            // Fallback endpoint — seharusnya tidak dipakai lagi (masing-masing controller punya LogNG sendiri)
+            if (string.IsNullOrWhiteSpace(req?.Tag)) return Json(new { ok = false });
+            var createdBy = HttpContext.Session.GetString("FullName") 
+                         ?? HttpContext.Session.GetString("Username") 
+                         ?? "Operator";
+            var rec = new ScanNGLog
+            {
+                Module = req.Module ?? "Unknown",
+                Tag = req.Tag.Trim(),
+                Label = req.Label?.Trim() ?? "",
+                Kanban = req.Kanban?.Trim() ?? "",
+                Reason = req.Reason?.Trim() ?? "",
+                CreatedBy = createdBy,
+                CreatedDate = DateTime.Now
+            };
+            _context.ScanNGLogs.Add(rec);
+            await _context.SaveChangesAsync();
+            return Json(new { ok = true });
         }
 
         public async Task<IActionResult> ExportToExcel(string plant = "Overall", DateTime? date = null, string period = "Day")
@@ -90,192 +207,10 @@ namespace DeliveryControl.Controllers
             }
         }
 
-        public async Task<IActionResult> Trend(string period = "Month", string mode = "Activity")
+        public IActionResult Trend(string period = "Month", string mode = "Activity")
         {
-            var now = DateTime.Now;
-            var today = DateTime.Today;
-            var startOfMonth = new DateTime(now.Year, now.Month, 1);
-            var startOfYear = new DateTime(now.Year, 1, 1);
-
-            var viewModel = new StockTrendViewModel
-            {
-                FilterPeriod = period,
-                ViewMode = mode
-            };
-
-            // 1. Calculate Total FG Activity based on selected period for relevant plants
-            var activePlants = new[] { "Molded", "Hose", "RVI" };
-            DateTime filterStartDate = period switch
-            {
-                "Year" => startOfYear,
-                "Day" => today,
-                _ => startOfMonth // Default to "Month"
-            };
-
-            viewModel.TotalFGStock = await _context.PullingRecords
-                .CountAsync(r => activePlants.Contains(r.Plant) && r.CreatedDate >= filterStartDate);
-
-            if (mode == "Level")
-            {
-                viewModel.CategoryTrends = await GetHistoricalCategoryTrends(filterStartDate, now, period);
-            }
-
-            // Fetch current stock summaries for recent activity status mapping
-            var moldedStockVM = await GetStockViewModel("Molded");
-            var hoseStockVM = await GetStockViewModel("Hose");
-            var rviStockVM = await GetStockViewModel("RVI");
-
-            // Fetch pulling records based on the selected period for each plant
-            // Fetch pulling records based on the selected period for each plant
-            var moldedPulling = await _context.PullingRecords
-                .Where(r => r.Plant == "Molded" && r.CreatedDate >= filterStartDate)
-                .Include(r => r.Item)
-                .OrderByDescending(r => r.CreatedDate)
-                .ToListAsync();
-
-            var hosePulling = await _context.PullingRecords
-                .Where(r => r.Plant == "Hose" && r.CreatedDate >= filterStartDate)
-                .Include(r => r.Item)
-                .OrderByDescending(r => r.CreatedDate)
-                .ToListAsync();
-
-            var rviPulling = await _context.PullingRecords
-                .Where(r => r.Plant == "RVI" && r.CreatedDate >= filterStartDate)
-                .Include(r => r.Item)
-                .OrderByDescending(r => r.CreatedDate)
-                .ToListAsync();
-
-            // Map to StockItemDetail for the view (Conditional: Shortage Grouping for Level, Transactional for Activity)
-            var moldedTransList = moldedPulling.Select(p => new StockItemDetail {
-                ItemName = p.Item?.ItemName ?? "N/A",
-                VIN = p.Item?.VIN ?? "-",
-                LevelStock = p.Item != null && moldedStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
-                                ? moldedStockVM.StockDetails.First(d => d.Tag == p.Tag).LevelStock : 0,
-                Status = p.Item != null && moldedStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
-                                ? moldedStockVM.StockDetails.First(d => d.Tag == p.Tag).Status : "Normal"
-            }).ToList();
-            viewModel.RecentMolded = mode == "Level" 
-                ? moldedStockVM.StockDetails.Where(d => d.Status == "Shortage").ToList() 
-                : moldedTransList;
-
-            var hoseTransList = hosePulling.Select(p => new StockItemDetail {
-                ItemName = p.Item?.ItemName ?? "N/A",
-                VIN = p.Item?.VIN ?? "-",
-                LevelStock = p.Item != null && hoseStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
-                                ? hoseStockVM.StockDetails.First(d => d.Tag == p.Tag).LevelStock : 0,
-                Status = p.Item != null && hoseStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
-                                ? hoseStockVM.StockDetails.First(d => d.Tag == p.Tag).Status : "Normal"
-            }).ToList();
-            viewModel.RecentHose = mode == "Level" 
-                ? hoseStockVM.StockDetails.Where(d => d.Status == "Shortage").ToList() 
-                : hoseTransList;
-
-            var rviTransList = rviPulling.Select(p => new StockItemDetail {
-                ItemName = p.Item?.ItemName ?? "N/A",
-                VIN = p.Item?.VIN ?? "-",
-                LevelStock = p.Item != null && rviStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
-                                ? rviStockVM.StockDetails.First(d => d.Tag == p.Tag).LevelStock : 0,
-                Status = p.Item != null && rviStockVM.StockDetails.Any(d => d.Tag == p.Tag) 
-                                ? rviStockVM.StockDetails.First(d => d.Tag == p.Tag).Status : "Normal"
-            }).ToList();
-            viewModel.RecentRVI = mode == "Level" 
-                ? rviStockVM.StockDetails.Where(d => d.Status == "Shortage").ToList() 
-                : rviTransList;
-
-            // 2. Trend Data Calculation
-            // Pre-fetch Category Snapshots ONCE for high performance
-            var allSnapshots = await GetHistoricalCategorySnapshots(filterStartDate, now, period);
-
-            foreach (var plant in activePlants)
-            {
-                var plantTrend = new PlantTrendData { PlantName = plant.ToUpper() };
-                var pullingQuery = _context.PullingRecords.Where(r => r.Plant == plant);
-                var preparationQuery = _context.PreparationRecords.Where(r => r.Plant == plant);
-                plantTrend.TotalStock = await pullingQuery.CountAsync(r => r.CreatedDate >= filterStartDate);
-
-                if (period == "Day")
-                {
-                    var pullingData = await pullingQuery.Where(r => r.CreatedDate >= today).GroupBy(r => r.CreatedDate.Hour).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
-                    var preparationData = await preparationQuery.Where(r => r.CreatedDate >= today).GroupBy(r => r.CreatedDate.Hour).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
-                    for (int i = 0; i < 24; i++) {
-                        plantTrend.DataPoints.Add(new TrendDataPoint { Label = $"{i:D2}:00", PullingCount = pullingData.GetValueOrDefault(i, 0), PreparationCount = preparationData.GetValueOrDefault(i, 0) });
-                    }
-                }
-                else if (period == "Month")
-                {
-                    var daysInMonth = DateTime.DaysInMonth(now.Year, now.Month);
-                    var pullingData = await pullingQuery.Where(r => r.CreatedDate >= startOfMonth).GroupBy(r => r.CreatedDate.Day).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
-                    var preparationData = await preparationQuery.Where(r => r.CreatedDate >= startOfMonth).GroupBy(r => r.CreatedDate.Day).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
-                    for (int i = 1; i <= daysInMonth; i++) {
-                        plantTrend.DataPoints.Add(new TrendDataPoint { Label = i.ToString(), PullingCount = pullingData.GetValueOrDefault(i, 0), PreparationCount = preparationData.GetValueOrDefault(i, 0) });
-                    }
-                }
-                else // Year
-                {
-                    var pullingData = await pullingQuery.Where(r => r.CreatedDate >= startOfYear).GroupBy(r => r.CreatedDate.Month).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
-                    var preparationData = await preparationQuery.Where(r => r.CreatedDate >= startOfYear).GroupBy(r => r.CreatedDate.Month).Select(g => new { Key = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
-                    for (int i = 1; i <= 12; i++) {
-                        plantTrend.DataPoints.Add(new TrendDataPoint { Label = new DateTime(now.Year, i, 1).ToString("MMM"), PullingCount = pullingData.GetValueOrDefault(i, 0), PreparationCount = preparationData.GetValueOrDefault(i, 0) });
-                    }
-                }
-
-                if (plantTrend.DataPoints.Any()) {
-                    plantTrend.PeakActivity = plantTrend.DataPoints.Max(p => Math.Max(p.PullingCount, p.PreparationCount));
-                }
-
-                plantTrend.CategoryTrends = allSnapshots.Select(s => {
-                    var pStats = s.PlantStats.GetValueOrDefault(plant.ToUpper()) ?? new CategoryStats();
-                    return new CategoryTrendPoint {
-                        Label = s.Label,
-                        CatLess1 = pStats.Less1,
-                        CatLess1_5 = pStats.Less1_5,
-                        CatRange1_5_2 = pStats.Range1_5_2,
-                        CatRange2_3 = pStats.Range2_3,
-                        CatMore3 = pStats.More3,
-                        ShortageCount = pStats.Less1 + pStats.Less1_5,
-                        NormalCount = pStats.Range1_5_2 + pStats.Range2_3,
-                        OverCount = pStats.More3
-                    };
-                }).ToList();
-
-                viewModel.PlantTrends.Add(plantTrend);
-            }
-
-            // Calculate Overall Trend
-            if (viewModel.PlantTrends.Any())
-            {
-                var numPoints = viewModel.PlantTrends[0].DataPoints.Count;
-                for (int i = 0; i < numPoints; i++)
-                {
-                    var point = new TrendDataPoint { Label = viewModel.PlantTrends[0].DataPoints[i].Label };
-                    foreach (var pt in viewModel.PlantTrends) {
-                        point.PullingCount += pt.DataPoints[i].PullingCount;
-                        point.PreparationCount += pt.DataPoints[i].PreparationCount;
-                    }
-                    viewModel.OverallTrend.Add(point);
-                }
-
-                // Populate Overall Category Trends FROM THE SAME pre-fetched snapshots
-                viewModel.CategoryTrends = allSnapshots.Select(s => new CategoryTrendPoint {
-                    Label = s.Label,
-                    CatLess1 = s.TotalStats.Less1,
-                    CatLess1_5 = s.TotalStats.Less1_5,
-                    CatRange1_5_2 = s.TotalStats.Range1_5_2,
-                    CatRange2_3 = s.TotalStats.Range2_3,
-                    CatMore3 = s.TotalStats.More3,
-                    ShortageCount = s.TotalStats.Less1 + s.TotalStats.Less1_5,
-                    NormalCount = s.TotalStats.Range1_5_2 + s.TotalStats.Range2_3,
-                    OverCount = s.TotalStats.More3
-                }).ToList();
-            }
-            
-            if (viewModel.OverallTrend.Any()) {
-                viewModel.HighestActivityTarget = viewModel.OverallTrend.Max(p => Math.Max(p.PullingCount, p.PreparationCount));
-            }
-
-            return View(viewModel);
+            return RedirectToAction("TrendCriticalStock");
         }
-
 
         public async Task<IActionResult> Targets()
         {
@@ -319,7 +254,7 @@ namespace DeliveryControl.Controllers
             public int? RackMax { get; set; }
         }
 
-        private async Task<StockDashboardViewModel> GetStockViewModel(string plant, DateTime? searchDate = null, string period = "Day", int pageNumber = 1)
+        private async Task<StockDashboardViewModel> GetStockViewModel(string plant, DateTime? searchDate = null, string period = "Day", int pageNumber = 1, string status = "All")
         {
             var today = DateTime.Today;
             var isFilteredByDate = searchDate.HasValue;
@@ -350,17 +285,27 @@ namespace DeliveryControl.Controllers
             // STOCK CALCULATION LOGIC (FIFO)
             // 1. Pulling: Ambil SEMUA data historis (Tanpa batas waktu) untuk pencocokan FIFO yang akurat
             //    Karena barang yang ditarik 1 bulan lalu bisa saja baru disiapkan hari ini.
-            var pullingQueryAll = _context.PullingRecords.AsNoTracking().Include(r => r.Item).AsQueryable();
+            //    EXCLUDE Mismatch records — they are log-only and don't affect stock
+            var pullingQueryAll = _context.PullingRecords.AsNoTracking().Include(r => r.Item)
+                .Where(r => r.Remark != "Mismatch").AsQueryable();
             if (plant != "Overall") pullingQueryAll = pullingQueryAll.Where(r => r.Plant == plant);
             
             // 2. Preparation (STOCK CALCULATION): Use ALL TIME data to ensure accurate stock balance
             //    We must deduct ALL preparations that have ever happened, not just those in the selected period.
-            var preparationQueryAll = _context.PreparationRecords.AsNoTracking().AsQueryable();
+            //    EXCLUDE Mismatch records — they are log-only and don't affect stock
+            var preparationQueryAll = _context.PreparationRecords.AsNoTracking()
+                .Where(r => r.Remark != "Mismatch").AsQueryable();
             if (plant != "Overall") preparationQueryAll = preparationQueryAll.Where(r => r.Plant == plant);
 
             // 3. Preparation & Pulling (DISPLAY/ACTIVITY): Filter by date for the "Recent Activity" list and "Counts"
-            var pullingQueryInRange = pullingQueryAll.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
-            var preparationQueryFiltered = preparationQueryAll.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
+            //    NOTE: Display includes ALL records (Match + Mismatch) so users can see the full transaction log
+            var pullingQueryDisplay = _context.PullingRecords.AsNoTracking().Include(r => r.Item).AsQueryable();
+            if (plant != "Overall") pullingQueryDisplay = pullingQueryDisplay.Where(r => r.Plant == plant);
+            var preparationQueryDisplay = _context.PreparationRecords.AsNoTracking().AsQueryable();
+            if (plant != "Overall") preparationQueryDisplay = preparationQueryDisplay.Where(r => r.Plant == plant);
+
+            var pullingQueryInRange = pullingQueryDisplay.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
+            var preparationQueryFiltered = preparationQueryDisplay.Where(r => r.CreatedDate >= startDate && r.CreatedDate <= endDate);
 
             // Execute queries
             var allPullingPotential = await pullingQueryAll.OrderBy(r => r.CreatedDate).ThenBy(r => r.PullingId).ToListAsync();
@@ -379,13 +324,24 @@ namespace DeliveryControl.Controllers
                 var prepTag = (prep.Tag ?? "").Trim().ToUpper();
                 var prepLabel = (prep.Label ?? "").Trim().ToUpper();
 
-                // Cari kecocokan Pulling TERTUA (FIFO)
-                // Syarat: Tag & Label sama, Id belum terpakai, dan waktu Pulling <= waktu Preparation
+                // Prioritas 1: Cari Pulling dengan Tag + Label SAMA PERSIS (FIFO normal scan)
+                // Batasan waktu: Pulling harus ada sebelum Preparation (dengan toleransi 10 detik)
                 var match = allPullingPotential.FirstOrDefault(p => 
                     !consumedPullingIds.Contains(p.PullingId) && 
                     (p.Tag ?? "").Trim().ToUpper() == prepTag && 
                     (p.Label ?? "").Trim().ToUpper() == prepLabel && 
-                    p.CreatedDate <= prep.CreatedDate.AddSeconds(10)); // Tolerance for sync delays
+                    p.CreatedDate <= prep.CreatedDate.AddSeconds(10));
+
+                // Prioritas 2: Fallback untuk Manual Stock Adjustment
+                // Manual Adjust menyimpan Label = VIN + "LB" (misal: NA1490LB),
+                // sedangkan label scan preparation bisa berupa NA1490LB12312 (ada nomor seri).
+                // Tidak ada batasan waktu karena Manual Adjust bisa dibuat kapan saja sebelum preparation.
+                if (match == null)
+                {
+                    match = allPullingPotential.FirstOrDefault(p =>
+                        !consumedPullingIds.Contains(p.PullingId) &&
+                        (p.Tag ?? "").Trim().ToUpper() == prepTag);
+                }
 
                 if (match != null) consumedPullingIds.Add(match.PullingId);
             }
@@ -411,11 +367,19 @@ namespace DeliveryControl.Controllers
                 else itemStatuses[item.ItemId] = "Normal";
             }
 
-            // --- COUNT UNIQUE ITEMS FOR INDICATORS (Based on Item status - ONLY FOR IN-STOCK ITEMS) ---
-            var inStockItemIds = piecesByItem.Keys;
-            var shortageCount = itemStatuses.Where(kv => inStockItemIds.Contains(kv.Key)).Count(v => v.Value == "Shortage");
-            var normalCount = itemStatuses.Where(kv => inStockItemIds.Contains(kv.Key)).Count(v => v.Value == "Normal");
-            var overCount = itemStatuses.Where(kv => inStockItemIds.Contains(kv.Key)).Count(v => v.Value == "Over");
+            // --- COUNT FOR INDICATORS: Hitung per baris label (sama seperti tampilan tabel) ---
+            // Sehingga angka Shortage / Normal / Over konsisten dengan jumlah baris yang tampil saat filter diklik
+            var groupedForCount = inStockPieces.GroupBy(p => new { p.ItemId, Label = (p.Label ?? "").Trim().ToUpper() });
+            int shortageCount = 0, normalCount = 0, overCount = 0;
+            foreach (var grp in groupedForCount)
+            {
+                var sid = grp.First().ItemId;
+                if (!sid.HasValue) continue;
+                var rowStatus = itemStatuses.GetValueOrDefault(sid.Value, "None");
+                if (rowStatus == "Shortage") shortageCount++;
+                else if (rowStatus == "Normal") normalCount++;
+                else if (rowStatus == "Over") overCount++;
+            }
             // ------------------------------------------------------------------
 
             var stockDetails = new List<StockItemDetail>();
@@ -426,7 +390,7 @@ namespace DeliveryControl.Controllers
             foreach (var group in groupedByLabel)
             {
                 var latestPiece = group.OrderByDescending(p => p.CreatedDate).First();
-                var status = latestPiece.ItemId.HasValue ? itemStatuses.GetValueOrDefault(latestPiece.ItemId.Value, "None") : "None";
+                var itemStatus = latestPiece.ItemId.HasValue ? itemStatuses.GetValueOrDefault(latestPiece.ItemId.Value, "None") : "None";
                 
                 // Hitung jumlah box UNTUK LABEL INI SAJA (Permintaan user: agregasi per label)
                 var labelStockCount = (decimal)group.Count();
@@ -460,8 +424,10 @@ namespace DeliveryControl.Controllers
                     CurrentStock = labelStockCount, // TETAP: Jumlah box fisik label ini
                     LevelStock = itemLevelStock, // SYNC: Level total item (untuk ikon)
                     Operator = latestPiece.CreatedBy ?? "-", 
-                    Status = status,
-                    LastActivityDate = latestPiece.CreatedDate
+                    Status = itemStatus,
+                    LastActivityDate = latestPiece.CreatedDate,
+                    IsManualAdjust = latestPiece.IsManualAdjust,
+                    AdjustNote = latestPiece.AdjustNote
                 });
             }
             
@@ -471,6 +437,12 @@ namespace DeliveryControl.Controllers
                 .ThenBy(s => s.Plant)
                 .ThenBy(s => s.Location)
                 .ToList();
+
+            // Filter by status if specified
+            if (!string.IsNullOrEmpty(status) && status != "All")
+            {
+                stockDetails = stockDetails.Where(s => s.Status == status).ToList();
+            }
 
             var totalItems = stockDetails.Count;
             int pageSize = 20;
@@ -494,8 +466,10 @@ namespace DeliveryControl.Controllers
             ViewBag.RouteData = new Dictionary<string, string> { 
                 { "plant", plant },
                 { "date", searchDate?.ToString("yyyy-MM-dd") },
-                { "period", period }
+                { "period", period },
+                { "status", status }
             };
+            ViewBag.CurrentStatus = status;
 
             return new StockDashboardViewModel
             {
@@ -610,8 +584,8 @@ namespace DeliveryControl.Controllers
         private async Task<List<DaySnapshot>> GetHistoricalCategorySnapshots(DateTime start, DateTime end, string period = "Month")
         {
             var items = await _context.Items.ToListAsync();
-            var pullings = await _context.PullingRecords.Where(p => p.CreatedDate <= end).OrderBy(p => p.CreatedDate).ToListAsync();
-            var preps = await _context.PreparationRecords.Where(p => p.CreatedDate <= end).OrderBy(p => p.CreatedDate).ToListAsync();
+            var pullings = await _context.PullingRecords.Where(p => p.CreatedDate <= end && p.Remark != "Mismatch").OrderBy(p => p.CreatedDate).ToListAsync();
+            var preps = await _context.PreparationRecords.Where(p => p.CreatedDate <= end && p.Remark != "Mismatch").OrderBy(p => p.CreatedDate).ToListAsync();
 
             var snapshots = new List<DaySnapshot>();
             var availablePullings = new List<PullingRecord>();
@@ -636,8 +610,13 @@ namespace DeliveryControl.Controllers
                     var prep = preps[rIdx];
                     var tag = (prep.Tag ?? "").Trim().ToUpper();
                     var lbl = (prep.Label ?? "").Trim().ToUpper();
+                    // Prioritas 1: match Tag + Label persis (FIFO normal scan)
                     var match = availablePullings.FirstOrDefault(p => 
                         (p.Tag ?? "").Trim().ToUpper() == tag && (p.Label ?? "").Trim().ToUpper() == lbl && p.CreatedDate <= prep.CreatedDate.AddSeconds(5));
+                    // Prioritas 2: match Tag saja tanpa batasan waktu (untuk Manual Adjust — label bisa berbeda)
+                    if (match == null)
+                        match = availablePullings.FirstOrDefault(p => 
+                            (p.Tag ?? "").Trim().ToUpper() == tag);
                     if (match != null) availablePullings.Remove(match);
                     rIdx++;
                 }
@@ -702,17 +681,25 @@ namespace DeliveryControl.Controllers
             };
 
             var allPlants = await _context.StockSnapshots
-                .Where(s => !s.IsManual)
                 .Select(s => s.Plant)
                 .Distinct()
                 .OrderBy(p => p)
                 .ToListAsync();
 
-            var snapshots = await _context.StockSnapshots
+            // Ambil semua snapshot (otomatis & manual) dalam range tanggal
+            // Untuk tiap hari, jika ada otomatis → pakai otomatis. Jika hanya manual → pakai manual.
+            var allSnapshots = await _context.StockSnapshots
                 .Where(s => s.SnapshotDate.Date >= startDate
-                         && s.SnapshotDate.Date <= endDate
-                         && !s.IsManual)
+                         && s.SnapshotDate.Date <= endDate)
                 .ToListAsync();
+
+            // Prioritas per hari per item: auto > manual, jika sama type → ambil yang TERBARU
+            var snapshots = allSnapshots
+                .GroupBy(s => new { s.SnapshotDate.Date, s.ItemCode })
+                .Select(g => g.OrderBy(x => x.IsManual ? 1 : 0)   // auto dulu
+                              .ThenByDescending(x => x.CreatedAt)  // terbaru dulu
+                              .First())
+                .ToList();
 
             var dateRange = Enumerable.Range(0, (endDate - startDate).Days + 1)
                 .Select(i => startDate.AddDays(i))
@@ -736,18 +723,29 @@ namespace DeliveryControl.Controllers
                     };
                 }).ToList();
 
-                // Top 5 item paling sering kritis (<1D dalam periode ini)
+                // Top item paling sering kritis (<1D dalam periode ini)
                 var criticalItems = ps
                     .Where(s => s.StockLevel == "<1D")
                     .GroupBy(s => new { s.ItemCode, s.ItemName })
-                    .Select(g => new
-                    {
-                        g.Key.ItemCode,
-                        g.Key.ItemName,
-                        CriticalDays = g.Select(x => x.SnapshotDate.Date).Distinct().Count(),
+                    .Select(g => {
+                        var latest = ps.Where(x => x.ItemCode == g.Key.ItemCode)
+                                      .OrderByDescending(x => x.SnapshotDate)
+                                      .First();
+                        var vinCode = _context.Items
+                                      .Where(it => it.ItemCode == g.Key.ItemCode)
+                                      .Select(it => it.VIN)
+                                      .FirstOrDefault() ?? g.Key.ItemCode;
+                        return new
+                        {
+                            g.Key.ItemCode,
+                            g.Key.ItemName,
+                            VIN = vinCode,
+                            CriticalDays = g.Select(x => x.SnapshotDate.Date).Distinct().Count(),
+                            CurrentStockLevel = (double)latest.DaysCoverage
+                        };
                     })
                     .OrderByDescending(x => x.CriticalDays)
-                    .Take(5)
+                    .Take(50)
                     .ToList();
 
                 var todayPs = ps.Where(s => s.SnapshotDate.Date == endDate).ToList();
@@ -762,28 +760,86 @@ namespace DeliveryControl.Controllers
                 };
             }).ToList();
 
-            // Summary hari ini
+            // Summary hari ini — per level kategori sesuai request user
             var todayAll = snapshots.Where(s => s.SnapshotDate.Date == endDate).ToList();
+            ViewBag.ShortageCount = todayAll.Count(s => s.StockLevel == "<1D" || s.StockLevel == "<1.5D");
+            ViewBag.NormalCount   = todayAll.Count(s => s.StockLevel == "1.5-2D");
+            ViewBag.OverCount     = todayAll.Count(s => s.StockLevel == "2-3D" || s.StockLevel == ">3D");
+            ViewBag.TodayTotal    = todayAll.Count;
+
+            // Backward-compat alias untuk grafik jika diperlukan
             ViewBag.TodayBelow1D   = todayAll.Count(s => s.StockLevel == "<1D");
-            ViewBag.TodayBelow1_5D = todayAll.Count(s => s.StockLevel == "<1D" || s.StockLevel == "<1.5D");
-            ViewBag.TodayTotal     = todayAll.Count;
+            ViewBag.TodayBelow1_5D = ViewBag.ShortageCount;
             ViewBag.LastSnapshot   = await _context.StockSnapshots
-                .Where(s => !s.IsManual)
                 .OrderByDescending(s => s.CreatedAt)
                 .Select(s => (DateTime?)s.CreatedAt)
                 .FirstOrDefaultAsync();
 
+            var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             ViewBag.AllPlants      = allPlants;
             ViewBag.SelectedLevel  = level;
             ViewBag.SelectedPeriod = period;
-            ViewBag.PlantBreakdown = JsonSerializer.Serialize(plantBreakdown);
+            ViewBag.PlantBreakdown = JsonSerializer.Serialize(plantBreakdown, jsonOpts);
             ViewBag.DateLabels     = JsonSerializer.Serialize(dateRange.Select(d => d.ToString("dd/MM")).ToList());
+            ViewBag.FullDates      = JsonSerializer.Serialize(dateRange.Select(d => d.ToString("yyyy-MM-dd")).ToList());
 
             return View();
         }
 
+        [HttpGet]
+        public async Task<JsonResult> GetCriticalItemsByDay(DateTime date, string level = "1.5D")
+        {
+            var snapshots = await _context.StockSnapshots
+                .Where(s => s.SnapshotDate.Date == date.Date)
+                .ToListAsync();
+
+            // Filter data yang sama (auto vs manual)
+            var daySnaps = snapshots
+                .GroupBy(s => s.ItemCode)
+                .Select(g => g.OrderBy(x => x.IsManual ? 1 : 0)
+                              .ThenByDescending(x => x.CreatedAt)
+                              .First())
+                .ToList();
+
+            var plants = daySnaps.Select(s => s.Plant).Distinct().OrderBy(p => p).ToList();
+
+            // Pre-load VIN map untuk item yang ada di snapshot hari ini
+            var itemCodes = daySnaps.Select(s => s.ItemCode).Distinct().ToList();
+            var vinMap = await _context.Items
+                .Where(it => itemCodes.Contains(it.ItemCode))
+                .Select(it => new { it.ItemCode, it.VIN })
+                .ToDictionaryAsync(it => it.ItemCode, it => it.VIN ?? it.ItemCode);
+
+            var result = plants.Select(p => {
+                var ps = daySnaps.Where(s => s.Plant == p).ToList();
+                
+                // Filter items based on selected level
+                var items = ps.Where(s => {
+                    if (level == "1D") return s.StockLevel == "<1D";
+                    return s.StockLevel == "<1D" || s.StockLevel == "<1.5D";
+                })
+                .Select(s => new {
+                    ItemCode = s.ItemCode,
+                    ItemName = s.ItemName,
+                    VIN = vinMap.TryGetValue(s.ItemCode, out var v) ? v : s.ItemCode,
+                    CurrentStockLevel = (double)s.DaysCoverage
+                })
+                .OrderBy(s => s.CurrentStockLevel)
+                .ToList();
+
+                return new {
+                    Plant = p,
+                    Items = items,
+                    Count = items.Count
+                };
+            }).ToList();
+
+            return Json(result);
+        }
+
         /// <summary>Manual trigger snapshot — hanya Admin</summary>
         [HttpPost]
+        [AuthorizeAdmin]
         public async Task<IActionResult> TriggerSnapshot()
         {
             try
@@ -796,6 +852,29 @@ namespace DeliveryControl.Controllers
                 return Json(new { success = false, message = ex.Message, itemCount = 0 });
             }
         }
+
+        // ── Clear FG Data (Pulling + Preparation) ──────────────────────
+        [HttpPost]
+        [DeliveryControl.Filters.AuthorizeRoles("Admin")]
+        public async Task<IActionResult> ClearFGData()
+        {
+            try
+            {
+                var pullingCount   = await _context.PullingRecords.CountAsync();
+                var snapshotCount  = await _context.StockSnapshots.CountAsync();
+
+                // Clear Data Dashboard FG: hanya PullingRecords dan StockSnapshots
+                _context.PullingRecords.RemoveRange(_context.PullingRecords);
+                _context.StockSnapshots.RemoveRange(_context.StockSnapshots);
+                await _context.SaveChangesAsync();
+
+                return Json(new { success = true, message = $"Berhasil menghapus {pullingCount} data Pulling dan {snapshotCount} data Stock Snapshot. Data Preparation tidak terpengaruh." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = "Gagal: " + ex.Message });
+            }
+        }
     }
 
     public static class DictExtensions {
@@ -804,5 +883,14 @@ namespace DeliveryControl.Controllers
             if (!dict.TryGetValue(key, out var val)) { val = factory(); dict[key] = val; }
             return val;
         }
+    }
+
+    public class NGLogRequest
+    {
+        public string Module { get; set; } = "Preparation";
+        public string? Tag { get; set; }
+        public string? Label { get; set; }
+        public string? Kanban { get; set; }
+        public string? Reason { get; set; }
     }
 }

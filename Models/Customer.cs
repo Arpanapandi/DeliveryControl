@@ -95,6 +95,10 @@ namespace DeliveryControl.Models
         [Display(Name = "Area")]
         public string? Area { get; set; }
 
+        [StringLength(500)]
+        [Display(Name = "Remark Order")]
+        public string? RemarkOrder { get; set; }
+
         [Display(Name = "END PREP")]
         public int StdPrepareTime { get; set; }
 

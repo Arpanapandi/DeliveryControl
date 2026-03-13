@@ -41,31 +41,53 @@
                             <button type="button" class="btn btn-outline-light btn-sm" id="appFullscreenToggle" title="Full Screen">
                                 <i class="bi bi-arrows-fullscreen" id="appFullscreenIcon"></i>
                             </button>
+                            <!-- Light/Dark Mode Toggle -->
+                            <div class="theme-toggle-wrapper ms-2" title="Toggle Light/Dark Mode">
+                                <label class="theme-toggle-label" for="themeToggle">
+                                    <input type="checkbox" id="themeToggle" class="theme-toggle-input">
+                                    <span class="theme-toggle-slider">
+                                        <i class="bi bi-moon-fill theme-icon-dark"></i>
+                                        <i class="bi bi-sun-fill theme-icon-light"></i>
+                                    </span>
+                                </label>
+                            </div>
                         </div>
                     </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link user-profile dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-person-circle fs-4 me-2"></i>
-                            <span>@(Context.Session.GetString("FullName") ?? "User")</span>
-                            @if (Context.Session.GetString("Role") == "Admin")
-                            {
-                                <span class="badge bg-danger ms-2">Admin</span>
-                            }
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li>
-                                <h6 class="dropdown-header">
-                                    <i class="bi bi-person"></i> @(Context.Session.GetString("FullName") ?? "User")
-                                </h6>
-                            </li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li>
-                                <a class="dropdown-item" asp-controller="Account" asp-action="Logout">
-                                    <i class="bi bi-box-arrow-right"></i> Logout
-                                </a>
-                            </li>
-                        </ul>
-                    </li>
+                    @if (string.IsNullOrEmpty(Context.Session.GetString("UserId")))
+                    {
+                        <li class="nav-item">
+                            <a class="btn btn-primary btn-sm px-3 d-flex align-items-center gap-2" asp-controller="Account" asp-action="Login">
+                                <i class="bi bi-box-arrow-in-right"></i>
+                                <span>Login</span>
+                            </a>
+                        </li>
+                    }
+                    else
+                    {
+                        <li class="nav-item dropdown">
+                            <a class="nav-link user-profile dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-person-circle fs-4 me-2"></i>
+                                <span>@(Context.Session.GetString("FullName") ?? "User")</span>
+                                @if (Context.Session.GetString("Role") == "Admin")
+                                {
+                                    <span class="badge bg-danger ms-2">Admin</span>
+                                }
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <h6 class="dropdown-header">
+                                        <i class="bi bi-person"></i> @(Context.Session.GetString("FullName") ?? "User")
+                                    </h6>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item" asp-controller="Account" asp-action="Logout">
+                                        <i class="bi bi-box-arrow-right"></i> Logout
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                    }
                 </ul>
             </div>
         </div>
@@ -82,16 +104,62 @@
             @{
                 var username = (Context.Session.GetString("Username") ?? string.Empty).ToLower();
                 var role = Context.Session.GetString("Role") ?? string.Empty;
-            }
-            <!-- DELIVERY -->
-            <div class="sidebar-divider">
-                <span>DELIVERY</span>
-            </div>
+                bool isGuest = string.IsNullOrEmpty(role);
 
-            @if (username == "driver")
+                bool rbacDashboard      = isGuest || role == "Admin" || role == "User";
+                bool rbacJadwalDelivery = role == "Admin" || role == "User";
+                bool rbacPortalDriver   = role == "Admin" || role == "User" || role == "Driver";
+                bool rbacPulling        = role == "Admin" || role == "Pulling" || role == "User";
+                bool rbacPreparation    = role == "Admin" || role == "Preparation" || role == "User";
+                bool rbacJadwalPrep     = role == "Admin";
+                bool rbacPortalPrep     = role == "Admin" || role == "Leader" || role == "Preparation" || role == "User";
+                bool rbacStock          = isGuest || role == "Admin" || role == "Pulling" || role == "Leader" || role == "User";
+                bool rbacLogScanNG      = role == "Admin" || role == "User";
+                
+                // Baru: Menu folder hanya tampil jika ada item operasional selain dashboard
+                bool showDeliveryMenu   = rbacJadwalDelivery || rbacPortalDriver || rbacPulling || rbacPreparation || rbacJadwalPrep || rbacPortalPrep;
+                bool showStockMenu      = !isGuest && (role == "Admin" || role == "Pulling" || role == "Leader" || role == "User");
+                
+                bool isDriverOnly       = role == "Driver";
+            }
+            <!-- TOP LEVEL DASHBOARDS -->
+            <div class="sidebar-divider">
+                <span>DASHBOARD</span>
+            </div>
+            
+            @if (rbacDashboard)
             {
-                <!-- Hanya portal Driver -->
-                <a asp-controller="Driver" asp-action="Index" class="sidebar-link sidebar-link-group">
+                <a asp-controller="Home" asp-action="Index" class="sidebar-link sidebar-link-group" data-title="Dashboard Shipping">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-speedometer2"></i>
+                        <span>Dashboard Shipping</span>
+                    </div>
+                    <div class="link-glow"></div>
+                </a>
+            }
+
+            @if (rbacStock)
+            {
+                <a asp-controller="Stock" asp-action="Index" class="sidebar-link sidebar-link-group" data-title="Dashboard FG">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-columns-gap"></i>
+                        <span>Dashboard FG</span>
+                    </div>
+                    <div class="link-glow"></div>
+                </a>
+            }
+
+            @if (showDeliveryMenu)
+            {
+                <div class="sidebar-divider">
+                    <span>OPERATIONAL</span>
+                </div>
+            }
+
+            @if (username == "driver" || isDriverOnly)
+            {
+                <!-- Role/username Driver: hanya tampil portal Driver -->
+                <a asp-controller="Driver" asp-action="Index" class="sidebar-link sidebar-link-group" data-title="Portal Driver">
                     <div class="d-flex align-items-center justify-content-between w-100">
                         <span class="d-flex align-items-center gap-2">
                             <i class="bi bi-truck"></i>
@@ -101,124 +169,139 @@
                     <div class="link-glow"></div>
                 </a>
             }
-            else if (username == "prepare" || username == "preparation")
+            else if (showDeliveryMenu)
             {
-                <!-- Hanya portal Preparation -->
-                <a asp-controller="Preparation" asp-action="Index" class="sidebar-link sidebar-link-group">
-                    <div class="d-flex align-items-center justify-content-between w-100">
-                        <span class="d-flex align-items-center gap-2">
-                            <i class="bi bi-box-arrow-in-right"></i>
-                            <span>Portal Preparation</span>
-                        </span>
-                    </div>
-                    <div class="link-glow"></div>
-                </a>
-            }
-            else
-            {
-                <!-- Menu lengkap untuk Admin / User lain -->
-                <button class="sidebar-link sidebar-link-group" type="button" data-bs-toggle="collapse" data-bs-target="#menuDelivery" aria-expanded="false" aria-controls="menuDelivery">
+                <!-- Menu Delivery: tampil berdasarkan role -->
+                <button class="sidebar-link sidebar-link-group" type="button" data-bs-toggle="collapse" data-bs-target="#menuDelivery" aria-expanded="false" aria-controls="menuDelivery" data-title="Delivery">
                     <div class="d-flex align-items-center justify-content-between w-100">
                         <span class="d-flex align-items-center gap-2">
                             <i class="bi bi-truck-front"></i>
-                            <span>DELIVERY</span>
+                            <span>OPERASIONAL DELIVERY</span>
                         </span>
                         <i class="bi bi-chevron-down small"></i>
                     </div>
                     <div class="link-glow"></div>
                 </button>
                 <div class="collapse" id="menuDelivery">
-                    <a asp-controller="Home" asp-action="Index" class="sidebar-link sidebar-link-sub">
-                        <i class="bi bi-speedometer2"></i>
-                        <span>Dashboard Shipping</span>
-                        <div class="link-glow"></div>
-                    </a>
-                    <a asp-controller="Pulling" asp-action="Index" class="sidebar-link sidebar-link-sub">
-                        <i class="bi bi-arrow-down-square"></i>
-                        <span>Pulling</span>
-                        <div class="link-glow"></div>
-                    </a>
-                    <a asp-controller="PreparationWorkflow" asp-action="Index" class="sidebar-link sidebar-link-sub">
-                        <i class="bi bi-clipboard-check"></i>
-                        <span>Preparation</span>
-                        <div class="link-glow"></div>
-                    </a>
-                    @if (role == "Admin")
+
+
+
+                    <!-- Pulling: Admin, Pulling -->
+                    @if (rbacPulling)
                     {
-                        <a asp-controller="PreparationSchedule" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <a asp-controller="Pulling" asp-action="Index" class="sidebar-link sidebar-link-sub" data-title="Pulling">
+                            <i class="bi bi-arrow-down-square"></i>
+                            <span>Pulling</span>
+                            <div class="link-glow"></div>
+                        </a>
+                    }
+
+                    <!-- Preparation (Workflow): Admin, Preparation -->
+                    @if (rbacPreparation)
+                    {
+                        <a asp-controller="PreparationWorkflow" asp-action="Index" class="sidebar-link sidebar-link-sub" data-title="Preparation">
+                            <i class="bi bi-clipboard-check"></i>
+                            <span>Preparation</span>
+                            <div class="link-glow"></div>
+                        </a>
+                    }
+
+                    <!-- Jadwal Preparation: Admin only -->
+                    @if (rbacJadwalPrep)
+                    {
+                        <a asp-controller="PreparationSchedule" asp-action="Index" class="sidebar-link sidebar-link-sub" data-title="Jadwal Preparation">
                             <i class="bi bi-list-check"></i>
                             <span>Jadwal Preparation</span>
                             <div class="link-glow"></div>
                         </a>
                     }
-                    <a asp-controller="Preparation" asp-action="Index" class="sidebar-link sidebar-link-sub">
-                        <i class="bi bi-box-arrow-in-right"></i>
-                        <span>Portal Preparation</span>
-                        <div class="link-glow"></div>
-                    </a>
-                    @if (role == "Admin")
+
+                    <!-- Portal Preparation: Admin, Leader, Preparation -->
+                    @if (rbacPortalPrep)
                     {
-                        <a asp-controller="DeliverySchedules" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                        <a asp-controller="Preparation" asp-action="Index" class="sidebar-link sidebar-link-sub" data-title="Portal Preparation">
+                            <i class="bi bi-box-arrow-in-right"></i>
+                            <span>Portal Preparation</span>
+                            <div class="link-glow"></div>
+                        </a>
+                    }
+
+                    <!-- Jadwal Delivery: Admin, User -->
+                    @if (rbacJadwalDelivery)
+                    {
+                        <a asp-controller="DeliverySchedules" asp-action="Index" class="sidebar-link sidebar-link-sub" data-title="Jadwal Delivery">
                             <i class="bi bi-calendar-check"></i>
                             <span>Jadwal Delivery</span>
                             <div class="link-glow"></div>
                         </a>
                     }
-                    <a asp-controller="Driver" asp-action="Index" class="sidebar-link sidebar-link-sub">
-                        <i class="bi bi-truck"></i>
-                        <span>Portal Driver</span>
-                        <div class="link-glow"></div>
-                    </a>
+
+                    <!-- Portal Driver: Admin, User -->
+                    @if (rbacPortalDriver)
+                    {
+                        <a asp-controller="Driver" asp-action="Index" class="sidebar-link sidebar-link-sub" data-title="Portal Driver">
+                            <i class="bi bi-truck"></i>
+                            <span>Portal Driver</span>
+                            <div class="link-glow"></div>
+                        </a>
+                    }
                 </div>
             }
 
-            <!-- STOCK -->
-            <div class="sidebar-divider">
-                <span>STOCK</span>
-            </div>
-            <button class="sidebar-link sidebar-link-group" type="button" data-bs-toggle="collapse" data-bs-target="#menuStock" aria-expanded="false" aria-controls="menuStock">
-                <div class="d-flex align-items-center justify-content-between w-100">
-                    <span class="d-flex align-items-center gap-2">
-                        <i class="bi bi-box-seam"></i>
-                        <span>Stock</span>
-                    </span>
-                    <i class="bi bi-chevron-down small"></i>
+            <!-- STOCK: Admin, Pulling, Leader -->
+            @if (showStockMenu)
+            {
+                <div class="sidebar-divider">
+                    <span>OPERASIONAL STOCK</span>
                 </div>
-                <div class="link-glow"></div>
-            </button>
-            <div class="collapse" id="menuStock">
-                <a asp-controller="Stock" asp-action="Index" class="sidebar-link sidebar-link-sub">
-                    <i class="bi bi-columns-gap"></i>
-                    <span>Dashboard FG</span>
+                <button class="sidebar-link sidebar-link-group" type="button" data-bs-toggle="collapse" data-bs-target="#menuStock" aria-expanded="false" aria-controls="menuStock" data-title="Stock">
+                    <div class="d-flex align-items-center justify-content-between w-100">
+                        <span class="d-flex align-items-center gap-2">
+                            <i class="bi bi-box-seam"></i>
+                            <span>OPERASIONAL STOCK</span>
+                        </span>
+                        <i class="bi bi-chevron-down small"></i>
+                    </div>
                     <div class="link-glow"></div>
-                </a>
-                <a asp-controller="Stock" asp-action="Trend" class="sidebar-link sidebar-link-sub">
+                </button>
+            <div class="collapse" id="menuStock">
+
+                <a asp-controller="Stock" asp-action="Trend" class="sidebar-link sidebar-link-sub" data-title="Grafik Trend">
                     <i class="bi bi-graph-up"></i>
                     <span>Grafik Trend</span>
                     <div class="link-glow"></div>
                 </a>
-                <a asp-controller="Stock" asp-action="Molded" class="sidebar-link sidebar-link-sub">
+                <a asp-controller="Stock" asp-action="Molded" class="sidebar-link sidebar-link-sub" data-title="Molded">
                     <i class="bi bi-grid-3x3-gap"></i>
                     <span>Molded</span>
                     <div class="link-glow"></div>
                 </a>
-                <a asp-controller="Stock" asp-action="Hose" class="sidebar-link sidebar-link-sub">
+                <a asp-controller="Stock" asp-action="Hose" class="sidebar-link sidebar-link-sub" data-title="Hose">
                     <i class="bi bi-layers"></i>
                     <span>Hose</span>
                     <div class="link-glow"></div>
                 </a>
-                <a asp-controller="Stock" asp-action="RVI" class="sidebar-link sidebar-link-sub">
+                <a asp-controller="Stock" asp-action="RVI" class="sidebar-link sidebar-link-sub" data-title="RVI">
                     <i class="bi bi-cpu"></i>
                     <span>RVI</span>
                     <div class="link-glow"></div>
                 </a>
+                @if (rbacLogScanNG)
+                {
+                <a asp-controller="Stock" asp-action="LogScanNG" class="sidebar-link sidebar-link-sub" data-title="Log Scan NG">
+                    <i class="bi bi-bug-fill" style="color:#ef4444;"></i>
+                    <span style="color:#ef4444;">Log Scan NG</span>
+                    <div class="link-glow"></div>
+                </a>
+                }
             </div>
+            }
 
             <!-- PLANNING -->
             <div class="sidebar-divider">
                 <span>PLANNING</span>
             </div>
-            <button class="sidebar-link sidebar-link-group" type="button" disabled>
+            <button class="sidebar-link sidebar-link-group" type="button" disabled data-title="Planning">
                 <div class="d-flex align-items-center justify-content-between w-100">
                     <span class="d-flex align-items-center gap-2">
                         <i class="bi bi-diagram-3"></i>
@@ -229,13 +312,13 @@
                 <div class="link-glow"></div>
             </button>
 
-            <!-- MASTER DATA -->
+            <!-- MASTER DATA: Admin only -->
             @if (role == "Admin")
             {
                 <div class="sidebar-divider">
                     <span>MASTER DATA</span>
                 </div>
-                <button class="sidebar-link sidebar-link-group" type="button" data-bs-toggle="collapse" data-bs-target="#menuMasterData" aria-expanded="false" aria-controls="menuMasterData">
+                <button class="sidebar-link sidebar-link-group" type="button" data-bs-toggle="collapse" data-bs-target="#menuMasterData" aria-expanded="false" aria-controls="menuMasterData" data-title="Master Data">
                     <div class="d-flex align-items-center justify-content-between w-100">
                         <span class="d-flex align-items-center gap-2">
                             <i class="bi bi-collection"></i>
@@ -246,33 +329,32 @@
                     <div class="link-glow"></div>
                 </button>
                 <div class="collapse" id="menuMasterData">
-                    <a asp-controller="Customers" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                    <a asp-controller="Customers" asp-action="Index" class="sidebar-link sidebar-link-sub" data-title="Customer">
                         <i class="bi bi-building"></i>
                         <span>Customer</span>
                         <div class="link-glow"></div>
                     </a>
-
-                    <a asp-controller="Items" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                    <a asp-controller="Items" asp-action="Index" class="sidebar-link sidebar-link-sub" data-title="Item">
                         <i class="bi bi-boxes"></i>
                         <span>Item</span>
                         <div class="link-glow"></div>
                     </a>
-                    <a asp-controller="ItemMappings" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                    <a asp-controller="ItemMappings" asp-action="Index" class="sidebar-link sidebar-link-sub" data-title="Item Mapping">
                         <i class="bi bi-arrow-left-right"></i>
                         <span>Item Mapping (Customer)</span>
                         <div class="link-glow"></div>
                     </a>
-                    <a asp-controller="Users" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                    <a asp-controller="Users" asp-action="Index" class="sidebar-link sidebar-link-sub" data-title="Manajemen User">
                         <i class="bi bi-people"></i>
                         <span>Manajemen User</span>
                         <div class="link-glow"></div>
                     </a>
-                    <a asp-controller="Settings" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                    <a asp-controller="Settings" asp-action="Index" class="sidebar-link sidebar-link-sub" data-title="Pengaturan Sistem">
                         <i class="bi bi-gear"></i>
                         <span>Pengaturan Sistem</span>
                         <div class="link-glow"></div>
                     </a>
-                    <a asp-controller="ActivityLogs" asp-action="Index" class="sidebar-link sidebar-link-sub">
+                    <a asp-controller="ActivityLogs" asp-action="Index" class="sidebar-link sidebar-link-sub" data-title="Activity Logs">
                         <i class="bi bi-clock-history"></i>
                         <span>Activity Logs</span>
                         <div class="link-glow"></div>
@@ -328,6 +410,7 @@
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/lib/signalr.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="~/js/notification-utils.js" asp-append-version="true"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const fsToggle = document.getElementById('appFullscreenToggle');
@@ -366,6 +449,28 @@
             });
 
             document.addEventListener('fullscreenchange', updateAppFsButton);
+        });
+
+        // === THEME TOGGLE (Light / Dark) ===
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeToggle = document.getElementById('themeToggle');
+            if (!themeToggle) return;
+
+            const savedTheme = localStorage.getItem('app-theme') || 'dark';
+            if (savedTheme === 'light') {
+                document.body.classList.add('light-mode');
+                themeToggle.checked = true;
+            }
+
+            themeToggle.addEventListener('change', function() {
+                if (this.checked) {
+                    document.body.classList.add('light-mode');
+                    localStorage.setItem('app-theme', 'light');
+                } else {
+                    document.body.classList.remove('light-mode');
+                    localStorage.setItem('app-theme', 'dark');
+                }
+            });
         });
     </script>
     @await RenderSectionAsync("Modals", required: false)

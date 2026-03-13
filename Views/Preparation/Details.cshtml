@@ -299,4 +299,34 @@
     </div>
 </div>
 
+@section Scripts {
+    <script src="~/lib/signalr.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            const currentScheduleId = "@Model.ScheduleId";
+            const currentScheduleNumber = "@Model.ScheduleNumber";
 
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/deliveryHub")
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on("deliveryUpdated", function (data) {
+                console.log("Update received from SignalR:", data);
+                
+                // Refresh if the update matches this schedule
+                if (data.scheduleId == currentScheduleId || 
+                    data.scheduleNumber == currentScheduleNumber ||
+                    (data.action === "preparation" && data.scheduleNumber == currentScheduleNumber)) {
+                    
+                    // Simple reload for now to ensure all progress bars and counts are updated
+                    location.reload();
+                }
+            });
+
+            connection.start()
+                .then(() => console.log("SignalR Connected to Delivery Hub"))
+                .catch(err => console.error("SignalR Connection Error: ", err.toString()));
+        });
+    </script>
+}

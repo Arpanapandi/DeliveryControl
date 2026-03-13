@@ -330,7 +330,8 @@ namespace DeliveryControl.Controllers
             {
                 var worksheet = workbook.Worksheets.Add("Template Item");
 
-                // Headers matching UI: NO | KODE | NAMA | PROD. PLANT | RAK | NO RAK | CUST | STATUS | PROD. | VIN | QPC | MIN 1D | ROP 2D | MAX 3D
+                // Headers: NO | LOKASI RACK | PROD. PLANT | RAK | NO RAK | CUST | STATUS | PROD. | VIN | QPC | MIN 1D
+                // ROP 2D dan MAX 3D DIHAPUS dari template — dihitung otomatis saat upload
                 worksheet.Cell(1, 1).Value = "NO";
                 worksheet.Cell(1, 2).Value = "LOKASI RACK";
                 worksheet.Cell(1, 3).Value = "PROD. PLANT";
@@ -342,17 +343,16 @@ namespace DeliveryControl.Controllers
                 worksheet.Cell(1, 9).Value = "VIN";
                 worksheet.Cell(1, 10).Value = "QPC";
                 worksheet.Cell(1, 11).Value = "MIN 1D";
-                worksheet.Cell(1, 12).Value = "ROP 2D";
-                worksheet.Cell(1, 13).Value = "MAX 3D";
 
-                // Style header
-                var headerRange = worksheet.Range(1, 1, 1, 13);
+                // Style header (11 kolom)
+                var headerRange = worksheet.Range(1, 1, 1, 11);
                 headerRange.Style.Font.Bold = true;
                 headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#0f172a");
                 headerRange.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
                 headerRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+                headerRange.Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
 
-                // Example data (v2.2 matching Image 1)
+                // Contoh data
                 worksheet.Cell(2, 1).Value = 1;
                 worksheet.Cell(2, 2).Value = "RVI";
                 worksheet.Cell(2, 3).Value = "Molded";
@@ -362,20 +362,26 @@ namespace DeliveryControl.Controllers
                 worksheet.Cell(2, 7).Value = "Aktif";
                 worksheet.Cell(2, 8).Value = "HBR";
                 worksheet.Cell(2, 9).Value = "VIN001";
-                worksheet.Cell(2, 10).Value = 0;
-                worksheet.Cell(2, 11).Value = 0;
-                worksheet.Cell(2, 12).Value = 0;
-                worksheet.Cell(2, 13).Value = 0;
+                worksheet.Cell(2, 10).Value = 12;
+                worksheet.Cell(2, 11).Value = 5;
 
-                headerRange.RangeUsed().Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
-                
+                // Baris note: ROP 2D dan MAX 3D dihitung otomatis
+                var noteCell = worksheet.Cell(3, 1);
+                noteCell.Value = "ℹ️ ROP 2D dan MAX 3D dihitung OTOMATIS oleh sistem saat upload  →  ROP 2D = MIN 1D × 2  |  MAX 3D = MIN 1D × 3";
+                noteCell.Style.Font.Italic = true;
+                noteCell.Style.Font.Bold = false;
+                noteCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.FromHtml("#b45309");
+                noteCell.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#fef3c7");
+                worksheet.Range(3, 1, 3, 11).Merge();
+                worksheet.Range(3, 1, 3, 11).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Left;
+
                 worksheet.Columns().AdjustToContents();
 
                 using (var stream = new MemoryStream())
                 {
                     workbook.SaveAs(stream);
                     var content = stream.ToArray();
-                    return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Template_Master_Item_Revised.xlsx");
+                    return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Template_Master_Item.xlsx");
                 }
             }
         }
@@ -407,7 +413,7 @@ namespace DeliveryControl.Controllers
                 // 1. Pre-load ALL existing items into memory with COMPOSITE KEY (v9.0)
                 var existingItems = await _context.Items.ToListAsync();
                 var itemDict = existingItems
-                    .ToDictionary(i => $"{NormalizeKey(i.VIN)}|{NormalizeKey(i.ItemName)}|{NormalizeKey(i.Plant)}|{NormalizeKey(i.Rack)}|{NormalizeKey(i.NoRack?.ToString())}|{NormalizeKey(i.Customer)}|{NormalizeKey(i.Category)}|{NormalizeKey(i.QtyLot?.ToString())}|{NormalizeKey(i.RackMin?.ToString())}|{NormalizeKey(i.ROP?.ToString())}|{NormalizeKey(i.RackMax?.ToString())}", i => i);
+                    .ToDictionary(i => $"{NormalizeKey(i.VIN)}|{NormalizeKey(i.ItemName)}|{NormalizeKey(i.Plant)}|{NormalizeKey(i.Rack)}|{NormalizeKey(i.NoRack?.ToString())}|{NormalizeKey(i.Customer)}|{NormalizeKey(i.Category)}|{NormalizeKey(i.QtyLot?.ToString())}|{NormalizeKey(i.RackMin?.ToString())}", i => i);
 
                 using (var stream = new MemoryStream())
                 {
@@ -514,11 +520,15 @@ namespace DeliveryControl.Controllers
                                 string cat = GetSafeString(row, colMap.CategoryCol);
                                 string qpc = GetSafeNumberString(row, colMap.Qpc);
                                 string min = GetSafeNumberString(row, colMap.MinStock);
-                                string rop = GetSafeNumberString(row, colMap.RopStock);
-                                string max = GetSafeNumberString(row, colMap.MaxStock);
 
-                                // v10.0 Comprehensive Composite Key (All Unique Headers)
-                                string compositeKey = $"{NormalizeKey(vin)}|{NormalizeKey(itemName)}|{NormalizeKey(plt)}|{NormalizeKey(rak)}|{NormalizeKey(nrk)}|{NormalizeKey(cust)}|{NormalizeKey(cat)}|{NormalizeKey(qpc)}|{NormalizeKey(min)}|{NormalizeKey(rop)}|{NormalizeKey(max)}";
+                                // AUTO-CALCULATE: ROP 2D = MIN 1D × 2 | MAX 3D = MIN 1D × 3
+                                // Tidak lagi dibaca dari kolom Excel
+                                int min1DVal = ParseInt(min) ?? 0;
+                                string rop = (min1DVal * 2).ToString();
+                                string max = (min1DVal * 3).ToString();
+
+                                // v10.0 Composite Key (tanpa rop/max karena sudah auto-calculate)
+                                string compositeKey = $"{NormalizeKey(vin)}|{NormalizeKey(itemName)}|{NormalizeKey(plt)}|{NormalizeKey(rak)}|{NormalizeKey(nrk)}|{NormalizeKey(cust)}|{NormalizeKey(cat)}|{NormalizeKey(qpc)}|{NormalizeKey(min)}";
                                 
                                 // Capture Samples (First 3 rows)
                                 if (sampleVins.Count < 3) {
@@ -704,19 +714,21 @@ namespace DeliveryControl.Controllers
             item.Plant    = data.Plant;
             item.Rack     = data.Rack;
             item.NoRack   = ParseInt(data.NoRackStr);
-            item.Customer = data.Customer; // RE-ENABLED: User wants this populated in Master Items
+            item.Customer = data.Customer;
             item.Category = data.Category;
             item.VIN      = data.VIN;
             item.QtyLot   = ParseInt(data.QpcStr);
             item.RackMin  = ParseInt(data.MinStr);
-            item.ROP      = ParseInt(data.RopStr);
-            item.RackMax  = ParseInt(data.MaxStr);
+            // AUTO-CALCULATE: ROP 2D = MIN 1D × 2 | MAX 3D = MIN 1D × 3
+            item.ROP      = (item.RackMin ?? 0) * 2;
+            item.RackMax  = (item.RackMin ?? 0) * 3;
             item.IsActive = !data.StatusStr.Equals("Tidak Aktif", StringComparison.OrdinalIgnoreCase);
             item.UpdatedDate = DateTime.Now;
         }
 
         private Item CreateItem(ItemDto data)
         {
+            int min1D = ParseInt(data.MinStr) ?? 0;
             return new Item
             {
                 ItemCode    = Guid.NewGuid().ToString().ToUpper(), // v4.0 Internal Unique Key
@@ -724,13 +736,14 @@ namespace DeliveryControl.Controllers
                 Plant       = data.Plant,
                 Rack        = data.Rack,
                 NoRack      = ParseInt(data.NoRackStr),
-                Customer    = data.Customer, // RE-ENABLED
+                Customer    = data.Customer,
                 Category    = data.Category,
                 VIN         = data.VIN,
                 QtyLot      = ParseInt(data.QpcStr),
-                RackMin     = ParseInt(data.MinStr),
-                ROP         = ParseInt(data.RopStr),
-                RackMax     = ParseInt(data.MaxStr),
+                RackMin     = min1D,
+                // AUTO-CALCULATE: ROP 2D = MIN 1D × 2 | MAX 3D = MIN 1D × 3
+                ROP         = min1D * 2,
+                RackMax     = min1D * 3,
                 IsActive    = !data.StatusStr.Equals("Tidak Aktif", StringComparison.OrdinalIgnoreCase),
                 CreatedDate = DateTime.Now
             };

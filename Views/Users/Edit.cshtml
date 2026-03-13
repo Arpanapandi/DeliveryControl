@@ -98,11 +98,32 @@
                     </div>
 
                     <div id="dockAccessSection" style="display:none;">
+                        <div class="mt-4" id="dockAdminInfo" style="display:none;">
+                            <div class="alert alert-info">
+                                <i class="bi bi-shield-check me-2"></i>
+                                <strong>Admin:</strong> Memiliki akses ke semua dock secara otomatis.
+                            </div>
+                        </div>
+                        <div id="dockPickerSection">
                         <div class="mt-4">
                             <label class="form-label fw-semibold">
-                                <i class="bi bi-grid-3x3 me-1"></i> Penugasan Dock <span class="text-danger">*</span>
+                                <i class="bi bi-grid-3x3 me-1"></i> Penugasan Dock
                             </label>
-                            <div style="border:1.5px solid #d97706;border-radius:10px;overflow:hidden;">
+                            
+                            <!-- Checkbox Semua Dock -->
+                            <div class="mb-3 p-3" style="background:rgba(217,119,6,0.08);border:1.5px solid #d97706;border-radius:10px;">
+                                <div class="form-check">
+                                    <input asp-for="HasAllDockAccess" class="form-check-input" type="checkbox" id="hasAllDockAccess" />
+                                    <label class="form-check-label fw-semibold" for="hasAllDockAccess" style="color:#fbbf24;">
+                                        <i class="bi bi-infinity me-1"></i> Akses Semua Dock
+                                    </label>
+                                </div>
+                                <div class="text-muted small mt-1" style="font-size:.75rem;">
+                                    Jika dicentang, user ini akan otomatis memiliki akses ke semua dock termasuk dock baru yang ditambahkan.
+                                </div>
+                            </div>
+                            
+                            <div id="specificDockPicker" style="border:1.5px solid #d97706;border-radius:10px;overflow:hidden;">
                                 <!-- Header -->
                                 <div class="d-flex justify-content-between align-items-center px-3 py-2"
                                      style="background:rgba(217,119,6,0.12);border-bottom:1px solid rgba(217,119,6,0.3);">
@@ -146,8 +167,9 @@
                                 </div>
                             </div>
                             <div class="mt-2" style="font-size:.78rem;color:#fbbf24;">
-                                <i class="bi bi-info-circle me-1"></i> Wajib pilih minimal 1 dock untuk role Preparation.
+                                <i class="bi bi-info-circle me-1"></i> Wajib pilih minimal 1 dock untuk role Preparation dan Leader.
                             </div>
+                        </div>
                         </div>
                     </div>
 
@@ -178,6 +200,17 @@
                     Jika tidak ingin mengubah password, biarkan field password kosong.
                 </p>
                 <hr class="my-3" />
+                <p class="small text-muted">
+                    <strong>Role:</strong>
+                    <ul class="small">
+                        <li><strong>Admin:</strong> Akses penuh termasuk manajemen user</li>
+                        <li><strong>Leader:</strong> Portal Preparation + Stock Dashboard</li>
+                        <li><strong>Preparation:</strong> Preparation + Portal Preparation</li>
+                        <li><strong>Pulling:</strong> Pulling + Stock Dashboard</li>
+                        <li><strong>User:</strong> Jadwal Delivery + Portal Driver</li>
+                        <li><strong>Driver:</strong> Portal Driver (konfirmasi kedatangan & keberangkatan)</li>
+                    </ul>
+                </p>
                 <a asp-action="Index" class="btn btn-outline-primary btn-sm w-100">
                     <i class="bi bi-arrow-left"></i> Kembali ke Daftar
                 </a>
@@ -190,14 +223,37 @@
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
     <script>
     $(document).ready(function () {
-        // Show/hide dock section
-        function toggleDockSection() {
-            var role = $('#roleSelect').val();
-            if (role === 'Preparation') { $('#dockAccessSection').slideDown(200); }
-            else { $('#dockAccessSection').slideUp(200); }
+        function handleRoleChange(selectedRole) {
+            // Hanya Admin, Leader, Preparation yang tampilkan dock section
+            // User, Pulling, Driver → tidak perlu dock
+            var rolesWithDock = ['Admin', 'Leader', 'Preparation'];
+
+            if (selectedRole === '' || !rolesWithDock.includes(selectedRole)) {
+                // User, Pulling, atau belum pilih → sembunyikan semua
+                $('#dockAccessSection').hide();
+                return;
+            }
+
+            $('#dockAccessSection').show();
+
+            if (selectedRole === 'Admin') {
+                // Admin: tampil info saja, tidak perlu pilih dock
+                $('#dockAdminInfo').show();
+                $('#dockPickerSection').hide();
+            } else {
+                // Leader & Preparation: tampil picker dock
+                $('#dockAdminInfo').hide();
+                $('#dockPickerSection').show();
+            }
         }
-        if ($('#roleSelect').val() === 'Preparation') { $('#dockAccessSection').show(); }
-        $('#roleSelect').on('change', toggleDockSection);
+
+        // Trigger on change
+        $('#roleSelect').on('change', function() {
+            handleRoleChange($(this).val());
+        });
+
+        // Initialize on load with current role
+        handleRoleChange($('#roleSelect').val());
 
         // Search filter
         $('#dockSearch').on('keyup', function() {
@@ -206,6 +262,19 @@
                 $(this).toggle($(this).text().toLowerCase().includes(v));
             });
         });
+
+        // Handle HasAllDockAccess checkbox
+        function toggleSpecificDockPicker() {
+            var hasAll = $('#hasAllDockAccess').is(':checked');
+            if (hasAll) {
+                $('#specificDockPicker').hide();
+            } else {
+                $('#specificDockPicker').show();
+            }
+        }
+        
+        $('#hasAllDockAccess').on('change', toggleSpecificDockPicker);
+        toggleSpecificDockPicker(); // Initialize on load
 
         // Pilih Semua / Batal Semua
         $('#selectAllDocks').on('click', function(e) {

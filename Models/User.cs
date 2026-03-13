@@ -38,6 +38,12 @@ namespace DeliveryControl.Models
 
         public bool IsActive { get; set; } = true;
 
+        /// <summary>
+        /// Jika true, user memiliki akses ke SEMUA dock (termasuk dock baru yang ditambahkan)
+        /// </summary>
+        [Display(Name = "Akses Semua Dock")]
+        public bool HasAllDockAccess { get; set; } = false;
+
         public DateTime CreatedDate { get; set; } = DateTime.Now;
 
         public DateTime? UpdatedDate { get; set; }

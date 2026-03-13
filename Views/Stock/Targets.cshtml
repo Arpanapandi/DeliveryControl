@@ -1,6 +1,7 @@
 @model List<DeliveryControl.Models.Item>
 @{
     ViewData["Title"] = "Manage Stock Targets";
+    const int pageSize = 20;
 }
 
 <div class="row mb-4">
@@ -13,7 +14,6 @@
             <a asp-controller="Items" asp-action="Index" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
                 <i class="bi bi-arrow-left me-1"></i> Kembali ke Master Item
             </a>
-
         </div>
         <hr />
     </div>
@@ -30,10 +30,10 @@
                     </button>
                 </div>
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table table-hover align-middle mb-0" id="targetsTable">
                         <thead class="table-dark">
                             <tr>
-                                <th>Item</th>
+                                <th>Item (VIN)</th>
                                 <th style="width: 80px;">Rak</th>
                                 <th style="width: 80px;">No</th>
                                 <th style="width: 100px;">Qty/Lot</th>
@@ -45,10 +45,11 @@
                         <tbody>
                             @for (int i = 0; i < Model.Count; i++)
                             {
-                                <tr>
+                                var vinDisplay = !string.IsNullOrEmpty(Model[i].VIN) ? Model[i].VIN : Model[i].ItemCode;
+                                <tr class="targets-row" data-page-row="@(i + 1)">
                                     <td>
                                         <input type="hidden" name="updates[@i].ItemId" value="@Model[i].ItemId" />
-                                        <div class="fw-bold text-info">@Model[i].ItemCode</div>
+                                        <div class="fw-bold text-info">@vinDisplay</div>
                                         <div class="small text-muted">@Model[i].ItemName</div>
                                     </td>
                                     <td>
@@ -87,6 +88,13 @@
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Pagination -->
+                <div class="d-flex justify-content-between align-items-center px-3 py-3" id="targetsPaginationBar" style="border-top: 1px solid rgba(255,255,255,0.08);">
+                    <span class="text-muted small" id="targetsPageInfo"></span>
+                    <div id="targetsPagination" class="d-flex gap-1 flex-wrap"></div>
+                </div>
+
                 <div class="card-footer text-end p-3">
                     <button type="submit" class="btn btn-info">
                         <i class="bi bi-save me-1"></i> Save All Changes
@@ -104,4 +112,62 @@
         border-color: #38bdf8;
         box-shadow: 0 0 0 0.25rem rgba(56, 189, 248, 0.25);
     }
+    .tpg-btn {
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.12);
+        color: #94a3b8;
+        border-radius: 5px;
+        padding: 3px 10px;
+        font-size: 0.78rem;
+        cursor: pointer;
+        min-width: 30px;
+        transition: all .15s;
+    }
+    .tpg-btn:hover { background: rgba(56,189,248,0.15); color: #fff; }
+    .tpg-btn.active { background: #0ea5e9; border-color: #0ea5e9; color: #fff; font-weight: 700; }
+    .tpg-btn:disabled { opacity: 0.35; cursor: default; }
 </style>
+
+<script>
+(function() {
+    const PAGE_SIZE = @pageSize;
+    const rows = Array.from(document.querySelectorAll('.targets-row'));
+    const total = rows.length;
+    const totalPages = Math.ceil(total / PAGE_SIZE);
+    let currentPage = 1;
+
+    function showPage(page) {
+        currentPage = page;
+        rows.forEach((r, i) => {
+            const inPage = i >= (page - 1) * PAGE_SIZE && i < page * PAGE_SIZE;
+            r.style.display = inPage ? '' : 'none';
+        });
+        renderPagination();
+        const start = (page - 1) * PAGE_SIZE + 1;
+        const end = Math.min(page * PAGE_SIZE, total);
+        document.getElementById('targetsPageInfo').textContent =
+            `Menampilkan ${start}–${end} dari ${total} item`;
+    }
+
+    function renderPagination() {
+        const el = document.getElementById('targetsPagination');
+        if (totalPages <= 1) { el.innerHTML = ''; return; }
+        let html = `<button class="tpg-btn" onclick="tpgGo(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>‹ Prev</button>`;
+        for (let p = 1; p <= totalPages; p++) {
+            html += `<button class="tpg-btn ${p === currentPage ? 'active' : ''}" onclick="tpgGo(${p})">${p}</button>`;
+        }
+        html += `<button class="tpg-btn" onclick="tpgGo(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next ›</button>`;
+        el.innerHTML = html;
+    }
+
+    window.tpgGo = function(page) {
+        if (page < 1 || page > totalPages) return;
+        showPage(page);
+        document.getElementById('targetsTable').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    // Init
+    if (total > 0) showPage(1);
+    if (totalPages <= 1) document.getElementById('targetsPaginationBar').style.display = 'none';
+})();
+</script>

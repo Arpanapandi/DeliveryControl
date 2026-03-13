@@ -14,6 +14,7 @@ namespace DeliveryControl.Controllers
     /// Controller khusus untuk Portal Preparation - konfirmasi masuk dock
     /// </summary>
     [Authorize]
+    [AuthorizeRoles("Admin", "Preparation", "Leader", "User")]
     public class PreparationController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -44,15 +45,25 @@ namespace DeliveryControl.Controllers
             ViewData["SelectedCycle"] = normalizedCycle;
 
             // 1. Dapatkan izin dock user
-            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var userIdStr = HttpContext.Session.GetString("UserId");
             var sessionRole = HttpContext.Session.GetString("Role");
-            var isUserAdmin = User.IsInRole("Admin") || sessionRole == "Admin";
+            var isUserAdmin = sessionRole == "Admin";
+            var isLeader = sessionRole == "Leader";
+            
+            // Cek apakah user punya HasAllDockAccess flag
+            bool hasAllDockAccess = false;
+            if (int.TryParse(userIdStr, out int userId))
+            {
+                var user = await _context.Users.FindAsync(userId);
+                hasAllDockAccess = user?.HasAllDockAccess ?? false;
+            }
             
             List<int> allowedDockIds = new List<int>();
-            if (!isUserAdmin && int.TryParse(userIdStr, out int userId))
+            // Admin, Leader, atau user dengan HasAllDockAccess tidak perlu filter dock - bisa lihat semua
+            if (!isUserAdmin && !isLeader && !hasAllDockAccess && int.TryParse(userIdStr, out int userIdForDock))
             {
                 allowedDockIds = await _context.UserDockAccesses
-                    .Where(uda => uda.UserId == userId)
+                    .Where(uda => uda.UserId == userIdForDock)
                     .Select(uda => uda.DockId)
                     .ToListAsync();
             }
@@ -64,20 +75,43 @@ namespace DeliveryControl.Controllers
                     .ThenInclude(di => di.Item)
                 .Where(s => s.Status != "Cancelled");
 
-            // Filter oleh dock jika bukan admin
-            if (!isUserAdmin)
+            // Filter oleh dock jika bukan admin, bukan leader, dan tidak HasAllDockAccess
+            if (!isUserAdmin && !isLeader && !hasAllDockAccess)
             {
-                // Ambil kode dock dari ID dock yang diizinkan
-                var allowedDockCodes = await _context.Docks
-                    .Where(d => allowedDockIds.Contains(d.DockId))
-                    .Select(d => d.DockCode)
-                    .ToListAsync();
+                if (!allowedDockIds.Any())
+                {
+                    // Tidak ada dock yang di-assign → tampilkan kosong
+                    query = query.Where(s => false);
+                }
+                else
+                {
+                    // Ambil semua kode & nama dock yang diizinkan (case-insensitive)
+                    var dockData = await _context.Docks
+                        .Where(d => allowedDockIds.Contains(d.DockId))
+                        .Select(d => new { d.DockCode, d.DockName })
+                        .ToListAsync();
 
-                query = query.Where(s => 
-                    // Filter berdasarkan s.Area (Dock) atau s.Customer.Docking sebagai fallback
-                    (allowedDockCodes.Contains(s.Area ?? "") || allowedDockCodes.Contains(s.Customer!.Docking ?? ""))
-                );
+                    var allowedCodeSet = dockData
+                        .SelectMany(d => new[] { d.DockCode ?? "", d.DockName ?? "" })
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim().ToUpper())
+                        .ToHashSet();
+
+                    // Filter: cocokkan schedule ke dock via Area, Docking, CustomerName, atau Customer.Area
+                    var allMatching = await query.ToListAsync();
+                    var filteredIds = allMatching
+                        .Where(s =>
+                            allowedCodeSet.Contains((s.Area ?? "").Trim().ToUpper()) ||
+                            allowedCodeSet.Contains((s.Customer?.Docking ?? "").Trim().ToUpper()) ||
+                            allowedCodeSet.Contains((s.Customer?.CustomerName ?? "").Trim().ToUpper()) ||
+                            allowedCodeSet.Contains((s.Customer?.Area ?? "").Trim().ToUpper()))
+                        .Select(s => s.ScheduleId)
+                        .ToHashSet();
+
+                    query = query.Where(s => filteredIds.Contains(s.ScheduleId));
+                }
             }
+
 
             var allSchedules = await query.ToListAsync();
             
@@ -223,6 +257,15 @@ namespace DeliveryControl.Controllers
             var needAction = groupedSchedules
                 .Where(vm => vm.OverallStatus != "Completed")
                 .ToList();
+
+            // Role Leader: hanya tampilkan card yang status "Prepared" (butuh verifikasi leader)
+            // Card "Scheduled" dan "In Progress" tidak relevan untuk Leader
+            if (sessionRole == "Leader")
+            {
+                needAction = needAction
+                    .Where(vm => vm.OverallStatus == "Prepared")
+                    .ToList();
+            }
             
             var completed = groupedSchedules
                 .Where(vm => vm.OverallStatus == "Completed")
@@ -270,6 +313,7 @@ namespace DeliveryControl.Controllers
         // POST: Preparation/EnterDock/5 - Konfirmasi masuk dock
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [AuthorizeRoles("Admin", "Preparation", "Leader")]
         public async Task<IActionResult> EnterDock(int id, DateTime enterDockTime, string? notes)
         {
             var schedule = await _context.DeliverySchedules.FindAsync(id);
@@ -381,6 +425,7 @@ namespace DeliveryControl.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [AuthorizeRoles("Admin", "Preparation", "Leader")]
         public async Task<IActionResult> GroupReadyToDock(int id)
         {
             var repSchedule = await _context.DeliverySchedules.FindAsync(id);
@@ -440,6 +485,7 @@ namespace DeliveryControl.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [AuthorizeRoles("Admin", "Preparation", "Leader")]
         public async Task<IActionResult> QuickEnterDock(int id)
         {
             var repSchedule = await _context.DeliverySchedules.FindAsync(id);
@@ -455,6 +501,14 @@ namespace DeliveryControl.Controllers
                             s.Area == repSchedule.Area &&
                             (s.ScheduleNumber ?? "").ToUpper().StartsWith(manifestPrefix))
                 .ToListAsync();
+
+            // Guard: semua schedule dalam group harus sudah Leader Verified
+            var notVerified = schedules.Where(s => !s.IsLeaderVerified).ToList();
+            if (notVerified.Any())
+            {
+                TempData["ErrorMessage"] = $"❌ {notVerified.Count} manifest belum diverifikasi leader. Lakukan Leader Verification terlebih dahulu.";
+                return RedirectToAction(nameof(Index), new { selectedDate = repSchedule.ScheduledDate });
+            }
 
             var now = DateTime.Now;
             foreach (var s in schedules)
@@ -492,6 +546,7 @@ namespace DeliveryControl.Controllers
         // POST: Preparation/ConfirmPickup/5 - Quick action untuk konfirmasi keberangkatan truk (Pickup)
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [AuthorizeRoles("Admin", "Preparation", "Leader")]
         public async Task<IActionResult> ConfirmPickup(int id)
         {
             var schedule = await _context.DeliverySchedules.FindAsync(id);
@@ -558,6 +613,384 @@ namespace DeliveryControl.Controllers
             
             var redirectDate = schedule.EnterDockTime?.Date ?? schedule.ScheduledDate;
             return RedirectToAction(nameof(Index), new { selectedDate = redirectDate });
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // LEADER VERIFICATION
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// GET: Ambil data verifikasi untuk modal leader verification
+        /// Mengembalikan list manifest + kanban + status scan preparation untuk satu group card
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetVerificationData(int id)
+        {
+            var sessionRole = HttpContext.Session.GetString("Role");
+            if (sessionRole != "Admin" && sessionRole != "Leader")
+                return Json(new { success = false, message = "Akses ditolak. Hanya Admin atau Leader." });
+
+            var repSchedule = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .FirstOrDefaultAsync(s => s.ScheduleId == id);
+            if (repSchedule == null)
+                return Json(new { success = false, message = "Schedule tidak ditemukan." });
+
+            // Effective area untuk grouping (sama seperti di Index)
+            var effectiveArea = !string.IsNullOrWhiteSpace(repSchedule.Area)
+                ? repSchedule.Area.Trim().ToUpper()
+                : (repSchedule.Customer?.Docking ?? "").Trim().ToUpper();
+
+            // Cari semua schedule dalam TRIP yang sama (Cycle + Route + Area + Tanggal)
+            // Ini memastikan semua manifest dalam 1 card ditampilkan
+            var schedules = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .Include(s => s.DeliveryItems)
+                    .ThenInclude(di => di.Item)
+                .Where(s => s.ScheduledDate.Date == repSchedule.ScheduledDate.Date
+                         && (s.Cycle ?? "").Trim().ToUpper() == (repSchedule.Cycle ?? "").Trim().ToUpper()
+                         && (s.Route ?? "").Trim().ToUpper() == (repSchedule.Route ?? "").Trim().ToUpper()
+                         && ((!string.IsNullOrWhiteSpace(s.Area) ? s.Area.Trim().ToUpper() : (s.Customer != null ? s.Customer.Docking ?? "" : "").Trim().ToUpper()) == effectiveArea))
+                .OrderBy(s => s.ScheduleNumber)
+                .ToListAsync();
+
+            // Hitung kanban per manifest + detail parts
+            var manifestList = schedules.Select(s =>
+            {
+                double kanbanTarget = 0;
+                var partsList = new List<object>();
+                
+                if (s.DeliveryItems != null)
+                {
+                    foreach (var di in s.DeliveryItems)
+                    {
+                        var qpc = di.Item?.QtyLot ?? 1;
+                        var partKanban = qpc > 0 ? (int)Math.Ceiling((double)di.Quantity / qpc) : 0;
+                        kanbanTarget += partKanban;
+                        
+                        // Gunakan CustomerPartNumber jika ada, jika tidak pakai ItemCode
+                        var displayPartNo = !string.IsNullOrWhiteSpace(di.Item?.CustomerPartNumber) 
+                            ? di.Item.CustomerPartNumber 
+                            : di.Item?.ItemCode ?? "-";
+                        
+                        partsList.Add(new
+                        {
+                            itemId = di.ItemId,
+                            partNumber = displayPartNo,
+                            partName = di.Item?.ItemName ?? "-",
+                            quantity = di.Quantity,
+                            qtyLot = qpc,
+                            kanbanCount = partKanban,
+                            unit = di.Unit ?? "PCS"
+                        });
+                    }
+                }
+                var kanbanTarget_i = (int)Math.Round(kanbanTarget);
+                var kanbanScanned  = s.LeaderVerifiedKanbanCount;
+                var isVerified     = s.IsLeaderVerified || kanbanScanned >= kanbanTarget_i && kanbanTarget_i > 0;
+                var mnKey          = ParseManifestKey(s.ScheduleNumber ?? "");
+                return new
+                {
+                    scheduleId     = s.ScheduleId,
+                    scheduleNumber = s.ScheduleNumber ?? "",
+                    manifestKey    = mnKey,
+                    kanbanTarget   = kanbanTarget_i,
+                    kanbanScanned,
+                    isPrepared     = s.PreparationStatus == "Prepared",
+                    isVerified,
+                    parts          = partsList
+                };
+            }).ToList();
+
+            // Progress: total kanban di semua manifest, berapa yang sudah di-scan Leader
+            var totalKanban    = manifestList.Sum(m => m.kanbanTarget);
+            var scannedKanban  = manifestList.Sum(m => Math.Min(m.kanbanScanned, m.kanbanTarget));
+            var totalManifests = manifestList.Count;
+            var verifiedManifests = manifestList.Count(m => m.isVerified);
+
+            return Json(new
+            {
+                success          = true,
+                representativeId = id,
+                dockName         = repSchedule.Area ?? repSchedule.Customer?.CustomerName ?? "—",
+                customerName     = repSchedule.Customer?.CustomerName ?? "—",
+                cycle            = repSchedule.Cycle ?? "",
+                totalKanban,
+                scannedKanban,
+                totalManifests,
+                verifiedManifests,
+                isComplete       = verifiedManifests >= totalManifests && totalManifests > 0,
+                manifests        = manifestList
+            });
+        }
+
+        /// <summary>
+        /// POST: Proses scan manifest saat Leader Verification
+        /// scanInput format: "1231454334/2234" → key = "1231454334" (sebelum /)
+        /// Setiap scan menambah LeaderVerifiedKanbanCount. Manifest dianggap VERIFIED
+        /// ketika LeaderVerifiedKanbanCount >= kanbanTarget manifest tersebut.
+        /// </summary>
+        [HttpPost]
+        [AuthorizeRoles("Admin", "Preparation", "Leader")]
+        public async Task<IActionResult> ScanManifestVerification(int representativeId, string scanInput)
+        {
+            var sessionRole = HttpContext.Session.GetString("Role");
+            var sessionUser = HttpContext.Session.GetString("Username") ?? "Leader";
+
+            if (sessionRole != "Admin" && sessionRole != "Leader")
+                return Json(new { success = false, message = "Akses ditolak. Hanya Admin atau Leader." });
+
+            if (string.IsNullOrWhiteSpace(scanInput))
+                return Json(new { success = false, message = "Input scan kosong." });
+
+            var repSchedule = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .FirstOrDefaultAsync(s => s.ScheduleId == representativeId);
+            if (repSchedule == null)
+                return Json(new { success = false, message = "Schedule tidak ditemukan." });
+
+            // Bersihkan input scan (Part Number dari kanban)
+            var scannedPartNo = scanInput.Trim().ToUpper();
+
+            // Effective area untuk grouping (sama seperti di Index)
+            var effectiveArea = !string.IsNullOrWhiteSpace(repSchedule.Area)
+                ? repSchedule.Area.Trim().ToUpper()
+                : (repSchedule.Customer?.Docking ?? "").Trim().ToUpper();
+
+            // Cari semua schedule dalam TRIP yang sama (Cycle + Route + Area + Tanggal)
+            var schedules = await _context.DeliverySchedules
+                .Include(s => s.Customer)
+                .Include(s => s.DeliveryItems)
+                    .ThenInclude(di => di.Item)
+                .Where(s => s.ScheduledDate.Date == repSchedule.ScheduledDate.Date
+                         && (s.Cycle ?? "").Trim().ToUpper() == (repSchedule.Cycle ?? "").Trim().ToUpper()
+                         && (s.Route ?? "").Trim().ToUpper() == (repSchedule.Route ?? "").Trim().ToUpper()
+                         && ((!string.IsNullOrWhiteSpace(s.Area) ? s.Area.Trim().ToUpper() : (s.Customer != null ? s.Customer.Docking ?? "" : "").Trim().ToUpper()) == effectiveArea))
+                .ToListAsync();
+
+            // Cari schedule yang mengandung Part Number yang di-scan
+            // Match berdasarkan: ItemCode, CustomerPartNumber - dengan partial match
+            DeliverySchedule? matched = null;
+            string matchedPartName = "";
+            
+            foreach (var s in schedules)
+            {
+                if (s.DeliveryItems != null)
+                {
+                    var matchedItem = s.DeliveryItems.FirstOrDefault(di => 
+                        di.Item != null && (
+                            // Exact match ItemCode
+                            (di.Item.ItemCode ?? "").ToUpper() == scannedPartNo ||
+                            // Partial match: ItemCode starts with scanned OR scanned starts with ItemCode
+                            (di.Item.ItemCode ?? "").ToUpper().StartsWith(scannedPartNo) ||
+                            scannedPartNo.StartsWith((di.Item.ItemCode ?? "").ToUpper()) ||
+                            // Match CustomerPartNumber
+                            (di.Item.CustomerPartNumber ?? "").ToUpper() == scannedPartNo ||
+                            (di.Item.CustomerPartNumber ?? "").ToUpper().StartsWith(scannedPartNo) ||
+                            scannedPartNo.StartsWith((di.Item.CustomerPartNumber ?? "").ToUpper())
+                        ));
+                    
+                    if (matchedItem != null)
+                    {
+                        matched = s;
+                        matchedPartName = matchedItem.Item?.ItemName ?? matchedItem.Item?.ItemCode ?? scannedPartNo;
+                        break;
+                    }
+                }
+            }
+
+            if (matched == null)
+                return Json(new { success = false, message = $"Part \"{scannedPartNo}\" tidak ditemukan di manifest ini." });
+
+            // Validasi: preparation harus sudah Prepared
+            if (matched.PreparationStatus != "Prepared")
+                return Json(new { success = false, message = $"Manifest \"{matched.ScheduleNumber}\" belum selesai preparation (status: {matched.PreparationStatus ?? "Scheduled"})." });
+
+            // Hitung kanbanTarget untuk manifest ini
+            double kanbanTargetDouble = 0;
+            if (matched.DeliveryItems != null)
+            {
+                foreach (var di in matched.DeliveryItems)
+                {
+                    var qpc = di.Item?.QtyLot ?? 1;
+                    if (qpc > 0) kanbanTargetDouble += Math.Ceiling((double)di.Quantity / qpc);
+                }
+            }
+            var kanbanTarget = (int)Math.Round(kanbanTargetDouble);
+
+            // Cek apakah sudah fully verified (semua kanban terpenuhi)
+            var manifestKey = ParseManifestKey(matched.ScheduleNumber ?? "");
+            if (matched.IsLeaderVerified || (kanbanTarget > 0 && matched.LeaderVerifiedKanbanCount >= kanbanTarget))
+                return Json(new { success = false, isDuplicate = true, message = $"Manifest \"{manifestKey}\" sudah sepenuhnya diverifikasi ({kanbanTarget}/{kanbanTarget} kanban)." });
+
+            // Tambah count
+            matched.LeaderVerifiedKanbanCount += 1;
+            matched.UpdatedDate = DateTime.Now;
+            matched.UpdatedBy   = sessionUser;
+
+            var newCount   = matched.LeaderVerifiedKanbanCount;
+            var remaining  = kanbanTarget - newCount;
+            var isManifestComplete = kanbanTarget > 0
+                ? newCount >= kanbanTarget
+                : true; // jika tidak ada kanban target, anggap langsung verified
+
+            // Jika kanban manifest ini terpenuhi → tandai IsLeaderVerified
+            if (isManifestComplete)
+            {
+                matched.IsLeaderVerified = true;
+                matched.LeaderVerifiedAt = DateTime.Now;
+                matched.LeaderVerifiedBy = sessionUser;
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Hitung total kanban progress di seluruh group
+            // (ulang hitung karena data sudah ter-update in-memory)
+            int totalKanban   = 0;
+            int scannedKanban = 0;
+            int totalManifests    = schedules.Count;
+            int verifiedManifests = 0;
+
+            foreach (var s in schedules)
+            {
+                double kt = 0;
+                if (s.DeliveryItems != null)
+                {
+                    foreach (var di in s.DeliveryItems)
+                    {
+                        var qpc = di.Item?.QtyLot ?? 1;
+                        if (qpc > 0) kt += Math.Ceiling((double)di.Quantity / qpc);
+                    }
+                }
+                var ktInt = (int)Math.Round(kt);
+                totalKanban   += ktInt;
+                scannedKanban += Math.Min(s.LeaderVerifiedKanbanCount, ktInt);
+                if (s.IsLeaderVerified || (ktInt > 0 && s.LeaderVerifiedKanbanCount >= ktInt))
+                    verifiedManifests++;
+            }
+
+            var isGroupComplete = verifiedManifests >= totalManifests && totalManifests > 0;
+
+            if (isGroupComplete)
+            {
+                // Pastikan semua ter-flag IsLeaderVerified dan set Enter Dock time
+                var enterDockTime = DateTime.Now;
+                foreach (var s in schedules)
+                {
+                    if (!s.IsLeaderVerified)
+                    {
+                        s.IsLeaderVerified = true;
+                        s.LeaderVerifiedAt = DateTime.Now;
+                        s.LeaderVerifiedBy = sessionUser;
+                    }
+                    
+                    // Otomatis set Enter Dock saat verifikasi selesai
+                    if (s.ActualEnterDockTime == null)
+                    {
+                        s.ActualEnterDockTime = enterDockTime;
+                    }
+                    
+                    // Update status ke Loading
+                    if (s.Status == "Prepared" || s.Status == "Ready")
+                    {
+                        s.Status = "Loading";
+                    }
+                    
+                    s.UpdatedDate = DateTime.Now;
+                    s.UpdatedBy = sessionUser;
+                }
+                await _context.SaveChangesAsync();
+
+                await _logService.LogConfirm(
+                    "LeaderVerification",
+                    repSchedule.ScheduleNumber ?? "GROUP",
+                    repSchedule.ScheduleId,
+                    $"Leader Verification selesai - semua {totalManifests} manifest ({totalKanban} kanban) terverifikasi oleh {sessionUser}. Otomatis Dock In.",
+                    sessionUser
+                );
+
+                await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
+                {
+                    action         = "leaderVerificationComplete",
+                    scheduleNumber = repSchedule.ScheduleNumber,
+                    message        = $"Leader Verification selesai untuk {repSchedule.Area}. Status: Loading (Dock In otomatis).",
+                    timestamp      = DateTime.Now
+                });
+            }
+            else
+            {
+                await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
+                {
+                    action         = "manifestVerified",
+                    scheduleNumber = repSchedule.ScheduleNumber,
+                    manifestKey    = manifestKey,
+                    scanned        = scannedKanban,
+                    total          = totalKanban,
+                    timestamp      = DateTime.Now
+                });
+            }
+
+            // Kembalikan data progress terbaru
+            var updatedManifests = schedules.Select(s =>
+            {
+                double kt = 0;
+                if (s.DeliveryItems != null)
+                {
+                    foreach (var di in s.DeliveryItems)
+                    {
+                        var qpc = di.Item?.QtyLot ?? 1;
+                        if (qpc > 0) kt += Math.Ceiling((double)di.Quantity / qpc);
+                    }
+                }
+                var ktInt  = (int)Math.Round(kt);
+                var isVer  = s.IsLeaderVerified || (ktInt > 0 && s.LeaderVerifiedKanbanCount >= ktInt);
+                return new
+                {
+                    scheduleId    = s.ScheduleId,
+                    manifestKey   = ParseManifestKey(s.ScheduleNumber ?? ""),
+                    scheduleNumber= s.ScheduleNumber ?? "",
+                    kanbanTarget  = ktInt,
+                    kanbanScanned = s.LeaderVerifiedKanbanCount,
+                    isVerified    = isVer
+                };
+            }).ToList();
+
+            // Pesan feedback berdasarkan kondisi
+            string feedbackMessage;
+            if (isGroupComplete)
+                feedbackMessage = $"✅ Semua {totalManifests} manifest ({totalKanban} kanban) terverifikasi!";
+            else if (isManifestComplete)
+                feedbackMessage = $"✅ Manifest \"{manifestKey}\" selesai ({kanbanTarget}/{kanbanTarget} kanban).";
+            else
+                feedbackMessage = $"✅ Kanban {newCount}/{kanbanTarget} — Part \"{matchedPartName}\" ({remaining} lagi).";
+
+            return Json(new
+            {
+                success        = true,
+                message        = feedbackMessage,
+                scannedKey     = scannedPartNo,
+                kanbanTarget,
+                kanbanScanned  = newCount,
+                isManifestComplete,
+                totalKanban,
+                scannedKanban,
+                totalManifests,
+                verifiedManifests,
+                isComplete     = isGroupComplete,
+                manifests      = updatedManifests
+            });
+        }
+
+        /// <summary>
+        /// Helper: Parse key manifest dari format "PREFIX/SUFFIX" → ambil PREFIX (sebelum '/')
+        /// </summary>
+        private static string ParseManifestKey(string scheduleNumber)
+        {
+            if (string.IsNullOrWhiteSpace(scheduleNumber)) return string.Empty;
+            var idx = scheduleNumber.IndexOf('/');
+            return idx >= 0
+                ? scheduleNumber.Substring(0, idx).Trim()
+                : scheduleNumber.Trim();
         }
     }
 }

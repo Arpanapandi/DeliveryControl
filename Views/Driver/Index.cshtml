@@ -322,13 +322,16 @@ else
                                         <a asp-action="Arrival" asp-route-id="@trip.RepresentativeScheduleId" class="btn btn-warning">
                                             <i class="bi bi-geo-alt-fill"></i> Konfirmasi Kedatangan
                                         </a>
-                                        <form asp-action="QuickArrival" asp-route-id="@trip.RepresentativeScheduleId" method="post" class="d-inline">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-outline-warning btn-sm w-100" 
-                                                    onclick="return confirm('Konfirmasi kedatangan (GROUP) SEKARANG?')">
-                                                <i class="bi bi-lightning-fill"></i> Quick - Tiba Sekarang
-                                            </button>
-                                        </form>
+                                        @if (Context.Session.GetString("Role") == "Admin")
+                                        {
+                                            <form asp-action="QuickArrival" asp-route-id="@trip.RepresentativeScheduleId" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-warning btn-sm w-100" 
+                                                        onclick="return confirm('Konfirmasi kedatangan (GROUP) SEKARANG?')">
+                                                    <i class="bi bi-lightning-fill"></i> Quick - Tiba Sekarang
+                                                </button>
+                                            </form>
+                                        }
                                     </div>
                                 }
                                 else if (!hasDeparted)
@@ -338,13 +341,16 @@ else
                                         <a asp-action="Departure" asp-route-id="@trip.RepresentativeScheduleId" class="btn btn-info">
                                             <i class="bi bi-arrow-right-circle-fill"></i> Konfirmasi Keberangkatan
                                         </a>
-                                        <form asp-action="QuickDeparture" asp-route-id="@trip.RepresentativeScheduleId" method="post" class="d-inline">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-outline-info btn-sm w-100" 
-                                                    onclick="return confirm('Konfirmasi keberangkatan (GROUP) SEKARANG?')">
-                                                <i class="bi bi-lightning-fill"></i> Quick - Berangkat Sekarang
-                                            </button>
-                                        </form>
+                                        @if (Context.Session.GetString("Role") == "Admin")
+                                        {
+                                            <form asp-action="QuickDeparture" asp-route-id="@trip.RepresentativeScheduleId" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-info btn-sm w-100" 
+                                                        onclick="return confirm('Konfirmasi keberangkatan (GROUP) SEKARANG?')">
+                                                    <i class="bi bi-lightning-fill"></i> Quick - Berangkat Sekarang
+                                                </button>
+                                            </form>
+                                        }
                                     </div>
                                 }
                                 else
@@ -523,27 +529,32 @@ else
 }
 
 @section Scripts {
+    <script src="~/lib/signalr.min.js"></script>
     <script>
-        // Pastikan form submit dengan benar dan mempertahankan nilai
-        document.addEventListener('DOMContentLoaded', function() {
-            var filterForm = document.getElementById('filterForm');
-            
-            if (filterForm) {
-                // Form automatic submission for other inputs is already handled by inline onchange
-                console.log('Driver Portal Filter Form initialized');
-            }
-        });
+        $(document).ready(function() {
+            // SignalR Connection
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/deliveryHub")
+                .withAutomaticReconnect()
+                .build();
 
-        // Auto refresh setiap 60 detik
-        setTimeout(function() {
-            location.reload();
-        }, 60000);
-        
-        // Highlight waktu real-time
-        setInterval(function() {
-            var now = new Date();
-            var timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-            document.title = timeStr + ' - Portal Driver';
-        }, 1000);
+            connection.on("deliveryUpdated", function (data) {
+                console.log("Update received from SignalR:", data);
+                // Trigger full reload or AJAX refresh. 
+                // For the Driver Portal, a full reload is safer to ensure trip grouping logic is re-run.
+                location.reload();
+            });
+
+            connection.start()
+                .then(() => console.log("SignalR Connected to Delivery Hub"))
+                .catch(err => console.error("SignalR Connection Error: ", err.toString()));
+
+            // Highlight waktu real-time
+            setInterval(function() {
+                var now = new Date();
+                var timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                document.title = timeStr + ' - Portal Driver';
+            }, 1000);
+        });
     </script>
 }

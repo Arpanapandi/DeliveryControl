@@ -74,6 +74,9 @@ namespace DeliveryControl.Services
                 var snapshotDate = DateTime.Today;
                 var snapshotTime = isManual ? DateTime.Now.TimeOfDay : _cutoffTime;
 
+                // Tanaman yang valid (sesuai sistem)
+                var validPlants = new[] { "Hose", "Molded", "RVI" };
+
                 // Hindari duplikat snapshot otomatis di hari yang sama
                 if (!isManual)
                 {
@@ -85,39 +88,70 @@ namespace DeliveryControl.Services
                         return (0, "Snapshot otomatis hari ini sudah ada.");
                     }
                 }
-
-                // ΓöÇΓöÇ Hitung stock tiap item (logika sama dengan GetStockViewModel) ΓöÇΓöÇ
-                // Ambil semua pulling records & preparation records
-                var pullings = await context.PullingRecords
-                    .Include(p => p.Item)
-                    .ToListAsync();
-
-                var preps = await context.PreparationRecords
-                    .OrderBy(p => p.CreatedDate)
-                    .ToListAsync();
-
-                // Simulasikan stock: pulling masuk dikurangi yang sudah keluar (prep/delivery)
-                // Gunakan Tag+Label matching (sesuai logika existing StockController)
-                var availablePullings = new List<PullingRecord>(pullings.OrderBy(p => p.CreatedDate));
-
-                // Kurangi item yang sudah di-prepare (keluar dari stock)
-                foreach (var prep in preps.OrderBy(p => p.CreatedDate))
+                else
                 {
-                    var tag = (prep.Tag ?? "").Trim().ToUpper();
-                    var lbl = (prep.Label ?? "").Trim().ToUpper();
-                    var match = availablePullings.FirstOrDefault(p =>
-                        (p.Tag ?? "").Trim().ToUpper() == tag &&
-                        (p.Label ?? "").Trim().ToUpper() == lbl &&
-                        p.CreatedDate <= prep.CreatedDate.AddSeconds(5));
-                    if (match != null)
-                        availablePullings.Remove(match);
+                    // Untuk manual: hapus semua snapshot hari ini (auto & manual) lalu buat ulang
+                    // Ini memastikan data lama yang salah selalu tergantikan
+                    var todaySnapshots = context.StockSnapshots
+                        .Where(s => s.SnapshotDate.Date == snapshotDate);
+                    context.StockSnapshots.RemoveRange(todaySnapshots);
+                    await context.SaveChangesAsync();
+                    _logger.LogInformation("Snapshot hari ini dihapus sebelum snapshot manual baru.");
                 }
 
-                // Group per item
-                var stockByItem = availablePullings
+                // ── STOCK CALCULATION: identik dengan GetStockViewModel (FIFO) ──────────────
+                // 1. Ambil SEMUA pulling records (tanpa batas waktu)
+                var pullings = await context.PullingRecords
+                    .Include(p => p.Item)
+                    .OrderBy(p => p.CreatedDate).ThenBy(p => p.PullingId)
+                    .ToListAsync();
+
+                // 2. Ambil SEMUA preparation records (tanpa batas waktu)
+                var preps = await context.PreparationRecords
+                    .OrderBy(p => p.CreatedDate).ThenBy(p => p.PreparationId)
+                    .ToListAsync();
+
+                // 3. FIFO matching: setiap prep mengkonsumsi 1 pulling tertua yang cocok
+                var consumedPullingIds = new HashSet<int>();
+                foreach (var prep in preps)
+                {
+                    var prepTag   = (prep.Tag   ?? "").Trim().ToUpper();
+                    var prepLabel = (prep.Label ?? "").Trim().ToUpper();
+
+                    var match = pullings.FirstOrDefault(p =>
+                        !consumedPullingIds.Contains(p.PullingId) &&
+                        (p.Tag   ?? "").Trim().ToUpper() == prepTag  &&
+                        (p.Label ?? "").Trim().ToUpper() == prepLabel &&
+                        p.CreatedDate <= prep.CreatedDate.AddSeconds(10));
+
+                    if (match != null)
+                        consumedPullingIds.Add(match.PullingId);
+                }
+
+                // 4. Stok yang masih ada = pulling yang belum dikonsumsi
+                var inStockPieces = pullings
+                    .Where(p => !consumedPullingIds.Contains(p.PullingId))
+                    .ToList();
+
+                // 5. Group per item → jumlah stock per item (hanya item yang pernah masuk stok)
+                var stockByItem = inStockPieces
                     .Where(p => p.ItemId.HasValue)
                     .GroupBy(p => p.ItemId!.Value)
                     .ToDictionary(g => g.Key, g => g.Count());
+
+                // Set ItemId yang PERNAH punya pulling record (pernah masuk ke stok)
+                var everPulledItemIds = pullings
+                    .Where(p => p.ItemId.HasValue)
+                    .Select(p => p.ItemId!.Value)
+                    .ToHashSet();
+
+                // Plant lookup dari semua pulling (termasuk yang sudah dikonsumsi)
+                var plantByItem = pullings
+                    .Where(p => p.ItemId.HasValue)
+                    .GroupBy(p => p.ItemId!.Value)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.OrderByDescending(x => x.CreatedDate).First().Plant ?? "Unknown");
 
                 var items = await context.Items
                     .Where(i => i.IsActive)
@@ -127,6 +161,11 @@ namespace DeliveryControl.Services
 
                 foreach (var item in items)
                 {
+                    // SKIP item yang belum pernah punya pulling record
+                    // (belum pernah masuk stok → tidak relevan untuk critical stock monitoring)
+                    if (!everPulledItemIds.Contains(item.ItemId))
+                        continue;
+
                     var stockQty = stockByItem.GetValueOrDefault(item.ItemId, 0);
                     var rackMin  = item.RackMin ?? 5;
 
@@ -143,11 +182,13 @@ namespace DeliveryControl.Services
                         _       => ">3D"
                     };
 
-                    // Ambil Plant dari pulling record terbaru item ini
-                    var plant = availablePullings
-                        .LastOrDefault(p => p.ItemId == item.ItemId)?.Plant
-                        ?? item.Plant
-                        ?? "Unknown";
+                    var plant = plantByItem.GetValueOrDefault(item.ItemId)
+                             ?? item.Plant
+                             ?? "";
+
+                    // SKIP item dengan plant tidak valid (hanya Hose/Molded/RVI)
+                    if (!validPlants.Contains(plant, StringComparer.OrdinalIgnoreCase))
+                        continue;
 
                     snapshots.Add(new StockSnapshot
                     {

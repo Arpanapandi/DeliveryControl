@@ -1,4 +1,4 @@
-@model IEnumerable<DeliveryControl.Models.DeliverySchedule>
+@model DeliveryControl.Models.ViewModels.GanttChartViewModel
 
 @{
     ViewData["Title"] = "Gantt Chart - Jadwal Delivery";
@@ -58,17 +58,17 @@
 <!-- Filter Reset Button -->
 <div class="row mb-3" id="filterResetRow" style="display: none;">
     <div class="col-12 text-end">
-        <button class="btn btn-outline-light btn-sm" onclick="filterGanttRows('all')">
+        <button class="btn btn-outline-light btn-sm" onclick="resetDockFilter()">
             <i class="bi bi-arrow-clockwise"></i> Reset Filter
         </button>
     </div>
 </div>
 
 <!-- Gantt Chart Container -->
-@if (!Model.Any())
+@if (!Model.Rows.Any())
 {
     <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i> Tidak ada jadwal delivery untuk periode yang dipilih.
+        <i class="bi bi-info-circle"></i> Tidak ada customer aktif yang ditemukan. Tambahkan customer terlebih dahulu.
     </div>
 }
 else
@@ -94,593 +94,720 @@ else
                     <i class="bi bi-arrow-down-up" id="ganttAutoScrollIcon"></i>
                     <span id="ganttAutoScrollText">Auto Scroll: ON</span>
                 </button>
+                <button type="button" class="btn btn-sm btn-outline-info" id="ganttDockFilterBtn" title="Filter Dock" data-bs-toggle="modal" data-bs-target="#dockFilterModal">
+                    <i class="bi bi-funnel-fill"></i> Filter Dock
+                </button>
                 <button type="button" class="btn btn-sm btn-outline-light gantt-fullscreen-btn ms-lg-2" id="ganttFullscreenToggle">
                     <i class="bi bi-arrows-fullscreen" id="ganttFullscreenIcon"></i> Full Screen
                 </button>
             </div>
         </div>
         <div class="card-body p-0">
-            <div id="ganttChart" style="display: flex; flex-direction: column; max-height: 70vh; overflow-y: auto; overflow-x: hidden;">
-                <!-- Timeline Header (Fixed) - 18:00 (H-1) to 23:00 (H) = 30 hours -->
-                <div style="display: flex; border-bottom: 3px solid #3b82f6; position: sticky; top: 0; z-index: 100;">
-                    <div style="width: 180px; min-width: 180px; background: #0f172a; padding: 12px; font-weight: 700; color: #60a5fa; text-transform: uppercase; font-size: 0.85rem; border-right: 3px solid #3b82f6; box-sizing: border-box; opacity: 1; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);">
+            @{
+                // =====================================================================
+                // LAYOUT TIMELINE:
+                //   H-1   : kemarin 18:00–24:00 → col 0–5   (6 jam)   — hanya untuk data delay
+                //   H     : hari ini  00:00–24:00 → col 6–29 (24 jam)  — UTAMA
+                //   H+1   : besok    00:00–12:00 → col 30–41 (12 jam)
+                // Total 42 jam × 40px = 1680px
+                // =====================================================================
+                const int colPx = 40;
+                const int totalCols = 42;
+                const int timelineMinPx = colPx * totalCols; // 1680px
+                const int custColPx = 150;
+                const int remColPx  = 90;
+            }
+            <div id="ganttChart" style="display: flex; flex-direction: column; max-height: 82vh; overflow-y: auto; overflow-x: auto;">
+                <!-- Timeline Header (Fixed) -->
+                <div style="display: flex; border-bottom: 3px solid #3b82f6; position: sticky; top: 0; z-index: 100; min-width: @(custColPx + remColPx + timelineMinPx)px;">
+                    <div style="width: @(custColPx)px; min-width: @(custColPx)px; background: #0f172a; padding: 8px 6px; font-weight: 700; color: #60a5fa; text-transform: uppercase; font-size: 0.75rem; border-right: 2px solid #3b82f6; box-sizing: border-box; flex-shrink: 0; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); position: sticky; left: 0; z-index: 101;">
                         Customer / Schedule
                     </div>
-                    <div style="flex: 1; background: #0f172a; position: relative; overflow: hidden;">
-                        <!-- H-1 Header (18:00-23:59) - Gray, ~20% width -->
-                        <div style="position: absolute; top: 0; left: 0; width: 20%; height: 20px; background: rgba(100, 116, 139, 0.3); display: flex; align-items: center; justify-content: center; border-bottom: 1px solid rgba(148, 163, 184, 0.3);">
+                    <div style="width: @(remColPx)px; min-width: @(remColPx)px; background: #0f172a; padding: 8px 6px; font-weight: 700; color: #fbbf24; text-transform: uppercase; font-size: 0.72rem; border-right: 3px solid #3b82f6; box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; justify-content: center; text-align: center; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); position: sticky; left: @(custColPx)px; z-index: 101;">
+                        Remark Order
+                    </div>
+                    <div style="width: @(timelineMinPx)px; min-width: @(timelineMinPx)px; background: #0f172a; position: relative; flex-shrink: 0;">
+                        @{
+                            // Pixel positions berdasarkan colPx per jam (exact, tidak pakai %)
+                            int h1Cols    = 6;   // H-1: col 0-5
+                            int todayCols = 24;  // Today: col 6-29
+                            // H+1: col 30-41
+                            int h1PxStart    = 0;
+                            int todayPxStart = h1Cols * colPx;
+                            int h1PlusPxStart = (h1Cols + todayCols) * colPx;
+                            int h1PxWidth    = h1Cols * colPx;
+                            int todayPxWidth = todayCols * colPx;
+                            int h1PlusPxWidth = (totalCols - h1Cols - todayCols) * colPx;
+                        }
+                        <!-- H-1 Header (18:00-24:00) - Gray -->
+                        <div style="position: absolute; top: 0; left: @(h1PxStart)px; width: @(h1PxWidth)px; height: 20px; background: rgba(100, 116, 139, 0.3); display: flex; align-items: center; justify-content: center; border-bottom: 1px solid rgba(148, 163, 184, 0.3);">
                             <span style="font-size: 0.7rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">H-1 (18:00-24:00)</span>
                         </div>
-                        <!-- HARI INI Header (00:00-23:59) - Blue, ~80% width -->
-                        <div style="position: absolute; top: 0; left: 20%; width: 80%; height: 20px; background: rgba(59, 130, 246, 0.2); display: flex; align-items: center; justify-content: center; border-bottom: 1px solid rgba(59, 130, 246, 0.4); border-left: 2px solid #60a5fa;">
+                        <!-- HARI INI Header (00:00-24:00) - Blue -->
+                        <div style="position: absolute; top: 0; left: @(todayPxStart)px; width: @(todayPxWidth)px; height: 20px; background: rgba(59, 130, 246, 0.2); display: flex; align-items: center; justify-content: center; border-bottom: 1px solid rgba(59, 130, 246, 0.4); border-left: 2px solid #60a5fa;">
                             <span style="font-size: 0.7rem; font-weight: 600; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.5px;">HARI INI (00:00-24:00)</span>
                         </div>
-                        
-                        <div style="display: grid; grid-template-columns: repeat(30, 1fr); height: 45px; width: 100%; padding-top: 20px;">
-                            @for (int i = 0; i < 30; i++)
+                        <!-- H+1 Header (00:00-12:00) - Purple -->
+                        <div style="position: absolute; top: 0; left: @(h1PlusPxStart)px; width: @(h1PlusPxWidth)px; height: 20px; background: rgba(168, 85, 247, 0.2); display: flex; align-items: center; justify-content: center; border-bottom: 1px solid rgba(168, 85, 247, 0.4); border-left: 2px solid #a855f7;">
+                            <span style="font-size: 0.7rem; font-weight: 600; color: #c084fc; text-transform: uppercase; letter-spacing: 0.5px;">H+1 (00:00-12:00)</span>
+                        </div>
+
+                        <!-- Hour labels grid — setiap jam ditampilkan -->
+                        <div style="display: grid; grid-template-columns: repeat(@totalCols, @(colPx)px); height: 45px; width: @(timelineMinPx)px; padding-top: 20px;">
+                            @for (int i = 0; i < totalCols; i++)
                             {
-                                // Hours: 18,19,20,21,22,23 (H-1), then 0-23 (H)
-                                var actualHour = i < 6 ? (i + 18) : (i - 6);
-                                var isDay2 = i >= 6;
+                                int actualHour;
+                                string zone;
+                                if (i < 6) { actualHour = i + 18; zone = "h1"; }
+                                else if (i < 30) { actualHour = i - 6; zone = "today"; }
+                                else { actualHour = i - 30; zone = "h1plus"; }
+
+                                var isMidnightToday  = zone == "today"  && actualHour == 0;
+                                var isMidnightH1plus = zone == "h1plus" && actualHour == 0;
                                 var isMainHour = actualHour % 6 == 0;
-                                var isMidnight = actualHour == 0 && isDay2;
-                                var borderColor = isMidnight ? "#60a5fa" : (isMainHour ? "#60a5fa" : "rgba(148, 163, 184, 0.25)");
-                                var borderWidth = isMidnight ? "3px" : (isMainHour ? "2px" : "1px");
-                                var textColor = isDay2 ? "#60a5fa" : "#94a3b8";
-                                
-                                <div style="border-right: @borderWidth solid @borderColor; 
+                                string borderColor, borderWidth, textColor;
+
+                                if (isMidnightToday)       { borderColor = "#60a5fa"; borderWidth = "3px"; }
+                                else if (isMidnightH1plus) { borderColor = "#a855f7"; borderWidth = "3px"; }
+                                else if (isMainHour && zone == "h1plus") { borderColor = "#c084fc"; borderWidth = "2px"; }
+                                else if (isMainHour)       { borderColor = "#60a5fa"; borderWidth = "2px"; }
+                                else                       { borderColor = "rgba(148, 163, 184, 0.25)"; borderWidth = "1px"; }
+
+                                textColor = zone == "h1plus" ? "#c084fc" : (zone == "today" ? "#60a5fa" : "#94a3b8");
+
+                                <div style="border-right: @borderWidth solid @borderColor;
                                             display: flex;
                                             align-items: center;
                                             justify-content: center;
-                                            position: relative;">
-                                    @if (i % 2 == 0 || isMidnight)
-                                    {
-                                        <span style="font-size: 0.7rem; 
-                                                     font-weight: @(isMainHour || isMidnight ? "700" : "500");
-                                                     color: @textColor;
-                                                     opacity: 1;
-                                                     text-shadow: 0 1px 2px rgba(0,0,0,0.3);">
-                                            @actualHour.ToString("D2"):00
-                                        </span>
-                                    }
+                                            position: relative;
+                                            overflow: visible;">
+                                    <!-- Setiap jam ditampilkan — kolom cukup lebar (@(colPx)px) -->
+                                    <span style="font-size: 0.62rem;
+                                                 font-weight: @(isMainHour || isMidnightToday || isMidnightH1plus ? "700" : "500");
+                                                 color: @textColor;
+                                                 white-space: nowrap;
+                                                 text-shadow: 0 1px 2px rgba(0,0,0,0.3);">
+                                        @actualHour.ToString("D2"):00
+                                    </span>
                                 </div>
                             }
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Scrollable Content -->
                 <div id="ganttBody">
-                    <div style="display: flex; flex-direction: column;">
-                    <table class="table mb-0" style="table-layout: fixed; width: 100%; border-collapse: collapse;">
+                    <div style="display: flex; flex-direction: column; min-width: @(custColPx + remColPx + timelineMinPx)px;">
+                    <table class="table mb-0" style="table-layout: fixed; width: @(custColPx + remColPx + timelineMinPx)px; border-collapse: separate; border-spacing: 0;">
                         <tbody>
         @{
-            var ganttGroups = Model
-                .GroupBy(s => new {
-                    Dock     = s.Customer?.CustomerName ?? "-",
-                    Cycle    = s.Cycle ?? "",
-                    CustId   = s.CustomerId
-                })
-                .OrderBy(g => g.Key.Dock)
-                .ThenBy(g => g.Key.Cycle);
-        }
-        @foreach (var grp in ganttGroups)
-                        {
-                            // Representative schedule (for Customer, Status, ScheduledDate, etc.)
-                            var schedule = grp.OrderBy(s => s.PickupTime ?? s.ScheduledDate).First();
-                            int grpCount = grp.Count();
+            // =====================================================================
+            // Helper: konversi DateTime ke posisi pixel di timeline 42 jam
+            //
+            // PENTING — aturan penempatan:
+            //   • Data "planned" (prepare, enterDock, pickup, ETD) selalu di hari selectedDate (H)
+            //     karena startPrepMins / docking / pickup adalah jam di HARI INI bukan kemarin.
+            //   • H-1 (kiri, 6 kolom) dipakai HANYA untuk data AKTUAL yang terjadi kemarin
+            //     (mis. actualStartTime.Date == selectedDate-1)
+            //
+            // FORMULA pixel dari kiri:
+            //   H-1 zone  : dt adalah kemarin & jam 18-24 → offset = (hour-18)*colPx
+            //   H zone    : dt adalah hari ini             → offset = (6 + hour)*colPx  + minutes/60*colPx
+            //   H+1 zone  : dt adalah besok & jam 0-12    → offset = (30 + hour)*colPx + minutes/60*colPx
+            // =====================================================================
+            double DateTimeToPx(DateTime dt, DateTime selDate) {
+                double px;
+                if (dt.Date == selDate.Date.AddDays(-1)) {
+                    // Kemarin — muncul di H-1 zone (hanya jam 18-24 yang visible)
+                    double h = dt.Hour + dt.Minute / 60.0;
+                    double col = h - 18.0; // col 0-6
+                    if (col < 0) col = 0;
+                    px = col * colPx;
+                } else if (dt.Date == selDate.Date) {
+                    // Hari ini (H) — zone utama col 6-29
+                    double h = dt.Hour + dt.Minute / 60.0;
+                    px = (6.0 + h) * colPx;
+                } else if (dt.Date == selDate.Date.AddDays(1)) {
+                    // Besok (H+1) — zone col 30-41
+                    double h = dt.Hour + dt.Minute / 60.0;
+                    double col = 30.0 + h;
+                    if (col > 42.0) col = 42.0;
+                    px = col * colPx;
+                } else if (dt < selDate.Date) {
+                    // Lebih dari 1 hari lalu → clamp ke px 0
+                    px = 0;
+                } else {
+                    // Lebih dari 1 hari ke depan → clamp ke px max
+                    px = 42.0 * colPx;
+                }
+                return px;
+            }
+            double WidthInPercent42(double durationHours) {
+                return durationHours * colPx; // jam → pixels
+            }
 
-                            // Aggregate timing across all schedules in the group
-                            var pickupTime = grp.Any(s => s.PickupTime.HasValue)
-                                ? grp.Where(s => s.PickupTime.HasValue).Min(s => s.PickupTime!.Value)
-                                : schedule.ScheduledDate.AddHours(8);
-                            var etdTime = grp.Any(s => s.ETD.HasValue)
-                                ? grp.Where(s => s.ETD.HasValue).Max(s => s.ETD!.Value)
-                                : schedule.ScheduledDate.AddHours(12);
-                            var actualStartTime = grp.Any(s => s.ActualStartTime.HasValue)
-                                ? grp.Where(s => s.ActualStartTime.HasValue).Min(s => s.ActualStartTime)
-                                : (DateTime?)null;
-                            var actualEndTime = grp.Any(s => s.ActualEndTime.HasValue)
-                                ? grp.Where(s => s.ActualEndTime.HasValue).Max(s => s.ActualEndTime)
-                                : (DateTime?)null;
-                            var enterDockTime = grp.Any(s => s.EnterDockTime.HasValue)
-                                ? grp.Where(s => s.EnterDockTime.HasValue).Min(s => s.EnterDockTime)
-                                : (DateTime?)null;
-                            var actualEnterDockTime = grp.Any(s => s.ActualEnterDockTime.HasValue)
-                                ? grp.Where(s => s.ActualEnterDockTime.HasValue).Min(s => s.ActualEnterDockTime)
-                                : (DateTime?)null;
+            // Snap bar ke batas kolom jam jika lebar bar < 1 kolom (colPx).
+            // Mengembalikan (snappedLeft, snappedWidth) agar bar mengisi kolom jam penuh.
+            // Label tetap menampilkan waktu asli — hanya visual bar yang diperlebar.
+            (double left, double width) SnapBarToCol(double leftPx, double widthPx) {
+                if (widthPx >= colPx) return (leftPx, widthPx); // sudah ≥ 1 kolom, tidak perlu snap
+                // Snap left ke batas kolom jam terdekat ke kiri
+                double snappedLeft = Math.Floor(leftPx / colPx) * colPx;
+                return (snappedLeft, colPx);
+            }
+        }
+
+        @foreach (var row in Model.Rows)
+        {
+            var customer = row.Customer;
+            var schedules = row.Schedules;
+            int schCount = schedules.Count;
+            var selectedDate = Model.SelectedDate;
+
+            // ========================
+            // Timing: prioritize from schedules, fallback to Customer master
+            // ========================
+
+            // PickupTime
+            DateTime? pickupTime = null;
+            DateTime? etdTime = null;
+            DateTime? enterDockTime = null;
+            DateTime? actualEnterDockTime = null;
+            DateTime? actualStartTime = null;
+            DateTime? actualEndTime = null;
+            int startPrepMins = 0;
+            int stdPrepMins = 0;
+
+            if (schedules.Any())
+            {
+                pickupTime = schedules.Where(s => s.PickupTime.HasValue).Select(s => s.PickupTime).Min();
+                etdTime = schedules.Where(s => s.ETD.HasValue).Select(s => s.ETD).Max();
+                enterDockTime = schedules.Where(s => s.EnterDockTime.HasValue).Select(s => s.EnterDockTime).Min();
+                actualEnterDockTime = schedules.Where(s => s.ActualEnterDockTime.HasValue).Select(s => s.ActualEnterDockTime).Min();
+                actualStartTime = schedules.Where(s => s.ActualStartTime.HasValue).Select(s => s.ActualStartTime).Min();
+                actualEndTime = schedules.Where(s => s.ActualEndTime.HasValue).Select(s => s.ActualEndTime).Max();
+                startPrepMins = schedules.Where(s => s.StartPrepareTime > 0).Select(s => s.StartPrepareTime).DefaultIfEmpty(0).Min();
+                stdPrepMins = schedules.Where(s => s.StdPrepareTime > 0).Select(s => s.StdPrepareTime).DefaultIfEmpty(0).Min();
+                if (startPrepMins == 0) startPrepMins = customer.StartPrepareTime;
+                if (stdPrepMins == 0) stdPrepMins = customer.StdPrepareTime;
+            }
+            else
+            {
+                // Use Customer master data — parse string times relative to selectedDate
+                startPrepMins = customer.StartPrepareTime;
+                stdPrepMins = customer.StdPrepareTime;
+                if (!string.IsNullOrWhiteSpace(customer.Docking) && TimeSpan.TryParse(customer.Docking, out var dockTs))
+                    enterDockTime = selectedDate.Date.Add(dockTs);
+                if (!string.IsNullOrWhiteSpace(customer.Pickup) && TimeSpan.TryParse(customer.Pickup, out var pickupTs))
+                    pickupTime = selectedDate.Date.Add(pickupTs);
+                if (!string.IsNullOrWhiteSpace(customer.ETD) && TimeSpan.TryParse(customer.ETD, out var etdTs))
+                    etdTime = selectedDate.Date.Add(etdTs);
+            }
+
             var estimatedDockTime = enterDockTime?.AddMinutes(15);
             var actualEstimatedDockTime = actualEnterDockTime?.AddMinutes(15);
 
-                            // Calculate position percentages for 30-hour timeline
-                            // H-1: 18:00-23:59 (6 hours) = 0-20% of timeline
-                            // HARI INI: 00:00-23:59 (24 hours) = 20-100% of timeline
-                            
-                            // Helper function to convert hour to timeline percent
-                            double HourToPercent30(double hour, bool isYesterday) {
-                                if (isYesterday) {
-                                    // Yesterday (H-1): hour 18-24 mapped to 0-20%
-                                    // hour 18 = 0%, hour 24 = 20%
-                                    return ((hour - 18.0) / 6.0) * 20.0;
-                                } else {
-                                    // Today: hour 0-24 mapped to 20-100%
-                                    return 20.0 + (hour / 24.0) * 80.0;
-                                }
-                            }
-                            
-                            double WidthInPercent30(double duration) {
-                                // Duration in hours converted to percent of 30h timeline
-                                return (duration / 30.0) * 100.0;
-                            }
+            // ========================
+            // Status
+            // ========================
+            string displayStatus = "No Schedule";
+            bool isLateSchedule = false;
 
-                            // Determine if pickup is in yesterday or today
-                            // Logic: If EnterDock >= 18:00 AND Pickup < 18:00, then it's cross-day
-                            var isPickupCrossDay = enterDockTime.HasValue && 
-                                                  enterDockTime.Value.Hour >= 18 && 
-                                                  pickupTime.Hour < 18;
-                            
-                            var pickupHour = pickupTime.Hour + (pickupTime.Minute / 60.0);
-                            var etdHour = etdTime.Hour + (etdTime.Minute / 60.0);
-                            
-                            // Pickup always in today (HARI INI area)
-                            var pickupPercent = HourToPercent30(pickupHour, false);
-                            var durationHours = etdHour - pickupHour;
-                            if (durationHours < 0) durationHours += 24; // Handle cross-midnight
-                            var scheduleWidth = WidthInPercent30(durationHours);
-
-            var enterDockPercent = 0.0;
-            var enterDockWidth = 0.0;
-            if (enterDockTime.HasValue)
+            if (schedules.Any())
             {
-                var enterDockHour = enterDockTime.Value.Hour + (enterDockTime.Value.Minute / 60.0);
-                
-                // EnterDock in H-1 area (yesterday) if >= 18:00
-                var isEnterDockYesterday = enterDockHour >= 18.0 && isPickupCrossDay;
-                
-                if (isEnterDockYesterday)
-                {
-                    enterDockPercent = HourToPercent30(enterDockHour, true);
-                }
-                else
-                {
-                    // Normal schedule (same day), put in today area
-                    enterDockPercent = HourToPercent30(enterDockHour, false);
-                }
-                
-                if (estimatedDockTime.HasValue)
-                {
-                    var estimatedDockHour = estimatedDockTime.Value.Hour + (estimatedDockTime.Value.Minute / 60.0);
-                    var dockDuration = estimatedDockHour - enterDockHour;
-                    if (dockDuration < 0) dockDuration += 24;
-                    enterDockWidth = WidthInPercent30(dockDuration);
-                }
+                var repSchedule = schedules.First();
+                displayStatus = (repSchedule.DriverStatus ?? repSchedule.Status) ?? "Scheduled";
+                isLateSchedule = actualStartTime.HasValue && pickupTime.HasValue && actualStartTime.Value > pickupTime.Value;
+            }
+            var statusFilter = displayStatus.ToLower().Replace(" ", "");
+
+            // ========================
+            // Prepare Bar (orange)
+            // ========================
+            var prepareStartPercent = 0.0;
+            var prepareEndPercent   = 0.0;
+            DateTime? prepareStartTime = null;
+            DateTime? prepareEndTime   = null;
+            if (startPrepMins > 0 && stdPrepMins > 0)
+            {
+                // startPrepMins = menit dari 00:00 hari ini → selalu di selectedDate (H)
+                // stdPrepMins   = menit dari 00:00 → END time prepare, juga di selectedDate (H)
+                // Contoh: start=420 (07:00 H), end=600 (10:00 H) → bar 07:00-10:00 di H ✅
+                // Contoh: start=1380 (23:00 H), end=120 (02:00 H+1) → bar 23:00 H – 02:00 H+1 ✅
+                prepareStartTime = selectedDate.Date.AddMinutes(startPrepMins);
+
+                // End time: stdPrepMins menit dari 00:00 hari ini
+                // Jika end <= start → lintas tengah malam → end ada di H+1 (besok)
+                prepareEndTime = selectedDate.Date.AddMinutes(stdPrepMins);
+                if (prepareEndTime.Value <= prepareStartTime.Value)
+                    prepareEndTime = selectedDate.Date.AddDays(1).AddMinutes(stdPrepMins);
+
+                prepareStartPercent = DateTimeToPx(prepareStartTime.Value, selectedDate);
+                prepareEndPercent   = DateTimeToPx(prepareEndTime.Value,   selectedDate);
             }
 
+            // ========================
+            // Enter Dock Bar (cyan) - Baris 2
+            // ========================
+            var enterDockPercent = 0.0;
+            var enterDockEndPercent = 0.0;
+            if (enterDockTime.HasValue && estimatedDockTime.HasValue)
+            {
+                enterDockPercent    = DateTimeToPx(enterDockTime.Value,    selectedDate);
+                enterDockEndPercent = DateTimeToPx(estimatedDockTime.Value, selectedDate);
+                if (enterDockEndPercent <= enterDockPercent)
+                    enterDockEndPercent = enterDockPercent + WidthInPercent42(0.25); // min 15 menit
+            }
+
+            // ========================
+            // Actual Enter Dock Bar (green/red) - Baris 3
+            // ========================
             var actualEnterDockPercent = 0.0;
-            var actualEnterDockWidth = 0.0;
+            var actualEnterDockEndPercent = 0.0;
             var isDockDelay = false;
             var isDockEarly = false;
             var dockDiffMinutes = 0;
-            if (actualEnterDockTime.HasValue && enterDockTime.HasValue)
-            {
-                var dockDiff = actualEnterDockTime.Value - enterDockTime.Value;
-                if (dockDiff.TotalMinutes > 0)
-                {
-                    isDockDelay = true;
-                    dockDiffMinutes = (int)dockDiff.TotalMinutes;
-                }
-                else if (dockDiff.TotalMinutes < 0)
-                {
-                    isDockEarly = true;
-                    dockDiffMinutes = (int)Math.Abs(dockDiff.TotalMinutes);
-                }
-            }
-            
+            var isDockOutOfRange = false; // true jika terjadi sebelum H-1 18:00 (tidak visible di timeline)
             if (actualEnterDockTime.HasValue)
             {
-                var actualEnterDockHour = actualEnterDockTime.Value.Hour + (actualEnterDockTime.Value.Minute / 60.0);
-                
-                // Actual EnterDock follows same logic as scheduled EnterDock
-                var isActualEnterYesterday = actualEnterDockHour >= 18.0 && isPickupCrossDay;
-                actualEnterDockPercent = HourToPercent30(actualEnterDockHour, isActualEnterYesterday);
-                
-                if (actualEstimatedDockTime.HasValue)
+                if (enterDockTime.HasValue)
                 {
-                    var actualEstimatedDockHour = actualEstimatedDockTime.Value.Hour + (actualEstimatedDockTime.Value.Minute / 60.0);
-                    var actualDockDuration = actualEstimatedDockHour - actualEnterDockHour;
-                    if (actualDockDuration < 0) actualDockDuration += 24;
-                    actualEnterDockWidth = WidthInPercent30(actualDockDuration);
+                    var dockDiff = actualEnterDockTime.Value - enterDockTime.Value;
+                    if (dockDiff.TotalMinutes > 0) { isDockDelay = true; dockDiffMinutes = (int)dockDiff.TotalMinutes; }
+                    else if (dockDiff.TotalMinutes < 0) { isDockEarly = true; dockDiffMinutes = (int)Math.Abs(dockDiff.TotalMinutes); }
+                }
+                // Cek apakah waktu aktual berada di luar range timeline (sebelum H-1 18:00)
+                var h1StartBoundary = selectedDate.Date.AddDays(-1).AddHours(18);
+                if (actualEnterDockTime.Value < h1StartBoundary)
+                {
+                    isDockOutOfRange = true;
+                    // Clamp ke awal timeline agar bar tetap bisa dirender sebagai indikator
+                    actualEnterDockPercent    = 0;
+                    actualEnterDockEndPercent = colPx; // 1 kolom sebagai indikator
+                }
+                else
+                {
+                    actualEnterDockPercent = DateTimeToPx(actualEnterDockTime.Value, selectedDate);
+                    if (actualEstimatedDockTime.HasValue)
+                    {
+                        actualEnterDockEndPercent = DateTimeToPx(actualEstimatedDockTime.Value, selectedDate);
+                        if (actualEnterDockEndPercent <= actualEnterDockPercent)
+                            actualEnterDockEndPercent = actualEnterDockPercent + WidthInPercent42(0.25);
+                    }
+                    else
+                    {
+                        actualEnterDockEndPercent = actualEnterDockPercent + WidthInPercent42(0.25);
+                    }
                 }
             }
 
-                            var actualStartPercent = 0.0;
-                            var actualWidth = 0.0;
-                            if (actualStartTime.HasValue && actualEndTime.HasValue)
+            // ========================
+            // Schedule Pickup-ETD Bar (blue) - Baris 4
+            // ========================
+            var pickupPercent = 0.0;
+            var pickupEndPercent = 0.0;
+            if (pickupTime.HasValue && etdTime.HasValue && (pickupTime.Value.Hour > 0 || pickupTime.Value.Minute > 0 || etdTime.Value.Hour > 0 || etdTime.Value.Minute > 0))
+            {
+                pickupPercent    = DateTimeToPx(pickupTime.Value, selectedDate);
+                pickupEndPercent = DateTimeToPx(etdTime.Value,    selectedDate);
+                if (pickupEndPercent <= pickupPercent)
+                    pickupEndPercent = pickupPercent + WidthInPercent42(0.5); // minimal 30 menit width
+            }
+
+            // ========================
+            // Actual Pickup Bar (green/red) - Baris 5
+            // ========================
+            var actualStartPercent = 0.0;
+            var actualEndPercent = 0.0;
+            if (actualStartTime.HasValue && actualEndTime.HasValue)
+            {
+                actualStartPercent = DateTimeToPx(actualStartTime.Value, selectedDate);
+                actualEndPercent   = DateTimeToPx(actualEndTime.Value,   selectedDate);
+                if (actualEndPercent <= actualStartPercent)
+                    actualEndPercent = actualStartPercent + WidthInPercent42(0.5);
+            }
+
+            // ========================
+            // Remark Order from Customer
+            // ========================
+            var remarkOrder = customer.RemarkOrder ?? "";
+            var cycleStr = customer.Cycle ?? (schedules.Any() ? schedules.First().Cycle ?? "" : "");
+
+            var dockCycleKey = customer.CustomerName + (string.IsNullOrEmpty(cycleStr) ? "" : " - " + cycleStr);
+
+            <tr class="gantt-row" 
+                data-status="@statusFilter" 
+                data-late="@(isLateSchedule ? "true" : "false")"
+                data-has-schedule="@(row.HasSchedule ? "true" : "false")"
+                data-dock-name="@customer.CustomerName"
+                data-dock-cycle="@dockCycleKey"
+                data-dock-id="@customer.CustomerId"
+                style="display: flex; border-bottom: 1px solid rgba(59, 130, 246, 0.2);">
+                <!-- Customer Info Cell (left panel) -->
+                <td class="gantt-customer-cell" style="width: @(custColPx)px; min-width: @(custColPx)px; flex-shrink: 0; background: linear-gradient(135deg, #1e293b 0%, #334155 100%); box-shadow: 3px 0 15px rgba(0,0,0,0.3); border-right: 2px solid @(row.HasSchedule ? "#3b82f6" : "#475569"); padding: 6px 8px; box-sizing: border-box; border-bottom: none; position: sticky; left: 0; z-index: 3;">
+                    <div class="customer-info-gantt d-flex flex-column justify-content-center" style="height: 100%;">
+                        <!-- Row 1: Dock Name + Customer Code -->
+                        <div class="d-flex align-items-center mb-1">
+                            <div class="flex-grow-1" style="min-width: 0; overflow: hidden;">
+                                <div style="font-weight: 700; color: @(row.HasSchedule ? "#60a5fa" : "#94a3b8"); font-size: 0.78rem; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="@customer.CustomerName">
+                                    @customer.CustomerName
+                                </div>
+                                <div style="font-size: 0.65rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    @customer.CustomerCode
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Row 2: Cycle + Schedules count + Pickup time -->
+                        <div class="d-flex align-items-center justify-content-between">
+                            <small style="color: #94a3b8; font-size: 0.65rem;">
+                                @if (!string.IsNullOrEmpty(cycleStr)) {
+                                    <span><i class="bi bi-arrow-repeat" style="font-size: 0.55rem;"></i> @cycleStr</span>
+                                }
+                                @if (schCount > 0) {
+                                    <span class="badge bg-primary ms-1" style="font-size: 0.55rem;">@schCount</span>
+                                }
+                            </small>
+                            @if (pickupTime.HasValue && (pickupTime.Value.Hour > 0 || pickupTime.Value.Minute > 0))
                             {
-                                var actualStartHour = actualStartTime.Value.Hour + (actualStartTime.Value.Minute / 60.0);
-                                var actualEndHour = actualEndTime.Value.Hour + (actualEndTime.Value.Minute / 60.0);
-                                
-                                // ActualStart always in today area (like pickup)
-                                actualStartPercent = HourToPercent30(actualStartHour, false);
-                                var actualDuration = actualEndHour - actualStartHour;
-                                if (actualDuration < 0) actualDuration += 24;
-                                actualWidth = WidthInPercent30(actualDuration);
+                                <small style="color: #fbbf24; font-size: 0.65rem; font-weight: 600;">
+                                    <i class="bi bi-clock-fill" style="font-size: 0.55rem;"></i> @pickupTime.Value.ToString("HH:mm")
+                                </small>
                             }
+                        </div>
+                    </div>
+                </td>
 
-                            // --- Planned Prepare Bar ---
-                            // Timeline: H-1 (0-20%) = ScheduledDate 18:00-24:00
-                            //           HARI INI (20-100%) = ScheduledDate+1 00:00-24:00
-                            // Prepare starts at StartPrepareTime and ends at EnterDockTime.
-                            // Use left% + right% (not width%) so cross-midnight bars render correctly.
-                            var prepareStartPercent = 0.0;
-                            var prepareEndPercent   = 0.0;
-                            DateTime? prepareStartTime = null;
-                            DateTime? prepareEndTime = null;
-                            if (schedule.StdPrepareTime > 0)
-                            {
-                                prepareStartTime = schedule.ScheduledDate.Date.AddMinutes(schedule.StartPrepareTime);
-                                // End = absolute clock time (StdPrepareTime = minutes from midnight, same as START PREP column)
-                                prepareEndTime = schedule.ScheduledDate.Date.AddMinutes(schedule.StdPrepareTime);
-                                // If end <= start, it crosses midnight — push end to next day
-                                if (prepareEndTime.Value <= prepareStartTime.Value)
-                                    prepareEndTime = prepareEndTime.Value.AddDays(1);
+                <!-- Remark Order Column -->
+                <td style="width: @(remColPx)px; min-width: @(remColPx)px; flex-shrink: 0; background: @(row.HasSchedule ? "#1a2636" : "#151e2d"); border-right: 3px solid @(row.HasSchedule ? "#3b82f6" : "#475569"); padding: 6px 5px; box-sizing: border-box; border-bottom: none; display: flex; align-items: center; justify-content: center; position: sticky; left: @(custColPx)px; z-index: 3;">
+                    @if (row.HasSchedule)
+                    {
+                        @if (!string.IsNullOrWhiteSpace(remarkOrder))
+                        {
+                            <div style="font-size: 0.65rem; color: #34d399; background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.25); border-radius: 4px; padding: 3px 6px; text-align: center; word-break: break-word; line-height: 1.3;" title="@remarkOrder">
+                                @remarkOrder
+                            </div>
+                        }
+                        else
+                        {
+                            <!-- Jadwal diupload, tidak ada remark → kosong -->
+                            <div style="font-size: 0.6rem; color: #475569; font-style: italic; text-align: center;">—</div>
+                        }
+                    }
+                    else
+                    {
+                        <div style="font-size: 0.63rem; color: #f87171; font-weight: 600; text-align: center; background: rgba(248, 113, 113, 0.08); border: 1px solid rgba(248, 113, 113, 0.2); border-radius: 4px; padding: 3px 6px; line-height: 1.3;">
+                            Not Yet Release
+                        </div>
+                    }
+                </td>
 
-                                var prepStartHour = prepareStartTime.Value.Hour + (prepareStartTime.Value.Minute / 60.0);
-                                var prepEndHour   = prepareEndTime.Value.Hour   + (prepareEndTime.Value.Minute   / 60.0);
+                <!-- Timeline Cell -->
+                <td class="gantt-timeline-cell" style="width: @(timelineMinPx)px; min-width: @(timelineMinPx)px; flex-shrink: 0; position: relative; height: 148px; padding: 0; background: @(row.HasSchedule ? "#1e293b" : "#172032"); border-bottom: none;">
+                    <!-- Background grid (42 fixed-width columns) -->
+                    <div style="position: absolute; top: 0; left: 0; width: @(timelineMinPx)px; height: 100%; display: grid; grid-template-columns: repeat(@totalCols, @(colPx)px); z-index: 0; pointer-events: none;">
+                        @for (int i = 0; i < totalCols; i++)
+                        {
+                            int gh;
+                            string gz;
+                            if (i < 6) { gh = i + 18; gz = "h1"; }
+                            else if (i < 30) { gh = i - 6; gz = "today"; }
+                            else { gh = i - 30; gz = "h1plus"; }
 
-                                // H-1 = ScheduledDate with hour >= 18; HARI INI = next day (hour 0-24)
-                                var isPrepStartInH1 = prepareStartTime.Value.Date == schedule.ScheduledDate.Date && prepStartHour >= 18.0;
-                                var isPrepEndInH1   = prepareEndTime.Value.Date   == schedule.ScheduledDate.Date && prepEndHour   >= 18.0;
+                            bool gMidToday  = gz == "today"  && gh == 0;
+                            bool gMidH1plus = gz == "h1plus" && gh == 0;
+                            bool gMain = gh % 6 == 0;
+                            bool g2h   = gh % 2 == 0;
+                            bool gWork = gz == "today" && gh >= 8 && gh <= 17;
 
-                                prepareStartPercent = HourToPercent30(prepStartHour, isPrepStartInH1);
-                                prepareEndPercent   = HourToPercent30(prepEndHour,   isPrepEndInH1);
-                            }
+                            string gBg    = gWork ? "rgba(59, 130, 246, 0.06)" : (gz == "h1plus" ? "rgba(168,85,247,0.04)" : "transparent");
+                            string gBord, gBordW;
+                            if (gMidToday)       { gBord = "#60a5fa"; gBordW = "3px"; }
+                            else if (gMidH1plus) { gBord = "#a855f7"; gBordW = "3px"; }
+                            else if (gMain && gz == "h1plus") { gBord = "rgba(168,85,247,0.5)"; gBordW = "2px"; }
+                            else if (gMain)      { gBord = "#60a5fa"; gBordW = "2px"; }
+                            else if (g2h)        { gBord = "rgba(96,165,250,0.25)"; gBordW = "1px"; }
+                            else                 { gBord = "rgba(148,163,184,0.15)"; gBordW = "1px"; }
 
-                            var displayStatus = (schedule.DriverStatus ?? schedule.Status) ?? "Scheduled";
-                            var statusColor = displayStatus switch
-                            {
-                                "Completed" => "success",
-                                "In Progress" => "warning",
-                                "Cancelled" => "danger",
-                                _ => "secondary"
-                            };
+                            <div style="border-right: @gBordW solid @gBord; background: @gBg; height: 100%;"></div>
+                        }
+                    </div>
 
-                            var isLateSchedule = schedule.ActualStartTime.HasValue && schedule.PickupTime.HasValue && schedule.ActualStartTime.Value > schedule.PickupTime.Value;
-                            var statusFilter = displayStatus.ToLower().Replace(" ", "");
-                            
-                            <tr class="gantt-row" 
-                                data-status="@statusFilter" 
-                                data-late="@(isLateSchedule ? "true" : "false")"
-                                style="display: flex; border-bottom: 1px solid rgba(59, 130, 246, 0.2);">
-                                <td class="gantt-customer-cell" style="width: 180px; min-width: 180px; background: linear-gradient(135deg, #1e293b 0%, #334155 100%); box-shadow: 3px 0 15px rgba(0,0,0,0.3); border-right: 3px solid #3b82f6; padding: 8px 12px; box-sizing: border-box; border-bottom: none;">
-                                    <div class="customer-info-gantt d-flex flex-column justify-content-center" style="height: 100%;">
-                                        <div class="d-flex align-items-center mb-1">
-                                            <div class="customer-avatar-gantt-compact me-2">
-                                                <i class="bi bi-building-fill"></i>
-                                            </div>
-                                            <div class="flex-grow-1" style="min-width: 0; overflow: hidden;">
-                                                <div style="font-weight: 600; color: #60a5fa; font-size: 0.85rem; line-height: 1.2; opacity: 1; text-shadow: 0 1px 2px rgba(0,0,0,0.3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="@schedule.Customer.CustomerName">
-                                                    @schedule.Customer.CustomerName
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="d-flex align-items-center justify-content-between">
-                                            <small style="color: #94a3b8; font-size: 0.7rem;">
-                                                @(string.IsNullOrEmpty(grp.Key.Cycle) ? "-" : grp.Key.Cycle)
-                                                @if (grpCount > 1) {
-                                                    <span class="badge bg-secondary ms-1" style="font-size: 0.6rem;">@grpCount sch</span>
-                                                }
-                                            </small>
-                                            <span class="badge badge-gantt bg-@statusColor" style="font-size: 0.65rem; padding: 0.25rem 0.5rem;">
-                                                @if (displayStatus == "Completed")
-                                                {
-                                                    <i class="bi bi-check-circle-fill"></i>
-                                                }
-                                                else if (displayStatus == "In Progress")
-                                                {
-                                                    <i class="bi bi-arrow-repeat"></i>
-                                                }
-                                                else
-                                                {
-                                                    <i class="bi bi-clock"></i>
-                                                }
-                                            </span>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="gantt-timeline-cell" style="flex: 1; position: relative; height: 120px; padding: 0; background: #1e293b; border-bottom: none;">
-                                    <!-- Timeline Grid dengan garis vertikal (30 hours: 18:00 H-1 to 23:00 H) -->
-                                    <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: grid; grid-template-columns: repeat(30, 1fr); z-index: 0; pointer-events: none;">
-                                        @for (int i = 0; i < 30; i++)
-                                        {
-                                            var actualHour = i < 6 ? (i + 18) : (i - 6);
-                                            var isDay2 = i >= 6;
-                                            var isWorkHour = isDay2 && actualHour >= 8 && actualHour <= 17;
-                                            var isMainHour = actualHour % 6 == 0;
-                                            var is2Hour = actualHour % 2 == 0;
-                                            var isMidnight = actualHour == 0 && isDay2;
-                                            var bgColor = isWorkHour ? "rgba(59, 130, 246, 0.12)" : "transparent";
-                                            var borderColor = isMidnight ? "#60a5fa" : (isMainHour ? "#60a5fa" : (is2Hour ? "rgba(96, 165, 250, 0.4)" : "rgba(148, 163, 184, 0.2)"));
-                                            var borderWidth = isMidnight ? "3px" : (isMainHour ? "2px" : "1px");
-                                            <div style="border-right: @borderWidth solid @borderColor; 
-                                                        background: @bgColor;
-                                                        height: 100%;">
-                                            </div>
-                                        }
-                                    </div>
+                    @if (!row.HasSchedule)
+                    {
+                        <!-- No-schedule subtle grid overlay (no text — already shown in customer panel) -->
+                        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                                    background: repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(71,85,105,0.04) 8px, rgba(71,85,105,0.04) 9px);
+                                    z-index: 0; pointer-events: none;">
+                        </div>
+                    }
 
-                    <!-- Planned Prepare Bar - Baris 1 (orange, spans StartPrepare → EnterDockTime) -->
+                    <!-- Baris 1: Planned Prepare Bar (orange) -->
                     @if (prepareStartTime.HasValue && prepareEndPercent > prepareStartPercent)
                     {
-                        <div style="position: absolute;
-                                    top: 3px;
-                                    left: @prepareStartPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%;
-                                    right: @((100 - prepareEndPercent).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))%;
-                                    height: 16px;
-                                    min-width: 50px;
+                        var bar1W = prepareEndPercent - prepareStartPercent;
+                        var bar1Label = $"{prepareStartTime.Value:HH:mm} - {prepareEndTime!.Value:HH:mm}";
+                        var (bar1Left, bar1WSnap) = SnapBarToCol(prepareStartPercent, bar1W);
+                        @* Bar visual — lebar di-snap ke kolom jam jika durasi pendek *@
+                        <div style="position: absolute; top: 3px;
+                                    left: @bar1Left.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    width: @bar1WSnap.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    height: 20px;
                                     background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-                                    border-radius: 4px;
-                                    border: 2px solid #f97316;
-                                    display: flex;
-                                    align-items: center;
-                                    padding: 0 6px;
-                                    box-shadow: 0 2px 8px rgba(249, 115, 22, 0.5), inset 0 1px 0 rgba(255,255,255,0.2);
-                                    opacity: 0.9;
-                                    z-index: 1;
-                                    overflow: hidden;">
-                            <i class="bi bi-boxes" style="font-size: 0.65rem; color: white; margin-right: 3px; flex-shrink: 0;"></i>
-                            <span style="font-size: 0.65rem; color: white; font-weight: 600; white-space: nowrap;">
-                                @prepareStartTime.Value.ToString("HH:mm") - @prepareEndTime!.Value.ToString("HH:mm")
-                            </span>
+                                    border-radius: 4px; border: 2px solid #f97316;
+                                    box-shadow: 0 2px 8px rgba(249,115,22,0.5);
+                                    opacity: 0.9; z-index: 1; cursor: default;"
+                             title="Prepare: @bar1Label"></div>
+                        @* Label overlay — posisi mengikuti bar visual yang sudah di-snap *@
+                        <div style="position: absolute; top: 3px;
+                                    left: @bar1Left.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    width: max-content; height: 20px;
+                                    display: flex; align-items: center; justify-content: center; padding: 0 6px;
+                                    z-index: 5; pointer-events: none;">
+                            <i class="bi bi-boxes" style="font-size: 0.62rem; color: white; margin-right: 3px; flex-shrink: 0; text-shadow: 0 1px 3px rgba(0,0,0,0.7);"></i>
+                            <span style="font-size: 0.62rem; color: white; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,0.7);">@bar1Label</span>
                         </div>
                     }
 
-                    <!-- Enter Dock Bar (Scheduled) - Baris 2 -->
-                    @if (enterDockTime.HasValue && estimatedDockTime.HasValue && enterDockWidth > 0)
+                    <!-- Baris 2: Enter Dock Bar (cyan) -->
+                    @if (enterDockTime.HasValue && estimatedDockTime.HasValue && enterDockEndPercent > enterDockPercent)
                     {
-                        <div style="position: absolute; 
-                                    top: 24px; 
-                                    left: @enterDockPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
-                                    z-index: 1;">
-                            <div class="gantt-bar gantt-dock-scheduled" 
-                                 style="width: @enterDockWidth.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
-                                        min-width: 40px;
-                                        height: 16px; 
-                                        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); 
-                                        border-radius: 4px; 
-                                        border: 2px solid #0ea5e9;
-                                        display: flex; 
-                                        align-items: center; 
-                                        padding: 0 6px;
-                                        box-shadow: 0 2px 8px rgba(14, 165, 233, 0.5), 
-                                                    inset 0 1px 0 rgba(255,255,255,0.2);
-                                        opacity: 0.9;">
-                                <i class="bi bi-door-open" style="font-size: 0.65rem; color: white; margin-right: 3px;"></i>
-                                <span style="font-size: 0.65rem; color: white; font-weight: 600; white-space: nowrap;">
-                                    @enterDockTime.Value.ToString("HH:mm")
-                                </span>
-                                @if (estimatedDockTime.HasValue)
-                                {
-                                    <span style="font-size: 0.65rem; color: white; font-weight: 500; margin-left: 4px; white-space: nowrap;">
-                                        - @estimatedDockTime.Value.ToString("HH:mm")
-                                    </span>
-                                }
-                            </div>
+                        var bar2W = enterDockEndPercent - enterDockPercent;
+                        var bar2Label = $"{enterDockTime.Value:HH:mm} - {estimatedDockTime.Value:HH:mm}";
+                        var (bar2Left, bar2WSnap) = SnapBarToCol(enterDockPercent, bar2W);
+                        <div style="position: absolute; top: 27px;
+                                    left: @bar2Left.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    width: @bar2WSnap.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    height: 20px;
+                                    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+                                    border-radius: 4px; border: 2px solid #0ea5e9;
+                                    box-shadow: 0 2px 8px rgba(14,165,233,0.5);
+                                    opacity: 0.9; z-index: 1; cursor: default;"
+                             title="Enter Dock: @bar2Label"></div>
+                        <div style="position: absolute; top: 27px;
+                                    left: @bar2Left.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    width: max-content; height: 20px;
+                                    display: flex; align-items: center; justify-content: center; padding: 0 6px;
+                                    z-index: 5; pointer-events: none;">
+                            <i class="bi bi-door-open" style="font-size: 0.62rem; color: white; margin-right: 3px; flex-shrink: 0; text-shadow: 0 1px 3px rgba(0,0,0,0.7);"></i>
+                            <span style="font-size: 0.62rem; color: white; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,0.7);">@bar2Label</span>
                         </div>
                     }
 
-                    <!-- Actual Enter Dock Bar - Baris 3 -->
-                    @if (actualEnterDockTime.HasValue && actualEstimatedDockTime.HasValue && actualEnterDockWidth > 0)
+                    <!-- Baris 3: Actual Enter Dock Bar (green/red) -->
+                    @if (actualEnterDockTime.HasValue && actualEnterDockEndPercent > actualEnterDockPercent)
                     {
-                        var dockBarColor = isDockDelay ? "linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)" : (isDockEarly ? "linear-gradient(135deg, #22c55e 0%, #15803d 100%)" : "linear-gradient(135deg, #22c55e 0%, #15803d 100%)");
+                        var dockBarColor  = isDockDelay ? "linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)" : "linear-gradient(135deg, #22c55e 0%, #15803d 100%)";
                         var dockBarBorder = isDockDelay ? "#ef4444" : "#22c55e";
-                        var dockBarShadow = isDockDelay ? "0 2px 8px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)" : "0 2px 8px rgba(34, 197, 94, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)";
-                        var dockIcon = isDockDelay ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill";
-                        
-                        <div style="position: absolute; 
-                                    top: 45px; 
-                                    left: @actualEnterDockPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
-                                    z-index: 2;">
-                            <div class="gantt-bar gantt-dock-actual" 
-                                 style="width: @actualEnterDockWidth.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
-                                        min-width: 40px;
-                                        height: 16px; 
-                                        background: @dockBarColor; 
-                                        border-radius: 4px; 
-                                        border: 2px solid @dockBarBorder;
-                                        display: flex; 
-                                        align-items: center; 
-                                        padding: 0 6px;
-                                        box-shadow: @dockBarShadow;
-                                        opacity: 0.9;">
-                                <i class="bi @dockIcon" style="font-size: 0.65rem; color: white; margin-right: 3px;"></i>
-                                <span style="font-size: 0.65rem; color: white; font-weight: 600; white-space: nowrap;">
-                                    @actualEnterDockTime.Value.ToString("HH:mm")
-                                </span>
-                                <span style="font-size: 0.65rem; color: white; font-weight: 500; margin-left: 4px; white-space: nowrap;">
-                                    - @actualEstimatedDockTime.Value.ToString("HH:mm")
-                                </span>
-                                @if (enterDockTime.HasValue)
-                                {
-                                    // Jika delay, cukup tampilkan bar merah saja (tanpa badge tambahan)
-                                    if (!isDockDelay)
-                                    {
-                                        if (isDockEarly)
-                                        {
-                                            <span class="badge bg-success ms-1" style="font-size: 0.55rem; padding: 0.15rem 0.4rem; line-height: 1;">
-                                                <i class="bi bi-check-circle-fill"></i> -@dockDiffMinutes m
-                                            </span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-success ms-1" style="font-size: 0.55rem; padding: 0.15rem 0.4rem; line-height: 1;">
-                                                <i class="bi bi-check-circle-fill"></i> On Time
-                                            </span>
-                                        }
-                                    }
-                                }
+                        var dockIcon      = isDockDelay ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill";
+                        var bar3W = actualEnterDockEndPercent - actualEnterDockPercent;
+                        var bar3Label = $"{actualEnterDockTime.Value:HH:mm} - {actualEstimatedDockTime?.ToString("HH:mm") ?? "?"}";
+                        var dockStatusStr = isDockDelay ? $"Delay +{dockDiffMinutes}m" : (isDockEarly ? $"Early -{dockDiffMinutes}m" : "On Time");
+                        var (bar3Left, bar3WSnap) = isDockOutOfRange ? (0.0, (double)colPx) : SnapBarToCol(actualEnterDockPercent, bar3W);
+
+                        @if (isDockOutOfRange)
+                        {
+                            @* Bar out-of-range: indikator di tepi kiri dengan tanda panah kiri *@
+                            <div style="position: absolute; top: 51px;
+                                        left: 0px; width: @(colPx)px; height: 20px;
+                                        background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+                                        border-radius: 0 4px 4px 0; border: 2px solid #ef4444; border-left: 3px solid #fca5a5;
+                                        opacity: 0.9; z-index: 2; cursor: default;"
+                                 title="Actual Enter Dock (di luar range H-1): @bar3Label — gunakan filter tanggal untuk melihat detail"></div>
+                            <div style="position: absolute; top: 51px;
+                                        left: 0px; width: max-content; height: 20px;
+                                        display: flex; align-items: center; padding: 0 6px;
+                                        z-index: 5; pointer-events: none;">
+                                <i class="bi bi-chevron-double-left" style="font-size: 0.62rem; color: #fca5a5; margin-right: 3px; flex-shrink: 0;"></i>
+                                <i class="bi bi-exclamation-triangle-fill" style="font-size: 0.62rem; color: white; margin-right: 3px; flex-shrink: 0; text-shadow: 0 1px 3px rgba(0,0,0,0.7);"></i>
+                                <span style="font-size: 0.62rem; color: white; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,0.7);">@actualEnterDockTime.Value.ToString("dd/MM HH:mm") — filter tanggal</span>
                             </div>
+                        }
+                        else
+                        {
+                            <div style="position: absolute; top: 51px;
+                                        left: @bar3Left.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                        width: @bar3WSnap.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                        height: 20px;
+                                        background: @dockBarColor;
+                                        border-radius: 4px; border: 2px solid @dockBarBorder;
+                                        opacity: 0.9; z-index: 2; cursor: default;"
+                                 title="Actual Enter Dock: @bar3Label (@dockStatusStr)"></div>
+                            <div style="position: absolute; top: 51px;
+                                        left: @bar3Left.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                        width: max-content; height: 20px;
+                                        display: flex; align-items: center; justify-content: center; padding: 0 6px;
+                                        z-index: 5; pointer-events: none;">
+                                <i class="bi @dockIcon" style="font-size: 0.62rem; color: white; margin-right: 3px; flex-shrink: 0; text-shadow: 0 1px 3px rgba(0,0,0,0.7);"></i>
+                                <span style="font-size: 0.62rem; color: white; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,0.7);">@bar3Label</span>
+                            </div>
+                        }
+                    }
+
+                    <!-- Baris 4: Schedule Pickup-ETD Bar (blue) -->
+                    @if (pickupTime.HasValue && etdTime.HasValue && pickupEndPercent > pickupPercent)
+                    {
+                        var bar4W = pickupEndPercent - pickupPercent;
+                        var bar4Label = $"{pickupTime.Value:HH:mm} - {etdTime.Value:HH:mm}";
+                        var (bar4Left, bar4WSnap) = SnapBarToCol(pickupPercent, bar4W);
+                        <div style="position: absolute; top: 75px;
+                                    left: @bar4Left.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    width: @bar4WSnap.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    height: 22px;
+                                    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+                                    border-radius: 5px; border: 2px solid #0d6efd;
+                                    box-shadow: 0 3px 10px rgba(13,110,253,0.6);
+                                    z-index: 1; opacity: @(row.HasSchedule ? "0.95" : "0.55"); cursor: default;"
+                             title="Pickup-ETD: @bar4Label"></div>
+                        <div style="position: absolute; top: 75px;
+                                    left: @bar4Left.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    width: max-content; height: 22px;
+                                    display: flex; align-items: center; justify-content: center; padding: 0 6px;
+                                    z-index: 5; pointer-events: none; opacity: @(row.HasSchedule ? "1" : "0.6");">
+                            <i class="bi bi-calendar-check" style="font-size: 0.62rem; color: white; margin-right: 3px; flex-shrink: 0; text-shadow: 0 1px 3px rgba(0,0,0,0.7);"></i>
+                            <span style="font-size: 0.62rem; color: white; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,0.7);">@bar4Label</span>
                         </div>
                     }
 
-                    <!-- Schedule Bar (Planned Pickup-ETD) - Baris 4 -->
-                                    <div style="position: absolute; 
-                                                top: 68px; 
-                                                left: @pickupPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
-                                                z-index: 1;">
-                                        <div class="gantt-bar gantt-planned" 
-                                             style="width: @scheduleWidth.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
-                                                    min-width: 50px;
-                                                    height: 20px; 
-                                                    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); 
-                                                    border-radius: 6px; 
-                                                    border: 2px solid #0d6efd;
-                                                    display: flex; 
-                                                    align-items: center; 
-                                                    padding: 0 8px;
-                                                    box-shadow: 0 3px 10px rgba(13, 110, 253, 0.6), 
-                                                                inset 0 1px 0 rgba(255,255,255,0.3);
-                                                    opacity: 0.95;">
-                                            <i class="bi bi-calendar-check" style="font-size: 0.75rem; color: white; margin-right: 4px;"></i>
-                                            <span style="font-size: 0.7rem; color: white; font-weight: 600; white-space: nowrap;">
-                                                @pickupTime.ToString("HH:mm") - @etdTime.ToString("HH:mm")
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <!-- Actual Bar - Baris 5 -->
-                                    @if (actualStartTime.HasValue && actualEndTime.HasValue)
-                                    {
-                                        var isLate = actualStartTime.Value > pickupTime || actualEndTime.Value > etdTime;
-                                        var actualBarGradient = isLate ? "linear-gradient(135deg, #dc3545 0%, #b02a37 100%)" : "linear-gradient(135deg, #198754 0%, #146c43 100%)";
-                                        var actualBarShadow = isLate ? "0 4px 15px rgba(220, 53, 69, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)" : "0 4px 15px rgba(25, 135, 84, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)";
-                                        var actualBarBorder = isLate ? "rgba(220, 53, 69, 0.3)" : "rgba(25, 135, 84, 0.3)";
-                                        var actualIconClass = isLate ? "gantt-bar-danger" : "gantt-bar-success";
-                                        
-                                        <div style="position: absolute; 
-                                                    top: 92px; 
-                                                    left: @actualStartPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
-                                                    z-index: 2;">
-                                            <div class="gantt-bar gantt-actual @actualIconClass" 
-                                                 style="width: @actualWidth.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
-                                                        min-width: 50px;
-                                                        height: 20px; 
-                                                        background: @actualBarGradient; 
-                                                        border-radius: 6px; 
-                                                        border: 2px solid @(isLate ? "#dc3545" : "#198754");
-                                                        display: flex; 
-                                                        align-items: center; 
-                                                        padding: 0 8px;
-                                                        box-shadow: @actualBarShadow;
-                                                        opacity: 0.95;">
-                                                @if (isLate)
-                                                {
-                                                    <i class="bi bi-exclamation-triangle-fill" style="font-size: 0.75rem; color: white; margin-right: 4px;"></i>
-                                                    <span style="font-size: 0.7rem; color: white; font-weight: 600; white-space: nowrap;">
-                                                        @actualStartTime.Value.ToString("HH:mm") - @actualEndTime.Value.ToString("HH:mm")
-                                                    </span>
-                                                }
-                                                else
-                                                {
-                                                    <i class="bi bi-check-circle-fill" style="font-size: 0.75rem; color: white; margin-right: 4px;"></i>
-                                                    <span style="font-size: 0.7rem; color: white; font-weight: 600; white-space: nowrap;">
-                                                        @actualStartTime.Value.ToString("HH:mm") - @actualEndTime.Value.ToString("HH:mm")
-                                                    </span>
-                                                }
-                                            </div>
-                                        </div>
-                                    }
-                                    else if (actualStartTime.HasValue)
-                                    {
-                                        <!-- Only started, not finished yet -->
-                                        var actualStartHour = actualStartTime.Value.Hour + (actualStartTime.Value.Minute / 60.0);
-                                        // In-progress always in today area
-                                        actualStartPercent = HourToPercent30(actualStartHour, false);
-                                        
-                                        <div class="gantt-bar gantt-inprogress" 
-                                             style="position: absolute; 
-                                                    top: 92px; 
-                                                    left: @actualStartPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; 
-                                                    min-width: 60px; 
-                                                    height: 20px; 
-                                                    background: linear-gradient(135deg, #ffc107 0%, #d39e00 100%); 
-                                                    border-radius: 6px; 
-                                                    border: 2px solid #ffc107;
-                                                    display: flex; 
-                                                    align-items: center; 
-                                                    padding: 0 8px;
-                                                    color: #000;
-                                                    font-size: 0.7rem;
-                                                    font-weight: bold;
-                                                    z-index: 2;
-                                                    box-shadow: 0 3px 10px rgba(255, 193, 7, 0.7), 
-                                                                inset 0 1px 0 rgba(255,255,255,0.3);
-                                                    animation: pulse-warning 2s ease-in-out infinite;
-                                                    opacity: 0.95;">
-                                            <i class="bi bi-arrow-right-circle-fill" style="margin-right: 4px;"></i>
-                                            <span style="font-size: 0.7rem; font-weight: 600; white-space: nowrap;">
-                                                @actualStartTime.Value.ToString("HH:mm") - ...
-                                            </span>
-                                        </div>
-                                    }
-                                </td>
-                            </tr>
-                        }
+                    <!-- Baris 5: Actual Bar (green/red/yellow) -->
+                    @if (actualStartTime.HasValue && actualEndTime.HasValue && actualEndPercent > actualStartPercent)
+                    {
+                        var isLate = actualStartTime.Value > (pickupTime ?? actualStartTime.Value) || actualEndTime.Value > (etdTime ?? actualEndTime.Value);
+                        var actGrad   = isLate ? "linear-gradient(135deg, #dc3545 0%, #b02a37 100%)" : "linear-gradient(135deg, #198754 0%, #146c43 100%)";
+                        var actBorder = isLate ? "#dc3545" : "#198754";
+                        var actClass  = isLate ? "gantt-bar-danger" : "gantt-bar-success";
+                        var bar5W = actualEndPercent - actualStartPercent;
+                        var bar5Label = $"{actualStartTime.Value:HH:mm} - {actualEndTime.Value:HH:mm}";
+                        var (bar5Left, bar5WSnap) = SnapBarToCol(actualStartPercent, bar5W);
+                        <div style="position: absolute; top: 101px;
+                                    left: @bar5Left.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    width: @bar5WSnap.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    height: 22px;
+                                    background: @actGrad;
+                                    border-radius: 5px; border: 2px solid @actBorder;
+                                    z-index: 2; opacity: 0.95; cursor: default;"
+                             class="gantt-bar gantt-actual @actClass"
+                             title="Actual: @bar5Label"></div>
+                        <div style="position: absolute; top: 101px;
+                                    left: @bar5Left.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    width: max-content; height: 22px;
+                                    display: flex; align-items: center; justify-content: center; padding: 0 6px;
+                                    z-index: 5; pointer-events: none;">
+                            <i class="bi @(isLate ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill")" style="font-size: 0.62rem; color: white; margin-right: 3px; flex-shrink: 0; text-shadow: 0 1px 3px rgba(0,0,0,0.7);"></i>
+                            <span style="font-size: 0.62rem; color: white; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,0.7);">@bar5Label</span>
+                        </div>
+                    }
+                    else if (actualStartTime.HasValue)
+                    {
+                        var actPct2 = DateTimeToPx(actualStartTime.Value, selectedDate);
+                        var runEndTime = etdTime ?? actualStartTime.Value.AddHours(2);
+                        var runEndPct = DateTimeToPx(runEndTime, selectedDate);
+                        var bar5bW = runEndPct - actPct2;
+                        if (bar5bW < WidthInPercent42(0.25)) bar5bW = WidthInPercent42(0.25);
+                        var bar5bLabel = $"{actualStartTime.Value:HH:mm} - ...";
+                        var (bar5bLeft, bar5bWSnap) = SnapBarToCol(actPct2, bar5bW);
+                        <div style="position: absolute; top: 101px;
+                                    left: @bar5bLeft.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    width: @bar5bWSnap.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    height: 22px;
+                                    background: linear-gradient(135deg, #ffc107 0%, #d39e00 100%);
+                                    border-radius: 5px; border: 2px solid #ffc107;
+                                    z-index: 2; opacity: 0.95;
+                                    animation: pulse-warning 2s ease-in-out infinite; cursor: default;"
+                             class="gantt-bar gantt-inprogress"
+                             title="In Progress: @bar5bLabel"></div>
+                        <div style="position: absolute; top: 101px;
+                                    left: @bar5bLeft.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)px;
+                                    width: max-content; height: 22px;
+                                    display: flex; align-items: center; justify-content: center; padding: 0 6px;
+                                    z-index: 5; pointer-events: none;">
+                            <i class="bi bi-arrow-right-circle-fill" style="font-size: 0.62rem; color: #212529; margin-right: 3px; flex-shrink: 0; text-shadow: 0 1px 3px rgba(255,255,255,0.5);"></i>
+                            <span style="font-size: 0.62rem; color: #212529; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 3px rgba(255,255,255,0.5);">@bar5bLabel</span>
+                        </div>
+                    }
+                </td>
+            </tr>
+        }
                     </tbody>
                 </table>
                     </div>
                 </div>
             </div>
             
-            <!-- Legend - Sederhana seperti di Index -->
+            <!-- Legend -->
             <div class="legend-container">
-                <h6 class="legend-title">
-                    <i class="bi bi-info-circle-fill"></i> Keterangan:
-                </h6>
-                <div class="d-flex flex-wrap gap-4">
-                    <!-- Legend untuk bar timeline -->
-                    <div class="legend-item-simple">
-                        <i class="bi bi-boxes" style="color:#f97316"></i>
-                        <span>Planned Prepare (Baris 1)</span>
-                    </div>
-                    <div class="legend-item-simple">
-                        <i class="bi bi-door-open text-info"></i>
-                        <span>Enter Dock Schedule (Baris 2)</span>
-                    </div>
-                    <div class="legend-item-simple">
-                        <i class="bi bi-door-open-fill text-success"></i>
-                        <span>Actual Enter Dock (Baris 3)</span>
-                    </div>
-                    <div class="legend-item-simple">
-                        <i class="bi bi-exclamation-triangle-fill text-danger"></i>
-                        <span>Actual Dock Delay (Baris 3)</span>
-                    </div>
-                    <div class="legend-item-simple">
-                        <i class="bi bi-calendar-check text-primary"></i>
-                        <span>Schedule Pickup-ETD (Baris 4)</span>
-                    </div>
-                    <div class="legend-item-simple">
-                        <i class="bi bi-check-circle-fill text-success"></i>
-                        <span>Actual On Time (Baris 5)</span>
-                    </div>
-                    <div class="legend-item-simple">
-                        <i class="bi bi-arrow-right-circle-fill text-warning"></i>
-                        <span>In Progress (Baris 5)</span>
-                    </div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="legend-title-inline"><i class="bi bi-info-circle-fill"></i> Ket:</span>
+                    <div class="legend-item-simple"><span style="display:inline-block;width:10px;height:10px;background:#64748b;border-radius:2px;margin-right:3px;"></span>H-1 (18-24)</div>
+                    <div class="legend-item-simple"><span style="display:inline-block;width:10px;height:10px;background:#3b82f6;border-radius:2px;margin-right:3px;"></span>Hari Ini</div>
+                    <div class="legend-item-simple"><span style="display:inline-block;width:10px;height:10px;background:#a855f7;border-radius:2px;margin-right:3px;"></span>H+1</div>
+                    <div class="legend-item-simple"><span style="display:inline-block;width:10px;height:5px;background:linear-gradient(135deg,#f97316,#ea580c);border-radius:2px;margin-right:3px;"></span>Planned Prepare</div>
+                    <div class="legend-item-simple"><span style="display:inline-block;width:10px;height:5px;background:linear-gradient(135deg,#0ea5e9,#0284c7);border-radius:2px;margin-right:3px;"></span>Enter Dock</div>
+                    <div class="legend-item-simple"><span style="display:inline-block;width:10px;height:5px;background:linear-gradient(135deg,#0d6efd,#0a58ca);border-radius:2px;margin-right:3px;"></span>Pickup-ETD</div>
+                    <div class="legend-item-simple"><span style="display:inline-block;width:10px;height:5px;background:linear-gradient(135deg,#198754,#146c43);border-radius:2px;margin-right:3px;"></span>Actual On Time</div>
+                    <div class="legend-item-simple"><span style="display:inline-block;width:10px;height:5px;background:linear-gradient(135deg,#dc3545,#b02a37);border-radius:2px;margin-right:3px;"></span>Late/Delay</div>
+                    <div class="legend-item-simple"><span style="display:inline-block;width:10px;height:5px;background:linear-gradient(135deg,#ffc107,#d39e00);border-radius:2px;margin-right:3px;"></span>In Progress</div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-                    <!-- Legend untuk icon status di kolom customer -->
-                    <div class="legend-item-simple">
-                        <i class="bi bi-check-circle-fill text-success"></i>
-                        <span>Status: <strong>Completed</strong></span>
+    <!-- Dock Filter Modal -->
+    <div class="modal fade" id="dockFilterModal" tabindex="-1" aria-labelledby="dockFilterModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content" style="background: #1e293b; border: 1px solid #334155; color: #e2e8f0;">
+                <div class="modal-header" style="border-bottom: 1px solid #334155;">
+                    <h5 class="modal-title" id="dockFilterModalLabel">
+                        <i class="bi bi-funnel-fill" style="color: #60a5fa;"></i> Filter Dock — Pilih Dock Yang Ditampilkan
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Search + Select All -->
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <input type="text" class="form-control form-control-sm" id="dockFilterSearch" placeholder="Cari dock..." 
+                               style="background: #0f172a; border-color: #334155; color: #e2e8f0; max-width: 250px;">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="dockSelectAll">
+                            <i class="bi bi-check-all"></i> Pilih Semua
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="dockDeselectAll">
+                            <i class="bi bi-x-lg"></i> Hapus Semua
+                        </button>
+                        <span class="ms-auto badge bg-primary" id="dockSelectedCount">0 dipilih</span>
                     </div>
-                    <div class="legend-item-simple">
-                        <i class="bi bi-arrow-repeat text-warning"></i>
-                        <span>Status: <strong>In Progress</strong></span>
+                    <!-- Dock Grid -->
+                    <div id="dockFilterGrid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-height: 400px; overflow-y: auto;">
+                        @foreach (var row in Model.Rows)
+                        {
+                            var dkName = row.Customer.CustomerName;
+                            var dkCode = row.Customer.CustomerCode;
+                            var dkId = row.Customer.CustomerId;
+                            var dkHasSch = row.HasSchedule;
+                            var dkCycle = row.Customer.Cycle ?? (row.Schedules.Any() ? row.Schedules.First().Cycle ?? "" : "");
+                            var dkCycleKey = dkName + (string.IsNullOrEmpty(dkCycle) ? "" : " - " + dkCycle);
+                            <label class="dock-filter-item d-flex align-items-center gap-2 p-2" 
+                                   style="background: #0f172a; border: 1px solid @(dkHasSch ? "#334155" : "#1e293b"); border-radius: 6px; cursor: pointer; transition: all 0.15s;"
+                                   data-dock-name="@dkCycleKey">
+                                <input type="checkbox" class="form-check-input dock-filter-cb" value="@dkId" data-dock-name="@dkCycleKey" checked 
+                                       style="margin: 0; flex-shrink: 0;">
+                                <div style="min-width: 0; overflow: hidden;">
+                                    <div style="font-size: 0.78rem; font-weight: 600; color: @(dkHasSch ? "#60a5fa" : "#94a3b8"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                        @dkName
+                                        @if (!string.IsNullOrEmpty(dkCycle))
+                                        {
+                                            <span style="color: #fbbf24; font-size: 0.68rem; font-weight: 500;"> — @dkCycle</span>
+                                        }
+                                    </div>
+                                    <div style="font-size: 0.63rem; color: #64748b;">@dkCode @(dkHasSch ? "✓" : "")</div>
+                                </div>
+                            </label>
+                        }
                     </div>
-                    <div class="legend-item-simple">
-                        <i class="bi bi-clock text-secondary"></i>
-                        <span>Status: <strong>Waiting</strong></span>
-                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid #334155;">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="dockFilterApply">
+                        <i class="bi bi-check-lg"></i> Terapkan Filter
+                    </button>
                 </div>
             </div>
         </div>
@@ -706,6 +833,17 @@ else
 
         // Global filter state
         let currentGanttFilter = 'all';
+
+        // Reset dock filter (show all)
+        function resetDockFilter() {
+            $('.dock-filter-cb').prop('checked', true);
+            localStorage.removeItem('gantt_dock_filter');
+            $('.gantt-row').show();
+            $('#filterResetRow').fadeOut();
+            const btn = $('#ganttDockFilterBtn');
+            btn.removeClass('btn-info').addClass('btn-outline-info');
+            btn.html('<i class="bi bi-funnel-fill"></i> Filter Dock');
+        }
 
         // ============================================
         // AUTO-SCROLL VERTICAL GANTT CHART
@@ -812,78 +950,105 @@ else
             }
         }
 
-        // Filter function for Gantt Chart rows
+        // Filter function for Gantt Chart rows (dock filter)
         function filterGanttRows(filter) {
-            currentGanttFilter = filter;
-            
-            console.log("🔍 Filtering Gantt Chart:", filter);
-            
-            // Update active card
-            $('.filter-card-gantt').removeClass('active');
-            $(`.filter-card-gantt[data-filter="${filter}"]`).addClass('active');
-            
-            // Show/hide reset button
             if (filter === 'all') {
-                $('#filterResetRow').fadeOut();
-            } else {
-                $('#filterResetRow').fadeIn();
+                resetDockFilter();
             }
-            
-            // Filter rows
-            const rows = $('.gantt-row');
-            let visibleCount = 0;
-            
-            rows.each(function() {
-                const row = $(this);
-                const status = row.data('status');
-                const isLate = row.data('late') === true || row.data('late') === 'true';
-                let shouldShow = false;
-                
-                if (filter === 'all') {
-                    shouldShow = true;
-                } else if (filter === 'completed') {
-                    shouldShow = status === 'completed';
-                } else if (filter === 'inprogress') {
-                    shouldShow = status === 'inprogress';
-                } else if (filter === 'late') {
-                    shouldShow = isLate;
-                }
-                
-                if (shouldShow) {
-                    row.fadeIn(300);
-                    visibleCount++;
-                } else {
-                    row.fadeOut(300);
-                }
-            });
-            
-            console.log(`✅ Visible rows: ${visibleCount}`);
-            
-            // Show empty state if no results
-            if (visibleCount === 0) {
-                if ($('#ganttEmptyState').length === 0) {
-                    $('#ganttChart').prepend(`
-                        <div id="ganttEmptyState" class="alert alert-info text-center m-3">
-                            <i class="bi bi-filter-circle"></i> 
-                            <strong>Tidak ada schedule untuk filter ini.</strong>
-                            <br><small>Klik "Reset Filter" atau pilih card lain.</small>
-                        </div>
-                    `);
-                }
-            } else {
-                $('#ganttEmptyState').remove();
-            }
-            
-            // Restart auto-scroll setelah filter (tunggu animasi selesai)
-            setTimeout(function() {
-                stopGanttAutoScroll();
-                if (isGanttAutoScrollEnabled) {
-                    startGanttAutoScroll();
-                }
-            }, 400);
         }
 
         $(document).ready(function() {
+            // ========== DOCK FILTER LOGIC ==========
+            const DOCK_FILTER_KEY = 'gantt_dock_filter';
+
+            function updateDockSelectedCount() {
+                const total = $('.dock-filter-cb').length;
+                const checked = $('.dock-filter-cb:checked').length;
+                $('#dockSelectedCount').text(checked + ' / ' + total + ' dipilih');
+                // Update button badge
+                if (checked < total) {
+                    $('#ganttDockFilterBtn').removeClass('btn-outline-info').addClass('btn-info');
+                    $('#ganttDockFilterBtn').html('<i class="bi bi-funnel-fill"></i> Filter Dock (' + checked + ')');
+                } else {
+                    $('#ganttDockFilterBtn').removeClass('btn-info').addClass('btn-outline-info');
+                    $('#ganttDockFilterBtn').html('<i class="bi bi-funnel-fill"></i> Filter Dock');
+                }
+            }
+
+            function applyDockFilter() {
+                const checkedNames = [];
+                $('.dock-filter-cb:checked').each(function() {
+                    checkedNames.push($(this).data('dock-name'));
+                });
+                // Save to localStorage
+                localStorage.setItem(DOCK_FILTER_KEY, JSON.stringify(checkedNames));
+                // Show/hide rows
+                $('.gantt-row').each(function() {
+                    const rowDockCycle = $(this).data('dock-cycle');
+                    if (checkedNames.includes(rowDockCycle)) {
+                        $(this).show();
+                    } else {
+                        $(this).hide();
+                    }
+                });
+                updateDockSelectedCount();
+            }
+
+            // Load saved filter
+            function loadDockFilter() {
+                const saved = localStorage.getItem(DOCK_FILTER_KEY);
+                if (saved) {
+                    try {
+                        const names = JSON.parse(saved);
+                        if (Array.isArray(names) && names.length > 0) {
+                            $('.dock-filter-cb').each(function() {
+                                const dockName = $(this).data('dock-name');
+                                $(this).prop('checked', names.includes(dockName));
+                            });
+                            applyDockFilter();
+                            return;
+                        }
+                    } catch(e) {}
+                }
+                updateDockSelectedCount();
+            }
+
+            // Search filter
+            $('#dockFilterSearch').on('input', function() {
+                const q = $(this).val().toLowerCase();
+                $('.dock-filter-item').each(function() {
+                    const name = $(this).data('dock-name').toLowerCase();
+                    $(this).toggle(name.indexOf(q) > -1);
+                });
+            });
+
+            // Select all / deselect all
+            $('#dockSelectAll').on('click', function() {
+                $('.dock-filter-cb:visible').prop('checked', true);
+                updateDockSelectedCount();
+            });
+            $('#dockDeselectAll').on('click', function() {
+                $('.dock-filter-cb:visible').prop('checked', false);
+                updateDockSelectedCount();
+            });
+
+            // Checkbox change
+            $(document).on('change', '.dock-filter-cb', function() {
+                updateDockSelectedCount();
+            });
+
+            // Apply button
+            $('#dockFilterApply').on('click', function() {
+                applyDockFilter();
+                // Close modal
+                var modal = bootstrap.Modal.getInstance(document.getElementById('dockFilterModal'));
+                if (modal) modal.hide();
+            });
+
+            // Load saved dock filter
+            loadDockFilter();
+
+            // ========== END DOCK FILTER LOGIC ==========
             // Add hover effect to gantt bars
             $('.gantt-bar').hover(
                 function() {
@@ -899,8 +1064,8 @@ else
                 return $(this).find('strong').text();
             });
             
-            // Initialize filter
-            filterGanttRows('all');
+            // Initialize
+            loadDockFilter();
             
             // Load saved auto-scroll state
             loadGanttAutoScrollState();
@@ -1522,43 +1687,52 @@ else
     /* ========== LEGEND STYLES ========== */
     .legend-container {
         background: rgba(30, 41, 59, 0.4) !important;
-        border-top: 2px solid rgba(59, 130, 246, 0.3) !important;
-        padding: 1.5rem 2rem !important;
+        border-top: 1px solid rgba(59, 130, 246, 0.3) !important;
+        padding: 0.4rem 1rem !important;
         border-radius: 0 0 12px 12px !important;
         margin-top: 0 !important;
     }
 
+    .legend-title-inline {
+        color: #60a5fa;
+        font-size: 0.75rem;
+        font-weight: 700;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
     .legend-title {
         color: #60a5fa !important;
-        font-size: 1.1rem !important;
+        font-size: 0.9rem !important;
         font-weight: 700 !important;
-        margin-bottom: 1.2rem !important;
+        margin-bottom: 0.5rem !important;
         display: flex !important;
         align-items: center !important;
-        gap: 0.5rem !important;
+        gap: 0.4rem !important;
     }
 
     .legend-title i {
-        font-size: 1.2rem !important;
+        font-size: 0.9rem !important;
     }
 
     .legend-item-simple {
         display: flex !important;
         align-items: center !important;
-        gap: 0.5rem !important;
-        padding: 0.5rem 0.75rem !important;
+        gap: 0.25rem !important;
+        padding: 0.2rem 0.45rem !important;
         background: rgba(59, 130, 246, 0.08) !important;
-        border-radius: 6px !important;
-        border: 1px solid rgba(59, 130, 246, 0.2) !important;
-        font-size: 0.85rem !important;
-        color: #e2e8f0 !important;
-        transition: all 0.2s ease !important;
+        border-radius: 4px !important;
+        border: 1px solid rgba(59, 130, 246, 0.15) !important;
+        font-size: 0.72rem !important;
+        color: #cbd5e1 !important;
+        white-space: nowrap !important;
     }
 
     .legend-item-simple:hover {
         background: rgba(59, 130, 246, 0.15) !important;
-        border-color: rgba(96, 165, 250, 0.4) !important;
-        transform: translateY(-1px) !important;
+        border-color: rgba(96, 165, 250, 0.35) !important;
     }
 
     .legend-item-simple i {

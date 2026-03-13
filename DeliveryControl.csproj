@@ -20,6 +20,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +28,35 @@
     <Content Remove="DataDumper\**" />
     <EmbeddedResource Remove="DataDumper\**" />
     <None Remove="DataDumper\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="ApplyMigrationTool\**" />
+    <Content Remove="ApplyMigrationTool\**" />
+    <EmbeddedResource Remove="ApplyMigrationTool\**" />
+    <None Remove="ApplyMigrationTool\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="DeliveryControl\**" />
+    <Content Remove="DeliveryControl\**" />
+    <EmbeddedResource Remove="DeliveryControl\**" />
+    <None Remove="DeliveryControl\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Delivery\**" />
+    <Content Remove="Delivery\**" />
+    <EmbeddedResource Remove="Delivery\**" />
+    <None Remove="Delivery\**" />
+  </ItemGroup>
+
+  <!-- Exclude semua folder publish output yang mungkin ada di dalam project -->
+  <ItemGroup>
+    <Compile Remove="publish\**" />
+    <Content Remove="publish\**" />
+    <EmbeddedResource Remove="publish\**" />
+    <None Remove="publish\**" />
   </ItemGroup>
 
 </Project>

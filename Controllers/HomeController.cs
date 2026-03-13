@@ -9,6 +9,8 @@ using DeliveryControl.Data;
 
 namespace DeliveryControl.Controllers
 {
+    [DeliveryControl.Filters.AuthorizeRoles("Admin", "User")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public class HomeController : Controller
     {
         private readonly ILogger<HomeController> _logger;
@@ -24,10 +26,14 @@ namespace DeliveryControl.Controllers
             _hubContext = hubContext;
         }
 
-        public async Task<IActionResult> Index()
+        [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+        public async Task<IActionResult> Index(DateTime? date = null)
         {
             var now = DateTime.Now;
-            var today = DateTime.Today;
+            var today = date?.Date ?? DateTime.Today;
+            var isViewingPast = date.HasValue && date.Value.Date != DateTime.Today;
+            // Untuk data historis, gunakan waktu akhir hari (23:59:59); untuk hari ini, gunakan waktu sekarang
+            var effectiveNow = isViewingPast ? today.AddDays(1).AddSeconds(-1) : now;
 
             // Load all schedules for today and those that transitioned to tomorrow
             // (ScheduledDate is the anchor for the cycle)
@@ -39,21 +45,46 @@ namespace DeliveryControl.Controllers
                 .ToListAsync();
 
             var todaySchedules = allSchedules
-                .Where(s => s.ScheduledDate.Date == today)
+                .Where(s => s.ScheduledDate.Date == today ||
+                            // Carry-over: jadwal dari hari-hari sebelumnya yang belum Completed (delay)
+                            (s.ScheduledDate.Date < today && s.Status != "Completed" && !s.ActualEndTime.HasValue))
                 .OrderBy(s =>
                 {
-                    // Prepared scan selesai (walau Status masih In Progress) → tengah bawah
-                    if (s.PreparationStatus == "Prepared")
+                    bool isCarryOver = s.ScheduledDate.Date < today;
+                    bool isInProgress = s.PreparationStatus == "In Progress" || s.Status == "In Progress"
+                                        || s.ActualStartTime.HasValue || s.ActualEnterDockTime.HasValue;
+                    bool isPrepared  = s.PreparationStatus == "Prepared";
+                    bool isCompleted = s.Status == "Completed" || s.ActualEndTime.HasValue;
+
+                    // Selesai delivery → paling bawah (semua kondisi)
+                    if (isCompleted) return 5;
+
+                    if (today == DateTime.Today)
+                    {
+                        // ── HARI INI: urutan normal ──
+                        // Prepared (sudah scan, menunggu kirim) → urutan ke-3
+                        if (isPrepared) return 3;
+                        // In Progress (sedang dikerjakan) → paling atas
+                        if (isInProgress) return 1;
+                        // Scheduled / Waiting → urutan ke-2
                         return 2;
-                    // Selesai delivery → paling bawah
-                    if (s.Status == "Completed" || s.ActualEndTime.HasValue)
-                        return 3;
-                    // Preparing / In Progress → paling atas
-                    if (s.PreparationStatus == "In Progress" || s.Status == "In Progress" || s.ActualStartTime.HasValue || s.ActualEnterDockTime.HasValue)
-                        return 0;
-                    // Scheduled / Waiting
-                    return 1;
+                    }
+                    else
+                    {
+                        // ── HARI LAIN (filter past/future) ──
+                        // Carry-over In Progress (masih dikerjakan, dari hari lalu) → paling atas
+                        if (isCarryOver && isInProgress) return 0;
+                        // Carry-over Scheduled (belum dikerjakan, dari hari lalu) → urutan ke-2
+                        if (isCarryOver) return 1;
+                        // Jadwal hari ini In Progress → urutan ke-3
+                        if (isInProgress) return 2;
+                        // Jadwal hari ini Scheduled → urutan ke-4
+                        if (!isPrepared) return 3;
+                        // Prepared → urutan ke-5
+                        return 4;
+                    }
                 })
+                .ThenBy(s => s.ScheduledDate)
                 .ThenBy(s => s.PickupTime)
                 .ToList();
 
@@ -66,20 +97,43 @@ namespace DeliveryControl.Controllers
                 .Select(g => new { 
                     Schedules = g.ToList(),
                     First = g.First(),
+                    IsCarryOver = g.All(s => s.ScheduledDate.Date < today),
                     DisplayStatus = g.All(s => GetDisplayStatus(s) == "Completed") ? "Completed" : 
-                                   (g.Any(s => GetDisplayStatus(s) == "In Progress") ? "In Progress" : "Scheduled")
+                                   (g.Any(s => GetDisplayStatus(s) == "In Progress") ? "In Progress" : "Scheduled"),
+                    IsPrepared = g.All(s => s.PreparationStatus == "Prepared")
                 })
                 .OrderBy(g =>
                 {
-                    // Completed group → paling bawah
+                    // Completed group → paling bawah (semua kondisi)
                     if (g.DisplayStatus == "Completed")
-                        return 3;
-                    // In Progress group → paling atas
-                    if (g.DisplayStatus == "In Progress")
-                        return 0;
-                    // Scheduled / Waiting → tengah
-                    return 1;
+                        return 5;
+
+                    if (today == DateTime.Today)
+                    {
+                        // ── HARI INI: urutan normal ──
+                        // Prepared (scan selesai, belum kirim) → urutan ke-3
+                        if (g.IsPrepared) return 3;
+                        // In Progress (sedang dikerjakan) → paling atas
+                        if (g.DisplayStatus == "In Progress") return 1;
+                        // Scheduled / Waiting → urutan ke-2
+                        return 2;
+                    }
+                    else
+                    {
+                        // ── HARI LAIN (filter tanggal past/future) ──
+                        // Carry-over In Progress (masih dikerjakan dari hari lalu) → paling atas
+                        if (g.IsCarryOver && g.DisplayStatus == "In Progress") return 0;
+                        // Carry-over Scheduled (belum dikerjakan dari hari lalu) → urutan ke-2
+                        if (g.IsCarryOver) return 1;
+                        // Jadwal hari ini In Progress → urutan ke-3
+                        if (g.DisplayStatus == "In Progress") return 2;
+                        // Jadwal hari ini Scheduled → urutan ke-4
+                        if (!g.IsPrepared) return 3;
+                        // Prepared → urutan ke-5
+                        return 4;
+                    }
                 })
+                .ThenBy(g => g.First.ScheduledDate)
                 .ThenBy(g => g.First.PickupTime)
                 .ToList();
 
@@ -101,20 +155,20 @@ namespace DeliveryControl.Controllers
                         : (s.ScheduleNumber ?? "").Trim().ToUpper(),
                     Date = s.ScheduledDate.Date 
                 })
-                .Count(g => (g.First().ETD <= now) == true);
+                .Count(g => (g.First().ETD <= effectiveNow) == true);
             
             // Count Delay Pickup - Berdasarkan jadwal perwakilan grup
             var delayPickupCount = groupedSchedules.Count(g => 
                 g.First.ActualStartTime == null && 
                 g.First.PickupTime != null && 
-                now > g.First.PickupTime.Value &&
+                effectiveNow > g.First.PickupTime.Value &&
                 g.DisplayStatus != "Completed");
             
             // Count Delay Dock In (Not Arrived) - Berdasarkan jadwal perwakilan grup
             var delayDockInCount = groupedSchedules.Count(g => 
                 g.First.ActualEnterDockTime == null && 
                 g.First.EnterDockTime != null && 
-                now > g.First.EnterDockTime.Value &&
+                effectiveNow > g.First.EnterDockTime.Value &&
                 g.DisplayStatus != "Completed");
             
             // Count Delay Prepare (Slow Work) - Berdasarkan Waktu Sekarang vs End Prep/Std Dock In
@@ -123,14 +177,18 @@ namespace DeliveryControl.Controllers
                 
                 var isGroupPrepared = g.Schedules.All(s => s.PreparationStatus == "Prepared");
                 var item = g.First;
-                var stdPMinutes = item.StdPrepareTime > 0 ? item.StdPrepareTime : (item.Customer?.StdPrepareTime ?? 0);
-                var planEndTime = item.ScheduledDate.Date.AddMinutes(stdPMinutes);
+                var stdPMinutes   = item.StdPrepareTime > 0   ? item.StdPrepareTime   : (item.Customer?.StdPrepareTime ?? 0);
+                var startPMinutes = item.StartPrepareTime > 0 ? item.StartPrepareTime : (item.Customer?.StartPrepareTime ?? 0);
+                var planEndTime   = item.ScheduledDate.Date.AddMinutes(stdPMinutes);
+                // Koreksi lintas tengah malam: jika End Prep < Start Prep, End Prep ada di hari berikutnya
+                if (stdPMinutes > 0 && startPMinutes > stdPMinutes)
+                    planEndTime = planEndTime.AddDays(1);
                 var dockInTimeTarget = item.EnterDockTime;
 
                 if (!isGroupPrepared)
                 {
                     // Delay jika melewati target End Prep ATAU melewati jadwal masuk truk (Dock In)
-                    return now > planEndTime || (dockInTimeTarget.HasValue && now > dockInTimeTarget.Value);
+                    return effectiveNow > planEndTime || (dockInTimeTarget.HasValue && effectiveNow > dockInTimeTarget.Value);
                 }
                 else 
                 {
@@ -158,6 +216,7 @@ namespace DeliveryControl.Controllers
             ViewBag.DelayPrepareCount = delayPrepareCount;
             ViewBag.PreparedCount = preparedCount;
             ViewBag.ShouldBeDeliveredCount = shouldBeDeliveredCount;
+            ViewBag.SelectedDate = today.ToString("yyyy-MM-dd");
 
             return View(todaySchedules);
         }
@@ -170,6 +229,7 @@ namespace DeliveryControl.Controllers
         }
 
         // Action for SignalR Dashboard Update (Polling replacement)
+        [Microsoft.AspNetCore.Authorization.AllowAnonymous]
         [HttpGet]
         public async Task<IActionResult> GetScheduleTableData()
         {
@@ -184,15 +244,35 @@ namespace DeliveryControl.Controllers
                 .ToListAsync();
 
             var todaySchedules = allSchedules
-                .Where(s => s.ScheduledDate.Date == today)
-                .OrderBy(s => (s.Status == "In Progress" || s.PreparationStatus == "In Progress" || (s.ActualStartTime.HasValue && !s.ActualEndTime.HasValue) || (s.ActualEnterDockTime.HasValue && !s.ActualEndTime.HasValue)) ? 0 : 
-                             (s.Status == "Completed" || s.ActualEndTime.HasValue) ? 2 : 1)
+                .Where(s => s.ScheduledDate.Date == today ||
+                            // Carry-over: jadwal dari hari-hari sebelumnya yang belum Completed
+                            (s.ScheduledDate.Date < today && s.Status != "Completed" && !s.ActualEndTime.HasValue))
+                .OrderBy(s =>
+                {
+                    bool isCarryOver = s.ScheduledDate.Date < today;
+                    bool isInProgress = s.PreparationStatus == "In Progress" || s.Status == "In Progress"
+                                        || (s.ActualStartTime.HasValue && !s.ActualEndTime.HasValue)
+                                        || (s.ActualEnterDockTime.HasValue && !s.ActualEndTime.HasValue);
+                    bool isPrepared  = s.PreparationStatus == "Prepared";
+                    bool isCompleted = s.Status == "Completed" || s.ActualEndTime.HasValue;
+
+                    if (isCompleted) return 5;
+                    // GetScheduleTableData selalu untuk hari ini (today == DateTime.Today)
+                    // urutan normal: In Progress → Scheduled → Prepared
+                    if (isCarryOver && isInProgress) return 0;
+                    if (isCarryOver) return 1;
+                    if (isPrepared) return 3;
+                    if (isInProgress) return 2;
+                    return 2;
+                })
+                .ThenBy(s => s.ScheduledDate)
                 .ThenBy(s => s.PickupTime)
                 .ToList();
 
             return PartialView("_ScheduleTablePartial", todaySchedules);
         }
 
+        [Microsoft.AspNetCore.Authorization.AllowAnonymous]
         [HttpGet]
         public async Task<IActionResult> GetDashboardStatistics()
         {
@@ -207,7 +287,9 @@ namespace DeliveryControl.Controllers
                 .ToListAsync();
 
             var todaySchedules = allSchedules
-                .Where(s => s.ScheduledDate.Date == today)
+                .Where(s => s.ScheduledDate.Date == today ||
+                            // Carry-over: jadwal dari hari-hari sebelumnya yang belum Completed
+                            (s.ScheduledDate.Date < today && s.Status != "Completed" && !s.ActualEndTime.HasValue))
                 .ToList();
 
             var groupedSchedules = todaySchedules
@@ -257,8 +339,12 @@ namespace DeliveryControl.Controllers
                 
                 var isGroupPrepared = g.Schedules.All(s => s.PreparationStatus == "Prepared");
                 var item = g.First;
-                var stdPMinutes = item.StdPrepareTime > 0 ? item.StdPrepareTime : (item.Customer?.StdPrepareTime ?? 0);
-                var planEndTime = item.ScheduledDate.Date.AddMinutes(stdPMinutes);
+                var stdPMinutes   = item.StdPrepareTime > 0   ? item.StdPrepareTime   : (item.Customer?.StdPrepareTime ?? 0);
+                var startPMinutes = item.StartPrepareTime > 0 ? item.StartPrepareTime : (item.Customer?.StartPrepareTime ?? 0);
+                var planEndTime   = item.ScheduledDate.Date.AddMinutes(stdPMinutes);
+                // Koreksi lintas tengah malam
+                if (stdPMinutes > 0 && startPMinutes > stdPMinutes)
+                    planEndTime = planEndTime.AddDays(1);
                 var dockInTimeTarget = item.EnterDockTime;
 
                 if (!isGroupPrepared)
@@ -299,6 +385,16 @@ namespace DeliveryControl.Controllers
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
         {
+            var feature = HttpContext.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature>();
+            if (feature?.Error != null)
+            {
+                try
+                {
+                    System.IO.File.AppendAllText(@"C:\DeliveryControl\DeliveryControl\error_log.txt", 
+                        $"{DateTime.Now}: {feature.Error.ToString()}\n\n");
+                }
+                catch { }
+            }
             return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
         }
     }

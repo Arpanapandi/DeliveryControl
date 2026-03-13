@@ -61,6 +61,30 @@
                                             <i class="bi bi-shield-check"></i> Admin
                                         </span>
                                     }
+                                    else if (item.Role == "Preparation")
+                                    {
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-box-arrow-in-right"></i> Preparation
+                                        </span>
+                                    }
+                                    else if (item.Role == "Pulling")
+                                    {
+                                        <span class="badge bg-primary">
+                                            <i class="bi bi-arrow-down-square"></i> Pulling
+                                        </span>
+                                    }
+                                    else if (item.Role == "Leader")
+                                    {
+                                        <span class="badge bg-purple text-white" style="background:#7c3aed!important;">
+                                            <i class="bi bi-person-badge"></i> Leader
+                                        </span>
+                                    }
+                                    else if (item.Role == "Driver")
+                                    {
+                                        <span class="badge bg-secondary">
+                                            <i class="bi bi-truck"></i> Driver
+                                        </span>
+                                    }
                                     else
                                     {
                                         <span class="badge bg-info">
@@ -69,7 +93,10 @@
                                     }
                                 </td>
                                 <td>
-                                    @if (item.Role == "Admin")
+                                    @{
+                                        bool hasAllDocks = item.Role == "Admin" || item.HasAllDockAccess;
+                                    }
+                                    @if (hasAllDocks)
                                     {
                                         <span class="badge bg-dark bg-opacity-50 text-light border border-secondary shadow-sm">
                                             <i class="bi bi-infinity text-warning me-1"></i> Semua Dock

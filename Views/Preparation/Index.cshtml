@@ -28,6 +28,51 @@
         padding: 1rem 0;
     }
 
+    /* Responsive adjustments for mobile */
+    @@media (max-width: 576px) {
+        .gallery-grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+            padding: 0.5rem 0;
+        }
+        
+        .prep-card-body {
+            padding: 16px;
+        }
+        
+        .customer-name {
+            font-size: 1.2rem;
+        }
+        
+        .cycle-value {
+            font-size: 1.4rem;
+        }
+        
+        .filter-bar {
+            padding: 1rem;
+        }
+        
+        .filter-bar .row > div {
+            margin-bottom: 0.5rem;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .container-fluid {
+            padding-left: 10px;
+            padding-right: 10px;
+        }
+        
+        .prep-card-header {
+            padding: 10px 15px;
+            font-size: 1rem;
+        }
+        
+        .detail-value {
+            font-size: 1rem;
+        }
+    }
+
     .prep-card {
         background: var(--cyber-card-bg);
         border: 2px solid var(--cyber-border);
@@ -63,7 +108,10 @@
     .header-scheduled { background: var(--cyber-yellow); color: #000; }
     .header-preparing { background: #f97316; color: white; }
     .header-prepared { background: #3b82f6; color: white; }
+    .header-leader-verification { background: #7c3aed; color: white; }
     .header-completed { background: #10b981; color: white; }
+
+    .prep-card.border-leader { border-color: #7c3aed !important; }
 
     .prep-card-body {
         padding: 24px;
@@ -271,7 +319,7 @@
         {
             <div class="d-flex align-items-center mb-3 gap-2">
                 <i class="bi bi-lightning-charge-fill text-warning fs-5"></i>
-                <span class="fw-bold text-white-50 small" style="letter-spacing: 1px;">BUTUH AKSI PREPARATION</span>
+                <span class="fw-bold text-white-50 small" style="letter-spacing: 1px;">@(Context.Session.GetString("Role") == "Leader" ? "PERLU VERIFIKASI LEADER" : "BUTUH AKSI PREPARATION")</span>
                 <span class="badge bg-warning text-dark ms-1">@activeTrips.Count</span>
             </div>
             <div class="gallery-grid mb-5">
@@ -388,10 +436,62 @@
                             }
                             else if (trip.OverallStatus == "Prepared")
                             {
-                                <form asp-action="QuickEnterDock" method="post">
-                                    <input type="hidden" name="id" value="@trip.RepresentativeScheduleId" />
-                                    <button type="submit" class="btn btn-info w-100 fw-bold py-3 text-white"><i class="bi bi-check-circle-fill me-2"></i> ENTER DOCK</button>
-                                </form>
+                                var sessionRole = Context.Session.GetString("Role");
+                                var isLeaderRole = (sessionRole == "Leader");
+                                var isAdminRole = (sessionRole == "Admin");
+                                var canEnterDock = (sessionRole == "Admin" || sessionRole == "Preparation");
+                                var canVerify = (isLeaderRole || isAdminRole);
+                                var allVerified = trip.Schedules.All(s => s.IsLeaderVerified);
+                                var verifiedCount = trip.Schedules.Count(s => s.IsLeaderVerified);
+                                var totalCount = trip.Schedules.Count;
+
+                                @if (canVerify)
+                                {
+                                    @* Leader & Admin: tampil tombol verifikasi + Enter Dock jika sudah verified *@
+                                    if (allVerified)
+                                    {
+                                        @if (canEnterDock)
+                                        {
+                                            <form asp-action="QuickEnterDock" method="post">
+                                                <input type="hidden" name="id" value="@trip.RepresentativeScheduleId" />
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-info w-100 fw-bold py-3 text-white">
+                                                    <i class="bi bi-check-circle-fill me-2"></i> ENTER DOCK
+                                                </button>
+                                            </form>
+                                            <div class="text-center mt-1" style="color:#34d399;">
+                                                <small><i class="bi bi-check-circle-fill me-1"></i> Terverifikasi (@verifiedCount/@totalCount)</small>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="text-center py-2" style="color:#34d399;">
+                                                <i class="bi bi-check-circle-fill me-2"></i>
+                                                <small class="fw-bold">Semua Terverifikasi (<span>@verifiedCount/@totalCount</span>)</small>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <button type="button"
+                                                class="btn btn-leader w-100 fw-bold py-3"
+                                                onclick="openVerificationModal(@trip.RepresentativeScheduleId, '@Html.Raw(trip.Area ?? trip.CustomerName)', '@Html.Raw(trip.CustomerName)')"
+                                                style="background:#7c3aed;color:white;border:none;border-radius:8px;">
+                                            <i class="bi bi-shield-check me-2"></i> LEADER VERIFICATION
+                                            @if (verifiedCount > 0)
+                                            {
+                                                <span class="badge bg-light text-dark ms-1" style="font-size:0.7rem;">@verifiedCount/@totalCount</span>
+                                            }
+                                        </button>
+                                    }
+                                }
+                                else
+                                {
+                                    @* Role lain: hanya info status *@
+                                    <div class="text-center py-2 text-muted">
+                                        <small><i class="bi bi-clock me-1"></i> Status: Prepared</small>
+                                    </div>
+                                }
                             }
                         </div>
                     </div>
@@ -521,6 +621,401 @@
 
 @section Scripts {
     <script src="~/lib/signalr.min.js"></script>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         MODAL LEADER VERIFICATION
+    ══════════════════════════════════════════════════════════════ -->
+    <div class="modal fade" id="modalLeaderVerification" tabindex="-1" aria-labelledby="modalLeaderVerificationLabel" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content" style="background:#1e293b;border:2px solid #7c3aed;border-radius:16px;">
+                <div class="modal-header" style="background:#7c3aed;border-radius:14px 14px 0 0;">
+                    <div>
+                        <h5 class="modal-title fw-bold text-white mb-0" id="modalLeaderVerificationLabel">
+                            <i class="bi bi-shield-check me-2"></i> LEADER VERIFICATION
+                        </h5>
+                        <small class="text-white opacity-75" id="lvModalSubtitle">— Dock / Area —</small>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" style="color:white;">
+                    <!-- Progress Bar -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="small fw-bold" style="color:#a78bfa;">PROGRESS VERIFIKASI KANBAN</span>
+                            <span class="small fw-bold text-white" id="lvProgressText">0 / 0 Kanban</span>
+                        </div>
+                        <div class="progress" style="height:12px;background:rgba(255,255,255,0.08);border-radius:8px;">
+                            <div id="lvProgressBar" class="progress-bar" role="progressbar"
+                                 style="width:0%;background:#7c3aed;border-radius:8px;transition:width 0.4s ease;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+
+                    <!-- Daftar Manifest dengan Parts -->
+                    <div class="mb-4" style="border:1px solid rgba(124,58,237,0.3);border-radius:10px;overflow:hidden;">
+                        <div class="px-3 py-2" style="background:rgba(124,58,237,0.2);font-size:0.8rem;font-weight:700;letter-spacing:1px;color:#c4b5fd;">
+                            <i class="bi bi-list-check me-2"></i> DAFTAR MANIFEST & PARTS
+                        </div>
+                        <div id="lvManifestContainer" style="max-height:350px;overflow-y:auto;padding:8px;">
+                            <div class="text-center py-4 text-muted"><i class="bi bi-hourglass-split me-2"></i>Memuat data...</div>
+                        </div>
+                    </div>
+
+                    <!-- Form Scan -->
+                    <div id="lvScanSection">
+                        <div class="mb-2">
+                            <label class="form-label fw-bold" style="color:#a78bfa;letter-spacing:1px;font-size:0.82rem;">
+                                <i class="bi bi-upc-scan me-2"></i> SCAN KANBAN
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text" style="background:#0f172a;border:2px solid #7c3aed;color:#a78bfa;">
+                                    <i class="bi bi-qr-code-scan fs-5"></i>
+                                </span>
+                                <input type="text" id="lvScanInput"
+                                       class="form-control fw-bold"
+                                       style="background:#0f172a;border:2px solid #7c3aed;color:white;font-size:1.1rem;letter-spacing:2px;"
+                                       placeholder="Scan Part Number dari kanban..."
+                                       autocomplete="off" />
+                            </div>
+                            <div id="lvScanFeedback" class="mt-2" style="min-height:28px;font-size:0.85rem;"></div>
+                        </div>
+                        <div class="text-muted" style="font-size:0.75rem;">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Scan <code style="color:#a78bfa;">Part Number</code> dari kanban — setiap scan memverifikasi 1 kanban.
+                        </div>
+                    </div>
+
+                    <!-- Pesan Sukses Selesai -->
+                    <div id="lvCompleteMessage" class="text-center py-3" style="display:none;">
+                        <div class="mb-2" style="font-size:2.5rem;">✅</div>
+                        <div class="fw-bold text-success fs-5">Semua Manifest Terverifikasi!</div>
+                        @if (Context.Session.GetString("Role") == "Leader")
+                        {
+                            <div class="text-white-50 small mt-1">Menutup dalam <span id="lvCountdown">2</span> detik.</div>
+                            <div class="text-white-50 small mt-1" style="color:#a78bfa!important;">Tim Preparation dapat melanjutkan Enter Dock.</div>
+                        }
+                        else
+                        {
+                            <div class="text-white-50 small mt-1">Menutup dalam <span id="lvCountdown">2</span> detik... Silakan klik <strong>ENTER DOCK</strong>.</div>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top:1px solid rgba(124,58,237,0.3);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle me-1"></i> Tutup
+                    </button>
+                    <div id="lvFooterInfo" class="text-muted small ms-auto">
+                        <i class="bi bi-shield-lock me-1"></i> Hanya Admin & Leader yang dapat verifikasi
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ─── STATE ──────────────────────────────────────────────────────────
+        let lvRepresentativeId = null;
+        let lvIsProcessing     = false;
+
+        // ─── OPEN MODAL ─────────────────────────────────────────────────────
+        function openVerificationModal(repId, dockName, customerName) {
+            lvRepresentativeId = repId;
+            lvIsProcessing     = false;
+
+            document.getElementById('lvModalSubtitle').textContent = `${customerName} — ${dockName}`;
+            document.getElementById('lvProgressText').textContent  = '0 / 0 Kanban';
+            document.getElementById('lvProgressBar').style.width   = '0%';
+            document.getElementById('lvScanInput').value           = '';
+            document.getElementById('lvScanFeedback').innerHTML    = '';
+            document.getElementById('lvScanSection').style.display = 'block';
+            document.getElementById('lvCompleteMessage').style.display = 'none';
+            document.getElementById('lvManifestContainer').innerHTML = '<div class="text-center py-4 text-muted"><i class="bi bi-hourglass-split me-2"></i>Memuat data...</div>';
+
+            const modal = new bootstrap.Modal(document.getElementById('modalLeaderVerification'));
+            modal.show();
+
+            // Focus input setelah modal terbuka
+            document.getElementById('modalLeaderVerification').addEventListener('shown.bs.modal', function onShown() {
+                document.getElementById('lvScanInput').focus();
+                this.removeEventListener('shown.bs.modal', onShown);
+            });
+
+            // Load data manifest dari server
+            loadVerificationData(repId);
+        }
+
+        // ─── LOAD DATA ──────────────────────────────────────────────────────
+        function loadVerificationData(repId) {
+            fetch(`/Preparation/GetVerificationData?id=${repId}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) {
+                        showScanFeedback(data.message, 'error');
+                        return;
+                    }
+                    renderManifestTable(data.manifests);
+                    updateProgress(data.scannedKanban, data.totalKanban, data.verifiedManifests, data.totalManifests);
+                    if (data.isComplete) triggerVerificationComplete();
+                })
+                .catch(err => {
+                    console.error(err);
+                    showScanFeedback('Gagal memuat data. Periksa koneksi.', 'error');
+                });
+        }
+
+        // ─── RENDER MANIFEST CARDS WITH PARTS ───────────────────────────────
+        function renderManifestTable(manifests) {
+            const container = document.getElementById('lvManifestContainer');
+            if (!manifests || manifests.length === 0) {
+                container.innerHTML = '<div class="text-center py-4 text-muted">Tidak ada manifest ditemukan.</div>';
+                return;
+            }
+            
+            container.innerHTML = manifests.map((m, idx) => {
+                const scanned = m.kanbanScanned || 0;
+                const target  = m.kanbanTarget  || 0;
+                const pct     = target > 0 ? Math.min(100, Math.round(scanned / target * 100)) : 0;
+                const isVerified = m.isVerified;
+                const parts = m.parts || [];
+                
+                // Render parts table rows
+                const partsRows = parts.length > 0 ? parts.map(p => `
+                    <tr style="font-size:0.78rem;">
+                        <td class="py-1 ps-2" style="color:#e2e8f0;">${p.partNumber}</td>
+                        <td class="py-1" style="color:#94a3b8;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.partName}">${p.partName}</td>
+                        <td class="py-1 text-center" style="color:#fbbf24;">${p.quantity} ${p.unit}</td>
+                        <td class="py-1 text-center fw-bold" style="color:#22d3ee;">
+                            <i class="bi bi-box-seam me-1"></i>${p.kanbanCount}
+                        </td>
+                    </tr>
+                `).join('') : '<tr><td colspan="4" class="text-muted text-center py-2">Tidak ada parts</td></tr>';
+                
+                return `
+                <div id="lv-card-${m.scheduleId}" class="mb-2" style="border:1px solid ${isVerified ? '#10b981' : 'rgba(124,58,237,0.4)'};border-radius:8px;overflow:hidden;background:${isVerified ? 'rgba(16,185,129,0.08)' : 'rgba(15,23,42,0.6)'};">
+                    <!-- Manifest Header -->
+                    <div class="d-flex align-items-center justify-content-between px-3 py-2" style="background:${isVerified ? 'rgba(16,185,129,0.15)' : 'rgba(124,58,237,0.15)'};">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi ${isVerified ? 'bi-check-circle-fill text-success' : 'bi-file-earmark-text'}" style="color:${isVerified ? '' : '#7c3aed'};font-size:1.1rem;"></i>
+                            <div>
+                                <div class="fw-bold" style="color:${isVerified ? '#34d399' : 'white'};font-size:0.9rem;">${m.manifestKey}</div>
+                                <div style="font-size:0.7rem;color:#94a3b8;">${m.scheduleNumber}</div>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="text-end" id="lv-kanban-${m.scheduleId}">
+                                <div class="fw-bold" style="font-size:0.85rem;color:${isVerified ? '#34d399' : (scanned > 0 ? '#fbbf24' : '#94a3b8')};">
+                                    ${scanned} / ${target} <small style="color:#94a3b8;">Kanban</small>
+                                </div>
+                                <div style="height:4px;background:rgba(255,255,255,0.1);border-radius:4px;width:60px;">
+                                    <div style="height:4px;border-radius:4px;width:${pct}%;background:${pct>=100?'#10b981':(pct>0?'#fbbf24':'#475569')};transition:width 0.3s;"></div>
+                                </div>
+                            </div>
+                            <span id="lv-status-${m.scheduleId}">
+                                ${isVerified
+                                    ? '<span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i>VERIFIED</span>'
+                                    : (scanned > 0
+                                        ? '<span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>SCANNING</span>'
+                                        : '<span class="badge bg-secondary"><i class="bi bi-clock me-1"></i>PENDING</span>')}
+                            </span>
+                        </div>
+                    </div>
+                    <!-- Parts Table -->
+                    <div class="table-responsive" style="max-height:150px;overflow-y:auto;">
+                        <table class="table table-sm table-dark mb-0" style="font-size:0.8rem;">
+                            <thead style="position:sticky;top:0;background:#1e293b;z-index:1;">
+                                <tr style="color:#64748b;font-size:0.7rem;text-transform:uppercase;">
+                                    <th class="py-1 ps-2">Part No</th>
+                                    <th class="py-1">Part Name</th>
+                                    <th class="py-1 text-center">Qty</th>
+                                    <th class="py-1 text-center">Kanban</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${partsRows}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // ─── UPDATE PROGRESS BAR ────────────────────────────────────────────
+        function updateProgress(scanned, total, verifiedMf, totalMf) {
+            const pct = total > 0 ? Math.round(scanned / total * 100) : 0;
+            document.getElementById('lvProgressText').textContent = `${scanned} / ${total} Kanban  (${verifiedMf}/${totalMf} Manifest)`;
+            const bar = document.getElementById('lvProgressBar');
+            bar.style.width      = `${pct}%`;
+            bar.setAttribute('aria-valuenow', pct);
+            bar.style.background = pct >= 100 ? '#10b981' : '#7c3aed';
+        }
+
+        // ─── HANDLE SCAN INPUT ──────────────────────────────────────────────
+        document.getElementById('lvScanInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const input = this.value.trim();
+                if (!input || lvIsProcessing) return;
+                lvIsProcessing = true;
+                submitScan(input);
+            }
+        });
+
+        function submitScan(scanInput) {
+            showScanFeedback('<i class="bi bi-arrow-repeat me-1 spin"></i> Memproses...', 'loading');
+
+            const formData = new FormData();
+            formData.append('representativeId', lvRepresentativeId);
+            formData.append('scanInput', scanInput);
+
+            fetch('/Preparation/ScanManifestVerification', {
+                method: 'POST',
+                body:   formData
+            })
+            .then(r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
+            .then(data => {
+                lvIsProcessing = false;
+
+                if (data.success) {
+                    // Clear input immediately on success
+                    document.getElementById('lvScanInput').value = '';
+                    showScanFeedback(data.message, 'success');
+
+                    // Update card per-manifest
+                    if (data.manifests) {
+                        data.manifests.forEach(m => {
+                            const card   = document.getElementById(`lv-card-${m.scheduleId}`);
+                            const kanban = document.getElementById(`lv-kanban-${m.scheduleId}`);
+                            const status = document.getElementById(`lv-status-${m.scheduleId}`);
+                            const scanned = m.kanbanScanned || 0;
+                            const target  = m.kanbanTarget  || 0;
+                            const pct     = target > 0 ? Math.min(100, Math.round(scanned / target * 100)) : 0;
+                            const isVerified = m.isVerified;
+
+                            if (card) {
+                                card.style.border = `1px solid ${isVerified ? '#10b981' : 'rgba(124,58,237,0.4)'}`;
+                                card.style.background = isVerified ? 'rgba(16,185,129,0.08)' : 'rgba(15,23,42,0.6)';
+                                const header = card.querySelector('.d-flex');
+                                if (header) {
+                                    header.style.background = isVerified ? 'rgba(16,185,129,0.15)' : 'rgba(124,58,237,0.15)';
+                                }
+                            }
+                            if (kanban) {
+                                const color = isVerified ? '#34d399' : (scanned > 0 ? '#fbbf24' : '#94a3b8');
+                                const barColor = pct >= 100 ? '#10b981' : (pct > 0 ? '#fbbf24' : '#475569');
+                                kanban.innerHTML = `
+                                    <div class="fw-bold" style="font-size:0.85rem;color:${color};">
+                                        ${scanned} / ${target} <small style="color:#94a3b8;">Kanban</small>
+                                    </div>
+                                    <div style="height:4px;background:rgba(255,255,255,0.1);border-radius:4px;width:60px;">
+                                        <div style="height:4px;border-radius:4px;width:${pct}%;background:${barColor};transition:width 0.3s;"></div>
+                                    </div>`;
+                            }
+                            if (status) {
+                                status.innerHTML = isVerified
+                                    ? '<span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i>VERIFIED</span>'
+                                    : (scanned > 0
+                                        ? '<span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>SCANNING</span>'
+                                        : '<span class="badge bg-secondary"><i class="bi bi-clock me-1"></i>PENDING</span>');
+                            }
+                        });
+                    }
+                    updateProgress(data.scannedKanban, data.totalKanban, data.verifiedManifests, data.totalManifests);
+
+                    if (data.isComplete) {
+                        triggerVerificationComplete();
+                    } else {
+                        document.getElementById('lvScanInput').focus();
+                    }
+                } else if (data.isDuplicate) {
+                    document.getElementById('lvScanInput').value = '';
+                    showScanFeedback(data.message, 'warning');
+                    document.getElementById('lvScanInput').focus();
+                } else {
+                    document.getElementById('lvScanInput').value = '';
+                    showScanFeedback(data.message, 'error');
+                    const inp = document.getElementById('lvScanInput');
+                    inp.style.borderColor = '#ef4444';
+                    inp.focus();
+                    setTimeout(() => { inp.style.borderColor = '#7c3aed'; }, 800);
+                }
+            })
+            .catch(err => {
+                lvIsProcessing = false;
+                // Clear input, show brief error, refocus
+                document.getElementById('lvScanInput').value = '';
+                showScanFeedback('Gagal terhubung ke server. Coba lagi.', 'error');
+                document.getElementById('lvScanInput').focus();
+                console.error('Scan error:', err);
+            });
+        }
+
+        // ─── VERIFICATION COMPLETE ──────────────────────────────────────────
+        // Leader: setelah semua manifest verified → tutup modal saja (Leader tidak enter dock)
+        // Admin: reload halaman agar button Enter Dock muncul
+        function triggerVerificationComplete() {
+            document.getElementById('lvScanSection').style.display     = 'none';
+            document.getElementById('lvCompleteMessage').style.display = 'block';
+
+            // Sembunyikan countdown text untuk Leader (tidak perlu reload)
+            const isLeader = '@(Context.Session.GetString("Role"))' === 'Leader';
+
+            let countdown = 2;
+            const tick = setInterval(() => {
+                countdown--;
+                const el = document.getElementById('lvCountdown');
+                if (el) el.textContent = countdown;
+                if (countdown <= 0) {
+                    clearInterval(tick);
+                    // Tutup modal
+                    const modalEl = document.getElementById('modalLeaderVerification');
+                    const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                    if (modalInstance) modalInstance.hide();
+
+                    if (!isLeader) {
+                        // Admin/Preparation: reload agar button Enter Dock muncul
+                        const selectedDate = document.querySelector('input[name="selectedDate"]')?.value || '';
+                        window.location.href = '/Preparation/Index' + (selectedDate ? '?selectedDate=' + selectedDate : '');
+                    }
+                    // Leader: tidak reload, karena Enter Dock bukan tanggung jawab Leader
+                }
+            }, 1000);
+        }
+
+        // ─── FEEDBACK ───────────────────────────────────────────────────────
+        let feedbackTimer = null;
+        function showScanFeedback(message, type) {
+            const el    = document.getElementById('lvScanFeedback');
+            const styles = {
+                success: 'color:#34d399;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);',
+                error:   'color:#f87171;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);',
+                warning: 'color:#fbbf24;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);',
+                loading: 'color:#a78bfa;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.3);'
+            };
+            el.innerHTML = `<div class="px-3 py-2 rounded" style="${styles[type] || styles.loading}">${message}</div>`;
+            // Clear previous timer
+            if (feedbackTimer) clearTimeout(feedbackTimer);
+            // Auto-clear: error/warning = 1.5s, success = 2s, loading = stays until replaced
+            if (type === 'error' || type === 'warning') {
+                feedbackTimer = setTimeout(() => { el.innerHTML = ''; }, 1500);
+            } else if (type === 'success') {
+                feedbackTimer = setTimeout(() => { el.innerHTML = ''; }, 2000);
+            }
+        }
+
+        // ─── ANTI FORGERY TOKEN ─────────────────────────────────────────────
+        function getAntiForgeryToken() {
+            return document.querySelector('input[name="__RequestVerificationToken"]')?.value
+                ?? document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+                ?? '';
+        }
+
+        const spinStyle = document.createElement('style');
+        spinStyle.textContent = '.spin { display:inline-block; animation: spin 1s linear infinite; } @@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .text-orange { color: #f97316; }';
+        document.head.appendChild(spinStyle);
+    </script>
+
     <script>
         // SignalR Connection
         var connection = new signalR.HubConnectionBuilder().withUrl("/deliveryHub").build();
@@ -556,8 +1051,8 @@
                     // Card not found (maybe new?), reload filtering might be needed but try not to disrupt
                     // location.reload(); 
                 }
-            } else if (action === "enterDock" || action === "readyToDock") {
-                 // specific logic for enter dock / ready to dock (full reload to refresh buttons)
+            } else if (action === "enterDock" || action === "readyToDock" || action === "leaderVerificationComplete") {
+                 // specific logic for enter dock / ready to dock / leader verification (full reload to refresh buttons)
                  location.reload();
             }
         });
@@ -569,8 +1064,8 @@
                 var status = data.status || data.Status;
                 var prepStatus = data.preparationStatus || data.PreparationStatus;
                 
-                header.classList.remove('header-scheduled', 'header-preparing', 'header-prepared', 'header-completed');
-                card.classList.remove('border-warning', 'border-orange', 'border-info', 'border-success');
+                header.classList.remove('header-scheduled', 'header-preparing', 'header-prepared', 'header-leader-verification', 'header-completed');
+                card.classList.remove('border-warning', 'border-orange', 'border-info', 'border-leader', 'border-success');
                 
                 var badge = header.querySelector('.badge-status');
 
@@ -591,12 +1086,6 @@
                     card.classList.add('border-warning');
                     if(badge) badge.innerText = "SCHEDULED";
                 }
-            }
-
-            // Note: Individual Item Progress update removed for performance and cleaner UI.
-            // Full reload is safer when Kanban agregat updates via SignalR.
-            if ((data.items || data.Items) && action === "preparation") {
-                // location.reload(); // Uncomment if real-time item aggregation update is needed
             }
         }
 

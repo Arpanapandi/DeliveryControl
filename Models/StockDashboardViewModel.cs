@@ -19,6 +19,11 @@ namespace DeliveryControl.Models
         public DateTime? SearchDate { get; set; }
         public string Period { get; set; } = "Day";
         
+        public List<ScanNGLog> NGPulling { get; set; } = new List<ScanNGLog>();
+        public List<ScanNGLog> NGPreparation { get; set; } = new List<ScanNGLog>();
+        public int TotalNGPulling { get; set; }
+        public int TotalNGPreparation { get; set; }
+        
         public int NetStock => StockDetails.Count; // Updated to show current actual stock
     }
 
@@ -46,5 +51,7 @@ namespace DeliveryControl.Models
         public string Operator { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty; // Shortage, Normal, Over
         public DateTime LastActivityDate { get; set; }
+        public bool IsManualAdjust { get; set; }
+        public string? AdjustNote { get; set; }
     }
 }

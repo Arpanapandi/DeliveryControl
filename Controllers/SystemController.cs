@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using DeliveryControl.Data;
 using Microsoft.EntityFrameworkCore;
+using DeliveryControl.Filters;
 
 namespace DeliveryControl.Controllers
 {
+    [AuthorizeAdmin]
     public class SystemController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -13,20 +15,18 @@ namespace DeliveryControl.Controllers
             _context = context;
         }
 
+        // Clear Data Dashboard Shipping: hanya DeliverySchedules, DeliveryItems, ActivityLogs
         public async Task<IActionResult> ClearTransactions()
         {
-            // Clear transaction tables using raw SQL for speed on SQLite
-            await _context.Database.ExecuteSqlRawAsync("DELETE FROM PreparationRecords");
+            await _context.Database.ExecuteSqlRawAsync("DELETE FROM ActivityLogs");
             await _context.Database.ExecuteSqlRawAsync("DELETE FROM DeliveryItems");
             await _context.Database.ExecuteSqlRawAsync("DELETE FROM DeliverySchedules");
-            await _context.Database.ExecuteSqlRawAsync("DELETE FROM PullingRecords");
-            await _context.Database.ExecuteSqlRawAsync("DELETE FROM ActivityLogs");
 
-            // Vacuum database to recover space and reset IDs if possible (optional)
-            await _context.Database.ExecuteSqlRawAsync("VACUUM");
+            var connStr = _context.Database.GetConnectionString() ?? "";
+            if (!connStr.Contains("Server=") && !connStr.Contains("Database="))
+                await _context.Database.ExecuteSqlRawAsync("VACUUM");
 
-            TempData["SuccessMessage"] = "Semua data transaksi (Schedule, Pulling, Prep, Log) telah dikosongkan.";
-            
+            TempData["SuccessMessage"] = "Data Dashboard Shipping (Jadwal, Item, Log) telah dikosongkan. Data Preparation dan Pulling tidak terpengaruh.";
             return RedirectToAction("Index", "Home");
         }
         public async Task<IActionResult> ConsolidateSchedules()

@@ -22,6 +22,10 @@ build_property._RazorSourceGeneratorDebug =
 build_property.EffectiveAnalysisLevelStyle = 8.0
 build_property.EnableCodeStyleSeverity = 
 
+[C:/DeliveryControl/DeliveryControl/Views/Account/AccessDenied.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQWNjb3VudFxBY2Nlc3NEZW5pZWQuY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
 [C:/DeliveryControl/DeliveryControl/Views/Account/Login.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQWNjb3VudFxMb2dpbi5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
@@ -226,6 +230,10 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU2hhcmVkXEVycm9yLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
+[C:/DeliveryControl/DeliveryControl/Views/Shared/_ClearDataModal.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU2hhcmVkXF9DbGVhckRhdGFNb2RhbC5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
 [C:/DeliveryControl/DeliveryControl/Views/Shared/_Pager.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU2hhcmVkXF9QYWdlci5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
@@ -242,6 +250,10 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
+[C:/DeliveryControl/DeliveryControl/Views/Stock/LogScanNG.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcTG9nU2Nhbk5HLmNzaHRtbA==
+build_metadata.AdditionalFiles.CssScope = 
+
 [C:/DeliveryControl/DeliveryControl/Views/Stock/Molded.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcTW9sZGVkLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
@@ -252,10 +264,6 @@ build_metadata.AdditionalFiles.CssScope =
 
 [C:/DeliveryControl/DeliveryControl/Views/Stock/Targets.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcVGFyZ2V0cy5jc2h0bWw=
-build_metadata.AdditionalFiles.CssScope = 
-
-[C:/DeliveryControl/DeliveryControl/Views/Stock/Trend.cshtml]
-build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3RvY2tcVHJlbmQuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
 [C:/DeliveryControl/DeliveryControl/Views/Stock/TrendCriticalStock.cshtml]

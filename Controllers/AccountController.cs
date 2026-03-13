@@ -21,23 +21,12 @@ namespace DeliveryControl.Controllers
         // GET: Account/Login
         public IActionResult Login()
         {
-            // Jika sudah login, redirect ke home
+            // Jika sudah login, redirect berdasarkan Role
             if (HttpContext.Session.GetString("UserId") != null)
             {
-                var username = HttpContext.Session.GetString("Username") ?? string.Empty;
-
-                if (string.Equals(username, "driver", StringComparison.OrdinalIgnoreCase))
-                {
-                    return RedirectToAction("Index", "Driver");
-                }
-
-                if (string.Equals(username, "prepare", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(username, "preparation", StringComparison.OrdinalIgnoreCase))
-                {
-                    return RedirectToAction("Index", "Preparation");
-                }
-
-                return RedirectToAction("Index", "Home");
+                return RedirectAfterLogin(
+                    HttpContext.Session.GetString("Username") ?? "",
+                    HttpContext.Session.GetString("Role") ?? "");
             }
             return View();
         }
@@ -55,7 +44,7 @@ namespace DeliveryControl.Controllers
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.Username == model.Username && u.IsActive);
 
-            if (user == null || !BCrypt.Net.BCrypt.Verify(model.Password, user.Password))
+            if (user == null || string.IsNullOrEmpty(user.Password) || !BCrypt.Net.BCrypt.Verify(model.Password, user.Password))
             {
                 ModelState.AddModelError("", "Username atau password salah");
                 return View(model);
@@ -67,20 +56,31 @@ namespace DeliveryControl.Controllers
             HttpContext.Session.SetString("FullName", user.FullName);
             HttpContext.Session.SetString("Role", user.Role);
 
-            _logger.LogInformation($"User {user.Username} logged in successfully");
+            _logger.LogInformation($"User {user.Username} (Role: {user.Role}) logged in successfully");
 
-            // Redirect berdasarkan username / role
-            if (string.Equals(user.Username, "driver", StringComparison.OrdinalIgnoreCase))
-            {
+            return RedirectAfterLogin(user.Username, user.Role);
+        }
+
+        private IActionResult RedirectAfterLogin(string username, string role)
+        {
+            // Username "driver" atau Role "Driver" → Driver Portal
+            if (string.Equals(username, "driver", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(role, "Driver", StringComparison.OrdinalIgnoreCase))
                 return RedirectToAction("Index", "Driver");
-            }
 
-            if (string.Equals(user.Username, "prepare", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(user.Username, "preparation", StringComparison.OrdinalIgnoreCase))
-            {
+            // Role Leader → Portal Preparation
+            if (string.Equals(role, "Leader", StringComparison.OrdinalIgnoreCase))
                 return RedirectToAction("Index", "Preparation");
-            }
 
+            // Role Preparation → Langsung ke halaman scan
+            if (string.Equals(role, "Preparation", StringComparison.OrdinalIgnoreCase))
+                return RedirectToAction("Index", "PreparationWorkflow");
+
+            // Role Pulling → Portal Pulling
+            if (string.Equals(role, "Pulling", StringComparison.OrdinalIgnoreCase))
+                return RedirectToAction("Index", "Pulling");
+
+            // Admin, User → Dashboard Shipping
             return RedirectToAction("Index", "Home");
         }
 
@@ -91,6 +91,18 @@ namespace DeliveryControl.Controllers
             HttpContext.Session.Clear();
             _logger.LogInformation($"User {username} logged out");
             return RedirectToAction("Login");
+        }
+
+        // GET: Account/AccessDenied
+        public IActionResult AccessDenied()
+        {
+            var errorMessage = HttpContext.Session.GetString("ErrorMessage");
+            if (!string.IsNullOrEmpty(errorMessage))
+            {
+                TempData["ErrorMessage"] = errorMessage;
+                HttpContext.Session.Remove("ErrorMessage");
+            }
+            return View();
         }
     }
 

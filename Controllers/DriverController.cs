@@ -14,6 +14,7 @@ namespace DeliveryControl.Controllers
     /// Controller khusus untuk Driver - konfirmasi kedatangan dan keberangkatan
     /// </summary>
     [Authorize]
+    [AuthorizeRoles("Admin", "Preparation", "User", "Pulling", "Driver", "Leader")]
     public class DriverController : Controller
     {
         private readonly ApplicationDbContext _context;

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Authorization;
 
 namespace DeliveryControl.Filters
 {
@@ -13,12 +14,9 @@ namespace DeliveryControl.Filters
             {
                 return;
             }
-
-            // Check for AllowAnonymous attribute
-            var hasAllowAnonymous = context.ActionDescriptor.EndpointMetadata
-                .Any(em => em.GetType().Name == "AllowAnonymousAttribute");
-
-            if (hasAllowAnonymous)
+            
+            // PENTING: Cek attribute [AllowAnonymous] di endpoint/action/controller
+            if (context.ActionDescriptor.EndpointMetadata.Any(em => em is IAllowAnonymous || em.GetType().Name.Contains("AllowAnonymous")))
             {
                 return;
             }
@@ -62,7 +60,57 @@ namespace DeliveryControl.Filters
             {
                 // Jika bukan admin, redirect ke home dengan error message
                 context.HttpContext.Session.SetString("ErrorMessage", "Anda tidak memiliki akses untuk halaman ini");
-                context.Result = new RedirectToActionResult("Index", "Home", null);
+                context.Result = new RedirectToActionResult("AccessDenied", "Account", null);
+                return;
+            }
+
+            base.OnActionExecuting(context);
+        }
+    }
+
+    /// <summary>
+    /// Filter untuk membatasi akses berdasarkan Role. Gunakan: [AuthorizeRoles("Admin", "Preparation")]
+    /// </summary>
+    public class AuthorizeRolesAttribute : ActionFilterAttribute
+    {
+        private readonly string[] _roles;
+
+        public AuthorizeRolesAttribute(params string[] roles)
+        {
+            _roles = roles;
+        }
+
+        public override void OnActionExecuting(ActionExecutingContext context)
+        {
+            var session = context.HttpContext.Session;
+            var userId = session.GetString("UserId");
+            var role   = session.GetString("Role") ?? "";
+            var username = (session.GetString("Username") ?? "").ToLower();
+
+            // PENTING: Cek attribute [AllowAnonymous] di endpoint/action/controller
+            if (context.ActionDescriptor.EndpointMetadata.Any(em => em is IAllowAnonymous || em.GetType().Name.Contains("AllowAnonymous")))
+            {
+                return;
+            }
+
+            // Jika belum login → ke halaman login
+            if (string.IsNullOrEmpty(userId))
+            {
+                // context.HttpContext.Session.SetString("ErrorMessage", "DEBUG: Redirecting from AuthorizeRoles because userId is null");
+                context.Result = new RedirectToActionResult("Login", "Account", null);
+                return;
+            }
+
+            // Bypass untuk username "driver" agar tetap bisa akses DriverController
+            // (role-nya bisa saja 'User' tapi kita tetap izinkan lewat di sini)
+            // Controller DriverController akan handle redirectnya sendiri.
+
+            // Cek apakah role user ada dalam daftar role yang diizinkan (case-insensitive)
+            if (!_roles.Any(r => string.Equals(r, role, StringComparison.OrdinalIgnoreCase)))
+            {
+                context.HttpContext.Session.SetString("ErrorMessage", 
+                    $"Akses ditolak. Halaman ini hanya untuk role: {string.Join(", ", _roles)}.");
+                context.Result = new RedirectToActionResult("AccessDenied", "Account", null);
                 return;
             }
 

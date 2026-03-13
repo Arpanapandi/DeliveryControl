@@ -27,6 +27,7 @@ namespace DeliveryControl.Data
         public DbSet<PreparationRecord> PreparationRecords { get; set; }
         public DbSet<UserDock> UserDocks { get; set; }
         public DbSet<StockSnapshot> StockSnapshots { get; set; }
+        public DbSet<ScanNGLog> ScanNGLogs { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -258,6 +259,15 @@ namespace DeliveryControl.Data
                     .WithMany()
                     .HasForeignKey(e => e.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Configure ScanNGLog
+            modelBuilder.Entity<ScanNGLog>(entity =>
+            {
+                entity.HasIndex(e => e.Module);
+                entity.HasIndex(e => e.CreatedDate);
+                entity.HasIndex(e => new { e.Module, e.CreatedDate });
+                entity.HasIndex(e => e.CreatedBy);
             });
         }
     }

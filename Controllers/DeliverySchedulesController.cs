@@ -7,18 +7,23 @@ using DeliveryControl.Models;
 using DeliveryControl.Models.ViewModels;
 using DeliveryControl.Hubs;
 using System.Globalization;
+using DeliveryControl.Filters;
+using DeliveryControl.Services;
 
 namespace DeliveryControl.Controllers
 {
+    [AuthorizeRoles("Admin", "User")]
     public class DeliverySchedulesController : Controller
     {
         private readonly ApplicationDbContext _context;
         private readonly IHubContext<DeliveryHub> _hubContext;
+        private readonly PreparationSyncService _syncService;
 
-        public DeliverySchedulesController(ApplicationDbContext context, IHubContext<DeliveryHub> hubContext)
+        public DeliverySchedulesController(ApplicationDbContext context, IHubContext<DeliveryHub> hubContext, PreparationSyncService syncService)
         {
             _context = context;
             _hubContext = hubContext;
+            _syncService = syncService;
         }
 
         // GET: DeliverySchedules/GanttChart - Visualisasi Gantt Chart
@@ -32,27 +37,142 @@ namespace DeliveryControl.Controllers
             ViewData["CustomerId"] = customerId;
             ViewData["Customers"] = new SelectList(_context.Customers.Where(c => c.IsActive), "CustomerId", "CustomerName");
 
-            var query = _context.DeliverySchedules
+            // Ambil semua active customers dari master
+            var allCustomers = await _context.Customers
+                .Where(c => c.IsActive)
+                .OrderBy(c => c.CustomerName)
+                .ToListAsync();
+
+            // Filter berdasarkan customerId jika ada
+            if (customerId.HasValue)
+            {
+                allCustomers = allCustomers.Where(c => c.CustomerId == customerId.Value).ToList();
+            }
+
+            // Ambil schedules untuk tanggal yang dipilih
+            var rawSchedules = await _context.DeliverySchedules
                 .Include(s => s.Customer)
                 .Where(s => s.ScheduledDate.Date >= scheduleDate.Date && s.ScheduledDate.Date <= endScheduleDate.Date)
-                .AsQueryable();
+                .ToListAsync();
 
             if (customerId.HasValue)
             {
-                query = query.Where(s => s.CustomerId == customerId.Value);
+                rawSchedules = rawSchedules.Where(s => s.CustomerId == customerId.Value).ToList();
             }
 
-            var rawSchedules = await query.ToListAsync();
+            // Buat dictionary: CustomerId → list schedules
+            var schedulesByCustomer = rawSchedules
+                .GroupBy(s => s.CustomerId)
+                .ToDictionary(g => g.Key, g => g.ToList());
 
-            // Urutkan: yang belum complete di atas, yang sudah Complete selalu di bawah
-            var schedules = rawSchedules
-                .OrderBy(s => (s.Status == "In Progress" || s.PreparationStatus == "In Progress" || (s.ActualStartTime.HasValue && !s.ActualEndTime.HasValue) || (s.ActualEnterDockTime.HasValue && !s.ActualEndTime.HasValue)) ? 0 : 
-                             (s.Status == "Completed" || s.ActualEndTime.HasValue) ? 2 : 1)
-                .ThenBy(s => s.ScheduledDate)
-                .ThenBy(s => s.PickupTime ?? s.ETD ?? s.ScheduledDate)
-                .ToList();
+            // Helper: parse "HH:mm" string ke double jam (untuk sorting)
+            static double ParseTimeString(string? timeStr)
+            {
+                if (string.IsNullOrWhiteSpace(timeStr)) return 0;
+                if (TimeSpan.TryParse(timeStr, out var ts))
+                    return ts.TotalHours;
+                return 0;
+            }
 
-            return View(schedules);
+            // Buat GanttRow untuk setiap customer
+            var rows = allCustomers.Select(customer =>
+            {
+                var schedules = schedulesByCustomer.TryGetValue(customer.CustomerId, out var s) ? s : new List<DeliverySchedule>();
+
+                // Tentukan earliest meaningful time (non-zero) untuk sorting
+                // Priority: actual data dari schedule > master data times
+                double pickupHour = 0;
+                double dockingHour = 0;
+                double prepStartHour = 0;
+
+                if (schedules.Any())
+                {
+                    var earliestPickup = schedules
+                        .Where(x => x.PickupTime.HasValue)
+                        .Select(x => x.PickupTime!.Value.Hour + x.PickupTime!.Value.Minute / 60.0)
+                        .DefaultIfEmpty(0)
+                        .Min();
+                    var earliestDock = schedules
+                        .Where(x => x.EnterDockTime.HasValue)
+                        .Select(x => x.EnterDockTime!.Value.Hour + x.EnterDockTime!.Value.Minute / 60.0)
+                        .DefaultIfEmpty(0)
+                        .Min();
+                    pickupHour = earliestPickup;
+                    dockingHour = earliestDock;
+                }
+                else
+                {
+                    // Gunakan Customer master data
+                    pickupHour = ParseTimeString(customer.Pickup);
+                    dockingHour = ParseTimeString(customer.Docking);
+                }
+                prepStartHour = customer.StartPrepareTime / 60.0;
+
+                // =====================================================================
+                // Sort key: urut berdasarkan startPrepMins di HARI INI (H) ascending
+                //
+                // startPrepMins selalu merupakan jam di hari ini (H):
+                //   - 420  = 07:00 H → sort key 7.0
+                //   - 1380 = 23:00 H → sort key 23.0
+                // Pickup/docking juga selalu di H atau H+1.
+                // Yang paling pagi (sort key terkecil) tampil paling atas.
+                // Tidak ada data → 9999 (paling bawah)
+                // =====================================================================
+                double sortHour = 9999;
+
+                // Prioritas 1: startPrepMins (jam mulai prepare hari ini)
+                if (customer.StartPrepareTime > 0)
+                    sortHour = customer.StartPrepareTime / 60.0;
+                // Prioritas 2: EnterDockTime dari schedule
+                else if (dockingHour > 0)
+                    sortHour = dockingHour;
+                // Prioritas 3: PickupTime
+                else if (pickupHour > 0)
+                    sortHour = pickupHour;
+
+                bool hasCompleteData = pickupHour > 0 || dockingHour > 0 || prepStartHour > 0;
+                double finalSortKey = sortHour;
+
+                return new GanttRow
+                {
+                    Customer = customer,
+                    Schedules = schedules
+                        .OrderBy(x => x.ActualEndTime.HasValue ? 2 :
+                                     (x.Status == "In Progress" || x.PreparationStatus == "In Progress" ||
+                                      (x.ActualStartTime.HasValue && !x.ActualEndTime.HasValue) ||
+                                      (x.ActualEnterDockTime.HasValue && !x.ActualEndTime.HasValue)) ? 0 : 1)
+                        .ThenBy(x => x.PickupTime ?? x.ETD ?? x.ScheduledDate)
+                        .ToList(),
+                    SortKey = finalSortKey,
+                    HasCompleteData = hasCompleteData
+                };
+            })
+            .OrderBy(r => r.SortKey)
+            .ThenBy(r => r.Customer.CustomerName)
+            .ToList();
+
+            // Hitung statistik dari schedules
+            var totalScheduled = rawSchedules.Count;
+            var totalCompleted = rawSchedules.Count(s => s.ActualEndTime.HasValue || s.Status == "Completed");
+            var totalInProgress = rawSchedules.Count(s =>
+                s.Status == "In Progress" || s.PreparationStatus == "In Progress" ||
+                (s.ActualStartTime.HasValue && !s.ActualEndTime.HasValue) ||
+                (s.ActualEnterDockTime.HasValue && !s.ActualEndTime.HasValue));
+            var totalLate = rawSchedules.Count(s =>
+                s.ActualStartTime.HasValue && s.PickupTime.HasValue &&
+                s.ActualStartTime.Value > s.PickupTime.Value);
+
+            var viewModel = new GanttChartViewModel
+            {
+                Rows = rows,
+                SelectedDate = scheduleDate,
+                TotalScheduled = totalScheduled,
+                TotalCompleted = totalCompleted,
+                TotalInProgress = totalInProgress,
+                TotalLate = totalLate
+            };
+
+            return View(viewModel);
         }
 
         // GET: DeliverySchedules/DelayChart - Grafik batang total delay per jam + tren harian
@@ -522,35 +642,50 @@ namespace DeliveryControl.Controllers
                 schedules = schedules.Where(s => s.Status == status);
             }
 
-            var totalItems = await schedules.CountAsync();
-            int pageSize = 20;
-
             var rawResults = await schedules.ToListAsync();
-            var items = rawResults
+
+            // Paginate by GROUP (Dock+Route+Cycle+Date), bukan raw records
+            // Supaya total kanban per group selalu lengkap (tidak terpotong pagination)
+            int pageSize = 20; // jumlah GROUP per halaman
+
+            var orderedResults = rawResults
                 .OrderBy(s =>
                 {
-                    // In Progress (truk di jalan / sedang berlangsung) → paling atas
                     if (s.Status == "In Progress" || s.PreparationStatus == "In Progress" || (s.ActualStartTime.HasValue && !s.ActualEndTime.HasValue) || (s.ActualEnterDockTime.HasValue && !s.ActualEndTime.HasValue))
                         return 0;
-                    // Completed (selesai delivery) → paling bawah
                     if (s.Status == "Completed" || s.ActualEndTime.HasValue)
                         return 2;
-                    // Cancelled → paling bawah sekali
                     if (s.Status == "Cancelled")
                         return 3;
-                    // Scheduled / Prepared (menunggu) → tengah
                     return 1;
                 })
                 .ThenBy(s => s.ScheduledDate)
                 .ThenBy(s => s.ETD ?? s.PickupTime ?? s.EnterDockTime ?? DateTime.MaxValue)
                 .ThenBy(s => s.ScheduleId)
+                .ToList();
+
+            // Group dulu, lalu paginate groups
+            var allGroups = orderedResults
+                .GroupBy(s => new {
+                    Dock  = (string.IsNullOrEmpty(s.Area) ? (s.Customer?.Docking ?? "") : s.Area).Trim().ToUpper(),
+                    Route = (s.Route ?? "").Trim().ToUpper(),
+                    Cycle = (s.Cycle ?? "").Trim().ToUpper(),
+                    Date  = s.ScheduledDate.Date
+                })
+                .ToList();
+
+            var totalGroups = allGroups.Count;
+            var pagedGroups = allGroups
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToList();
 
+            // Flatten kembali ke list schedules — tapi setiap group LENGKAP
+            var items = pagedGroups.SelectMany(g => g).ToList();
+
             ViewBag.CurrentPage = pageNumber;
-            ViewBag.TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
-            ViewBag.TotalItems = totalItems;
+            ViewBag.TotalPages = (int)Math.Ceiling(totalGroups / (double)pageSize);
+            ViewBag.TotalItems = totalGroups; // tampilkan count group, bukan raw rows
             ViewBag.RouteData = new Dictionary<string, string> { 
                 { "startDate", startDate?.ToString("yyyy-MM-dd") },
                 { "endDate", endDate?.ToString("yyyy-MM-dd") },
@@ -558,7 +693,23 @@ namespace DeliveryControl.Controllers
                 { "status", status }
             };
 
+            // Hitung pending preparations (belum terikat jadwal)
+            ViewBag.PendingPrepCount = await _context.PreparationRecords.CountAsync(p => p.ScheduleId == null);
+
             return View(items);
+        }
+
+        // POST: DeliverySchedules/SyncPendingNow — manual trigger untuk sinkronisasi pending preparations
+        [HttpPost]
+        [AuthorizeAdmin]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SyncPendingNow()
+        {
+            int synced = await _syncService.SyncAllPendingAsync();
+            TempData["SuccessMessage"] = synced > 0
+                ? $"✅ {synced} record preparation PENDING berhasil disinkronisasi ke jadwal."
+                : "ℹ️ Tidak ada pending preparation yang bisa disinkronisasi saat ini (belum ada jadwal yang sesuai, atau memang sudah kosong).";
+            return RedirectToAction(nameof(Index));
         }
 
         // GET: DeliverySchedules/Dashboard
@@ -631,6 +782,7 @@ namespace DeliveryControl.Controllers
         }
 
         // GET: DeliverySchedules/BulkCreate - Bulk scheduling dengan tabel checklist
+        [AuthorizeAdmin]
         public async Task<IActionResult> BulkCreate(DateTime? selectedDate)
         {
             var scheduledDate = selectedDate ?? DateTime.Today;
@@ -673,6 +825,7 @@ namespace DeliveryControl.Controllers
         // POST: DeliverySchedules/BulkCreate - Process bulk scheduling
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [AuthorizeAdmin]
         public async Task<IActionResult> BulkCreate(BulkScheduleViewModel model)
         {
             try
@@ -794,6 +947,17 @@ namespace DeliveryControl.Controllers
                         _context.DeliverySchedules.AddRange(schedules);
                         await _context.SaveChangesAsync();
                         await transaction.CommitAsync();
+
+                        // Auto-sync pending preparations ke jadwal yang baru dibuat
+                        var newScheduleIds = schedules.Select(s => s.ScheduleId).Where(id => id > 0).ToList();
+                        if (newScheduleIds.Any())
+                        {
+                            int synced = await _syncService.SyncPendingForSchedulesAsync(newScheduleIds);
+                            if (synced > 0)
+                            {
+                                TempData["InfoMessage"] = $"{synced} record preparation PENDING telah tersinkronisasi ke jadwal yang baru dibuat.";
+                            }
+                        }
                         
                         // Notify Dashboard via SignalR
                         await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
@@ -915,6 +1079,7 @@ namespace DeliveryControl.Controllers
         }
 
         // GET: DeliverySchedules/Create
+        [AuthorizeAdmin]
         public IActionResult Create()
         {
             var customerList = _context.Customers
@@ -1015,6 +1180,7 @@ namespace DeliveryControl.Controllers
         // POST: DeliverySchedules/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [AuthorizeAdmin]
         public async Task<IActionResult> Create([Bind("ScheduleId,ScheduleNumber,CustomerId,ScheduledDate,Route,Cycle,EnterDockTime,ActualEnterDockTime,PickupTime,ETD,Range,SKID,Area,VehicleNumber,DriverName,DriverPhone,Notes,Status,TotalTargetQuantity,TotalActualQuantity")] DeliverySchedule schedule)
         {
             // Remove validation for optional fields
@@ -1102,6 +1268,7 @@ namespace DeliveryControl.Controllers
         }
 
         // GET: DeliverySchedules/Edit/5
+        [AuthorizeAdmin]
         public async Task<IActionResult> Edit(int? id)
         {
             if (id == null)
@@ -1133,6 +1300,7 @@ namespace DeliveryControl.Controllers
         // POST: DeliverySchedules/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [AuthorizeAdmin]
         public async Task<IActionResult> Edit(int id, [Bind("ScheduleId,ScheduleNumber,CustomerId,ScheduledDate,Route,Cycle,EnterDockTime,ActualEnterDockTime,PickupTime,ETD,Range,SKID,Area,ActualStartTime,ActualEndTime,ActualPickupTime,VehicleNumber,DriverName,DriverPhone,Notes,Status,CreatedDate,CreatedBy,TotalTargetQuantity,TotalActualQuantity,StartPrepareTime,StdPrepareTime")] DeliverySchedule schedule)
         {
             if (id != schedule.ScheduleId)
@@ -1198,6 +1366,7 @@ namespace DeliveryControl.Controllers
         }
 
         // GET: DeliverySchedules/StartDelivery/5
+        [AuthorizeAdmin]
         public async Task<IActionResult> StartDelivery(int? id)
         {
             if (id == null)
@@ -1236,6 +1405,7 @@ namespace DeliveryControl.Controllers
         }
 
         // GET: DeliverySchedules/CompleteDelivery/5
+        [AuthorizeAdmin]
         public async Task<IActionResult> CompleteDelivery(int? id)
         {
             if (id == null)
@@ -1284,6 +1454,7 @@ namespace DeliveryControl.Controllers
         }
 
         // GET: DeliverySchedules/Delete/5
+        [AuthorizeAdmin]
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null)
@@ -1307,6 +1478,7 @@ namespace DeliveryControl.Controllers
         // POST: DeliverySchedules/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
+        [AuthorizeAdmin]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var schedule = await _context.DeliverySchedules
@@ -1362,6 +1534,7 @@ namespace DeliveryControl.Controllers
         // POST: Bulk Delete Schedules
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [AuthorizeAdmin]
         public async Task<IActionResult> BulkDelete(string selectedIds)
         {
             if (string.IsNullOrEmpty(selectedIds))
@@ -1505,7 +1678,7 @@ namespace DeliveryControl.Controllers
 
         // Import Excel
         [HttpPost]
-        [ValidateAntiForgeryToken]
+        [AuthorizeAdmin]
         public async Task<IActionResult> ImportExcel(IFormFile file)
         {
             if (file == null || file.Length == 0)
@@ -1619,7 +1792,7 @@ namespace DeliveryControl.Controllers
                             Cycle = string.IsNullOrWhiteSpace(cycle) ? customer.Cycle : cycle,
                             Range = string.IsNullOrWhiteSpace(range) ? customer.Range : range,
                             SKID = skid ?? customer.SKID,
-                            Area = string.IsNullOrWhiteSpace(area) ? enterDockStr : area,
+                            Area = string.IsNullOrWhiteSpace(area) ? customer.Area : area,
                             StartPrepareTime = ParsePrepTime(startPrepStr) != 0 ? ParsePrepTime(startPrepStr) : customer.StartPrepareTime,
                             StdPrepareTime = ParsePrepTime(endPrepStr) != 0 ? ParsePrepTime(endPrepStr) : customer.StdPrepareTime,
                             TotalTargetQuantity = targetQty,
@@ -1678,6 +1851,17 @@ namespace DeliveryControl.Controllers
                         _context.DeliverySchedules.AddRange(schedules);
                         await _context.SaveChangesAsync();
                         await transaction.CommitAsync();
+
+                        // Auto-sync pending preparations ke jadwal yang baru di-import
+                        var importedScheduleIds = schedules.Select(s => s.ScheduleId).Where(id => id > 0).ToList();
+                        if (importedScheduleIds.Any())
+                        {
+                            int synced = await _syncService.SyncPendingForSchedulesAsync(importedScheduleIds);
+                            if (synced > 0)
+                            {
+                                TempData["InfoMessage"] = $"{synced} record preparation PENDING telah tersinkronisasi ke jadwal yang baru di-import.";
+                            }
+                        }
 
                     // Notify Dashboard via SignalR
                     await _hubContext.Clients.All.SendAsync("deliveryUpdated", new
@@ -1801,13 +1985,22 @@ namespace DeliveryControl.Controllers
             }
 
             var results = await query.ToListAsync();
+            // Urutkan: 
+            // 1. In Progress di paling atas
+            // 2. Yang belum complete (ActualEndTime null) di tengah  
+            // 3. Yang sudah complete (ActualEndTime ada nilai) di paling bawah
             var sortedSchedules = results
                 .OrderBy(s =>
                 {
-                    if (s.Status == "In Progress" || s.PreparationStatus == "In Progress" || (s.ActualStartTime.HasValue && !s.ActualEndTime.HasValue) || (s.ActualEnterDockTime.HasValue && !s.ActualEndTime.HasValue))
-                        return 0;
-                    if (s.Status == "Completed" || s.ActualEndTime.HasValue)
+                    // Delivery complete (ActualEndTime ada) → paling bawah
+                    if (s.ActualEndTime.HasValue)
                         return 2;
+                    // In Progress → atas
+                    if (s.Status == "In Progress" || s.PreparationStatus == "In Progress" || 
+                        (s.ActualStartTime.HasValue && !s.ActualEndTime.HasValue) || 
+                        (s.ActualEnterDockTime.HasValue && !s.ActualEndTime.HasValue))
+                        return 0;
+                    // Cancelled → paling bawah
                     if (s.Status == "Cancelled")
                         return 3;
                     return 1;
@@ -1858,6 +2051,16 @@ namespace DeliveryControl.Controllers
             int hours = totalMinutes / 60;
             int minutes = totalMinutes % 60;
             return $"{hours:D2}:{minutes:D2}";
+        }
+
+        [HttpPost]
+        [DeliveryControl.Filters.AuthorizeRoles("Admin")]
+        public async Task<IActionResult> ClearDeliveryData()
+        {
+            var count = await _context.DeliverySchedules.CountAsync();
+            _context.DeliverySchedules.RemoveRange(_context.DeliverySchedules);
+            await _context.SaveChangesAsync();
+            return Json(new { success = true, message = $"Berhasil menghapus {count} data Jadwal Delivery." });
         }
     }
 }

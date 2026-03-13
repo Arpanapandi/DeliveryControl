@@ -55,6 +55,18 @@
                 <i class="bi bi-file-earmark-excel"></i>
                 <span>Template Excel</span>
             </button>
+
+            @if (Context.Session.GetString("Role") == "Admin")
+            {
+                <button id="btnAdjustStock" class="btn-custom-orange" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;padding:6px 14px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">
+                    <i class="bi bi-sliders"></i>
+                    <span>Adjust Stock</span>
+                </button>
+                <button onclick="showClearDataModal('Data FG (Pulling &amp; Preparation)', '/Stock/ClearFGData')" style="background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;border:none;padding:6px 14px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">
+                    <i class="bi bi-trash3-fill"></i>
+                    <span>Clear Data</span>
+                </button>
+            }
         </div>
     </div>
 
@@ -77,9 +89,9 @@
                 <i class="bi bi-cpu"></i>
                 <span>Transaction RVI</span>
             </a>
-            <a asp-controller="Stock" asp-action="Trend" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Trend" ? "active" : "")">
-                <i class="bi bi-graph-up"></i>
-                <span>Trend Stock</span>
+            <a asp-controller="Stock" asp-action="LogScanNG" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "LogScanNG" ? "active" : "")" style="color: #ef4444;">
+                <i class="bi bi-bug-fill"></i>
+                <span>Log Scan NG</span>
             </a>
             <a asp-controller="Stock" asp-action="TrendCriticalStock" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "TrendCriticalStock" ? "active" : "")" style="color: #f59e0b;">
                 <i class="bi bi-exclamation-triangle-fill"></i>
@@ -100,9 +112,9 @@
             </div>
         </div>
         <div class="col-md-3 mb-4">
-            <div class="cyber-card p-3 text-center border-success indicator-card clickable" data-filter="Normal" style="cursor: pointer;">
+            <div class="cyber-card p-3 text-center indicator-card clickable" data-filter="Normal" style="cursor: pointer; border-color: #f59e0b !important; border: 1px solid #f59e0b;">
                 <small class="text-muted d-block text-uppercase">Normal</small>
-                <h2 class="fw-bold mb-0 text-success">@Model.NormalCount</h2>
+                <h2 class="fw-bold mb-0" style="color:#f59e0b;">@Model.NormalCount</h2>
                 <small class="text-white-50">Safe Stock Items</small>
             </div>
         </div>
@@ -114,7 +126,7 @@
             </div>
         </div>
         <div class="col-md-3 mb-4">
-            <div class="cyber-card p-3 text-center">
+            <div class="cyber-card p-3 text-center indicator-card clickable" data-filter="All" style="cursor: pointer;">
                 <div class="status-indicator-live active"></div>
                 <small class="text-muted d-block text-uppercase">Total item</small>
                 <h2 class="fw-bold mb-0 text-white fs-4">@(Model.ShortageCount + Model.NormalCount + Model.OverCount)</h2>
@@ -156,6 +168,7 @@
                                 <th class="bg-red text-white text-center" style="min-width: 80px;">MIN 1D</th>
                                 <th class="bg-yellow text-dark text-center" style="min-width: 80px;">ROP 2D</th>
                                 <th class="bg-info text-white text-center" style="min-width: 80px;">MAX 3D</th>
+                                <th class="bg-dark-blue text-white text-center" style="min-width: 160px;">REMARK</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -177,25 +190,25 @@
                                          @if (record.LevelStock < 1.5m)
                                          {
                                              <span class="stock-badge stock-level-red px-2 py-1">
-                                                 <i class="bi bi-exclamation-triangle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
+                                                 <i class="bi bi-exclamation-triangle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) D
                                              </span>
                                          }
                                          else if (record.LevelStock >= 1.5m && record.LevelStock < 2.0m)
                                          {
                                              <span class="stock-badge stock-level-yellow px-2 py-1">
-                                                 <i class="bi bi-info-circle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
+                                                 <i class="bi bi-info-circle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) D
                                              </span>
                                          }
                                          else if (record.LevelStock >= 2.0m && record.LevelStock <= 3.0m)
                                          {
                                              <span class="stock-badge stock-level-green px-2 py-1">
-                                                 <i class="bi bi-check-circle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
+                                                 <i class="bi bi-check-circle-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) D
                                              </span>
                                          }
                                          else
                                          {
                                              <span class="stock-badge stock-level-blue px-2 py-1">
-                                                 <i class="bi bi-star-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) Days
+                                                 <i class="bi bi-star-fill"></i> @record.LevelStock.ToString("N1", System.Globalization.CultureInfo.InvariantCulture) D
                                              </span>
                                          }
                                     </td>
@@ -216,11 +229,17 @@
                                     <td class="text-center fw-bold text-danger">@(record.Min?.ToString() ?? "-")</td>
                                     <td class="text-center fw-bold text-warning">@(record.Rop?.ToString() ?? "-")</td>
                                     <td class="text-center fw-bold text-success">@(record.Max?.ToString() ?? "-")</td>
+                                    <td class="text-center" style="font-size:0.78rem;">
+                                        @if (record.IsManualAdjust && !string.IsNullOrEmpty(record.AdjustNote))
+                                        {
+                                            <span style="color:#f59e0b;"><i class="bi bi-pencil-square"></i> @record.AdjustNote</span>
+                                        }
+                                    </td>
                                 </tr>
                             }
                             @if (!Model.StockDetails.Any())
                             {
-                                <tr><td colspan="16" class="text-center py-5 text-muted small">Tidak ada data barang dalam stok.</td></tr>
+                                <tr><td colspan="17" class="text-center py-5 text-muted small">Tidak ada data barang dalam stok.</td></tr>
                             }
                         </tbody>
                     </table>
@@ -243,58 +262,68 @@
                 .build();
 
             connection.on("updateStock", function () {
+                if (window.showUpdateNotification) {
+                    window.showUpdateNotification('Data stock baru masuk — memperbarui dashboard...', 'pulling', 4000);
+                }
                 refreshDashboard();
             });
 
             connection.start().catch(err => console.error(err.toString()));
 
-            function refreshDashboard() {
+            function refreshDashboard(resetPage) {
                 const plant = $('#plantFilter').val() || 'Overall';
                 const date = $('#dateFilter').val() || '';
                 const period = $('#periodFilter').val() || 'Day';
+                const statusParam = currentStatusFilter || 'All';
                 
                 const urlParams = new URLSearchParams(window.location.search);
-                const pageNumber = urlParams.get('pageNumber') || '1';
+                const pageNumber = resetPage ? '1' : (urlParams.get('pageNumber') || '1');
                 
                 $.ajax({
-                    url: `/Stock/Index?plant=${plant}&date=${date}&period=${period}&pageNumber=${pageNumber}`,
+                    url: `/Stock/Index?plant=${plant}&date=${date}&period=${period}&pageNumber=${pageNumber}&status=${statusParam}`,
                     type: 'GET',
                     success: function (html) {
                         const newContent = $(html).find('#dashboardContent').html();
-                        $('#dashboardContent').fadeOut(200, function() {
-                            $(this).html(newContent).fadeIn(200);
-                            bindFilterEvents();
-                            applyAllFilters(); // Re-apply local filters (Search & Status)
-                            
-                            // Re-apply auto scroll state if it was active
-                            if (isAutoScrollActive) {
-                                syncAutoScrollUI();
-                                startScrolling();
-                            }
-                        });
+                        $('#dashboardContent').html(newContent);
+                        bindFilterEvents();
+                        applyAllFilters(); // Re-apply local filters (Search & Status UI)
+                        
+                        // Re-apply auto scroll state if it was active
+                        if (isAutoScrollActive) {
+                            syncAutoScrollUI();
+                            startScrolling();
+                        }
                     }
                 });
             }
 
-            let currentStatusFilter = 'All';
+            let currentStatusFilter = '@(ViewBag.CurrentStatus ?? "All")';
 
             function bindFilterEvents() {
                 $('.indicator-card.clickable').off('click').on('click', function() {
-                    currentStatusFilter = $(this).data('filter');
-                    applyAllFilters();
+                    const clickedFilter = $(this).data('filter');
+                    if (clickedFilter === 'All') {
+                        // Total card: selalu reset ke All
+                        currentStatusFilter = 'All';
+                    } else {
+                        // Toggle: klik yang sama → kembali ke All
+                        currentStatusFilter = (currentStatusFilter === clickedFilter) ? 'All' : clickedFilter;
+                    }
+                    refreshDashboard(1); // Server-side filter, reset ke page 1
                 });
 
                 $('#plantFilter, #dateFilter, #periodFilter').off('change').on('change', function() {
-                    refreshDashboard();
+                    currentStatusFilter = 'All'; // reset status filter saat filter utama berubah
+                    refreshDashboard(1);
                 });
 
                 $('#tagLabelSearch').off('input').on('input', function() {
-                    applyAllFilters();
+                    applySearchFilter();
                 });
 
                 $('#tagLabelSearch').off('keypress').on('keypress', function(e) {
                     if (e.which == 13) {
-                        refreshDashboard();
+                        refreshDashboard(1);
                     }
                 });
 
@@ -306,43 +335,54 @@
                     const period = $('#periodFilter').val() || 'Day';
                     window.location.href = `/Stock/ExportToExcel?plant=${plant}&date=${date}&period=${period}`;
                 });
+
+                // Highlight active filter card on load
+                syncFilterCardUI();
             }
 
-            function applyAllFilters() {
-                const searchText = $('#tagLabelSearch').val().toLowerCase();
-                let visibleCounter = 1;
-                
-                $('.indicator-card').removeClass('active-filter').css('opacity', '0.5');
-                
-                if (currentStatusFilter === 'All') {
-                    $('.indicator-card').css('opacity', '1');
-                    $('#activeFilterLabel').text('All Items').removeClass().addClass('badge bg-primary');
-                } else {
+            function syncFilterCardUI() {
+                $('.indicator-card').css('opacity', '1').removeClass('active-filter');
+                if (currentStatusFilter !== 'All') {
+                    $('.indicator-card').css('opacity', '0.5');
                     $(`.indicator-card[data-filter="${currentStatusFilter}"]`).addClass('active-filter').css('opacity', '1');
-                    
+                    // Total (All) card stays visible
+                    $(`.indicator-card[data-filter="All"]`).css('opacity', '0.7');
                     let badgeClass = 'bg-secondary';
                     if (currentStatusFilter === 'Shortage') badgeClass = 'bg-danger';
-                    if (currentStatusFilter === 'Normal') badgeClass = 'bg-success';
+                    if (currentStatusFilter === 'Normal') badgeClass = 'bg-warning text-dark';
                     if (currentStatusFilter === 'Over') badgeClass = 'bg-info text-dark';
                     $('#activeFilterLabel').text('Status: ' + currentStatusFilter).removeClass().addClass('badge ' + badgeClass);
+                } else {
+                    $(`.indicator-card[data-filter="All"]`).addClass('active-filter');
+                    $('#activeFilterLabel').text('All Items').removeClass().addClass('badge bg-primary');
                 }
+            }
+
+            function applySearchFilter() {
+                const searchText = $('#tagLabelSearch').val().toLowerCase();
+                const serverStartNo = @(ViewBag.CurrentPage != null ? ((int)ViewBag.CurrentPage - 1) * 20 + 1 : 1);
+                let visibleCounter = serverStartNo;
 
                 $('.stock-row').each(function() {
-                    const rowStatus = $(this).data('status');
                     const itemName = $(this).find('td:nth-child(2)').text().toLowerCase(); 
                     const label    = $(this).find('td:nth-child(5)').text().toLowerCase(); 
                     const vin      = $(this).find('td:nth-child(12)').text().toLowerCase();
                     
-                    const matchesStatus = (currentStatusFilter === 'All' || rowStatus === currentStatusFilter);
-                    const matchesSearch = (itemName.includes(searchText) || label.includes(searchText) || vin.includes(searchText));
+                    const matchesSearch = (!searchText || itemName.includes(searchText) || label.includes(searchText) || vin.includes(searchText));
                     
-                    if (matchesStatus && matchesSearch) {
+                    if (matchesSearch) {
                         $(this).show();
                         $(this).find('td:first-child').text(visibleCounter++);
                     } else {
                         $(this).hide();
                     }
                 });
+            }
+
+            // Legacy alias — applyAllFilters masih dipanggil setelah refresh AJAX
+            function applyAllFilters() {
+                syncFilterCardUI();
+                applySearchFilter();
             }
 
             // Auto Scroll Logic
@@ -536,3 +576,259 @@
         100% { opacity: 1; }
     }
 </style>
+
+<!-- ===== MANUAL ADJUST STOCK MODAL ===== -->
+<div id="modalAdjustStock" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;">
+    <div style="background:#1e293b;border-radius:12px;padding:28px 32px;width:100%;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#e2e8f0;position:relative;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+            <i class="bi bi-sliders" style="font-size:1.3rem;color:#f59e0b;"></i>
+            <h5 style="margin:0;font-weight:700;color:#f1f5f9;">Manual Adjust Stock</h5>
+            <button id="btnCloseAdjust" style="margin-left:auto;background:none;border:none;color:#94a3b8;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
+        </div>
+
+        <div style="margin-bottom:16px;">
+            <label style="font-size:0.82rem;color:#94a3b8;margin-bottom:6px;display:block;">Item <span style="color:#ef4444;">*</span></label>
+            <input type="text" id="adjItemSearch" placeholder="Ketik kode / nama item..." autocomplete="off"
+                   style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:0.88rem;">
+            <div id="adjItemDropdown" style="display:none;position:absolute;z-index:10000;background:#1e293b;border:1px solid #334155;border-radius:8px;max-height:200px;overflow-y:auto;width:416px;margin-top:2px;"></div>
+            <input type="hidden" id="adjItemId">
+            <div id="adjItemSelected" style="display:none;margin-top:8px;padding:8px 10px;background:#0f172a;border-radius:6px;font-size:0.82rem;color:#7dd3fc;"></div>
+        </div>
+
+        <!-- Lokasi RAK (muncul setelah pilih item) -->
+        <div id="adjRackSection" style="display:none;margin-bottom:16px;padding:12px;background:#0f172a;border-radius:8px;border:1px solid #334155;">
+            <label style="font-size:0.82rem;color:#94a3b8;margin-bottom:8px;display:block;">
+                <i class="bi bi-geo-alt"></i> Lokasi RAK <span style="color:#64748b;font-size:0.75rem;">(bisa diubah)</span>
+            </label>
+            <div style="display:flex;gap:10px;align-items:center;">
+                <div style="flex:1;">
+                    <span style="font-size:0.72rem;color:#64748b;">Rack</span>
+                    <input type="text" id="adjRack" maxlength="5" placeholder="A-K"
+                           style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#e2e8f0;font-size:0.9rem;text-transform:uppercase;">
+                </div>
+                <div style="flex:1;">
+                    <span style="font-size:0.72rem;color:#64748b;">No. Rak</span>
+                    <input type="number" id="adjNoRack" min="1" max="99" placeholder="1-20"
+                           style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#e2e8f0;font-size:0.9rem;">
+                </div>
+                <div style="padding-top:14px;">
+                    <span id="adjRackPreview" style="font-size:1rem;font-weight:600;color:#3b82f6;">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-bottom:16px;">
+            <label style="font-size:0.82rem;color:#94a3b8;margin-bottom:6px;display:block;">Qty (+ tambah &nbsp;/&nbsp; - kurangi) <span style="color:#ef4444;">*</span></label>
+            <input type="number" id="adjQty" placeholder="Contoh: 5 atau -3" step="1"
+                   style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:0.88rem;">
+            <div id="adjQtyWarning" style="display:none;margin-top:5px;font-size:0.78rem;color:#f59e0b;">
+                <i class="bi bi-exclamation-triangle"></i> Qty negatif akan mengurangi stok yang ada.
+            </div>
+        </div>
+
+        <div style="margin-bottom:20px;">
+            <label style="font-size:0.82rem;color:#94a3b8;margin-bottom:6px;display:block;">Catatan / Alasan <span style="color:#94a3b8;font-size:0.75rem;">(opsional)</span></label>
+            <textarea id="adjNote" rows="3" placeholder="Manual Stock Adjustment"
+                      style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:0.88rem;resize:vertical;"></textarea>
+        </div>
+
+        <div id="adjResultMsg" style="display:none;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:0.85rem;"></div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button id="btnCancelAdjust" style="padding:8px 18px;border-radius:8px;border:1px solid #334155;background:transparent;color:#94a3b8;cursor:pointer;font-size:0.85rem;">Batal</button>
+            <button id="btnSubmitAdjust" style="padding:8px 18px;border-radius:8px;border:none;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-weight:600;cursor:pointer;font-size:0.85rem;">
+                <i class="bi bi-check2-circle"></i> Simpan
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var allItems = [];
+    var selectedItemId = 0;
+
+    function openModal() {
+        document.getElementById('modalAdjustStock').style.display = 'flex';
+        resetForm();
+        loadItems();
+    }
+
+    function closeModal() {
+        document.getElementById('modalAdjustStock').style.display = 'none';
+    }
+
+    function resetForm() {
+        document.getElementById('adjItemSearch').value = '';
+        document.getElementById('adjItemId').value = '';
+        document.getElementById('adjItemSelected').style.display = 'none';
+        document.getElementById('adjItemDropdown').style.display = 'none';
+        document.getElementById('adjRackSection').style.display = 'none';
+        document.getElementById('adjRack').value = '';
+        document.getElementById('adjNoRack').value = '';
+        document.getElementById('adjRackPreview').textContent = '-';
+        document.getElementById('adjQty').value = '';
+        document.getElementById('adjQtyWarning').style.display = 'none';
+        document.getElementById('adjNote').value = '';
+        document.getElementById('adjResultMsg').style.display = 'none';
+        selectedItemId = 0;
+    }
+
+    function loadItems() {
+        if (allItems.length > 0) return;
+        fetch('/Pulling/GetAllItemsForAdjust')
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) allItems = data.items;
+            });
+    }
+
+    function showDropdown(query) {
+        var dd = document.getElementById('adjItemDropdown');
+        if (!query) { dd.style.display = 'none'; return; }
+        var q = query.toLowerCase();
+        var filtered = allItems.filter(i =>
+            (i.itemCode && i.itemCode.toLowerCase().includes(q)) ||
+            (i.itemName && i.itemName.toLowerCase().includes(q)) ||
+            (i.vin && i.vin.toLowerCase().includes(q))
+        ).slice(0, 20);
+
+        if (filtered.length === 0) { dd.style.display = 'none'; return; }
+
+        dd.innerHTML = filtered.map(i =>
+            '<div data-id="' + i.itemId + '" data-code="' + (i.itemCode||'') + '" data-name="' + (i.itemName||'') + '" data-vin="' + (i.vin||'') + '" data-plant="' + (i.plant||'') + '" data-rack="' + (i.rack||'') + '" data-norack="' + (i.noRack||'') + '"' +
+            ' style="padding:9px 12px;cursor:pointer;font-size:0.83rem;border-bottom:1px solid #0f172a;" ' +
+            ' onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'\'">' +
+            '<span style="color:#7dd3fc;font-weight:600;">' + (i.itemCode||'-') + '</span>' +
+            ' &mdash; ' + (i.itemName||'-') +
+            '<br><span style="color:#94a3b8;font-size:0.75rem;">' + (i.vin||'') + ' | ' + (i.plant||'') + ' | RAK: ' + (i.rack||'-') + '.' + (i.noRack||'-') + '</span>' +
+            '</div>'
+        ).join('');
+
+        dd.querySelectorAll('div[data-id]').forEach(function (el) {
+            el.addEventListener('click', function () {
+                selectedItemId = parseInt(el.getAttribute('data-id'));
+                document.getElementById('adjItemId').value = selectedItemId;
+                document.getElementById('adjItemSearch').value = el.getAttribute('data-code') + ' - ' + el.getAttribute('data-name');
+                var sel = document.getElementById('adjItemSelected');
+                sel.textContent = el.getAttribute('data-vin') + ' [' + el.getAttribute('data-plant') + ']';
+                sel.style.display = 'block';
+                
+                // Show and populate Rack section
+                var rack = el.getAttribute('data-rack') || '';
+                var noRack = el.getAttribute('data-norack') || '';
+                document.getElementById('adjRack').value = rack;
+                document.getElementById('adjNoRack').value = noRack;
+                document.getElementById('adjRackPreview').textContent = rack + '.' + (noRack || '-');
+                document.getElementById('adjRackSection').style.display = 'block';
+                
+                dd.style.display = 'none';
+            });
+        });
+
+        dd.style.display = 'block';
+    }
+
+    // Button open
+    var btnOpen = document.getElementById('btnAdjustStock');
+    if (btnOpen) {
+        btnOpen.addEventListener('click', openModal);
+    }
+
+    document.getElementById('btnCloseAdjust').addEventListener('click', closeModal);
+    document.getElementById('btnCancelAdjust').addEventListener('click', closeModal);
+
+    document.getElementById('adjItemSearch').addEventListener('input', function () {
+        showDropdown(this.value.trim());
+        selectedItemId = 0;
+        document.getElementById('adjItemId').value = '';
+        document.getElementById('adjItemSelected').style.display = 'none';
+        document.getElementById('adjRackSection').style.display = 'none';
+    });
+
+    // Update rack preview on input
+    document.getElementById('adjRack').addEventListener('input', function () {
+        var rack = this.value.toUpperCase();
+        var noRack = document.getElementById('adjNoRack').value || '-';
+        document.getElementById('adjRackPreview').textContent = rack + '.' + noRack;
+    });
+    document.getElementById('adjNoRack').addEventListener('input', function () {
+        var rack = document.getElementById('adjRack').value.toUpperCase() || '-';
+        var noRack = this.value || '-';
+        document.getElementById('adjRackPreview').textContent = rack + '.' + noRack;
+    });
+
+    document.getElementById('adjQty').addEventListener('input', function () {
+        var v = parseInt(this.value);
+        document.getElementById('adjQtyWarning').style.display = (!isNaN(v) && v < 0) ? 'block' : 'none';
+    });
+
+    // Close dropdown on outside click
+    document.addEventListener('click', function (e) {
+        var dd = document.getElementById('adjItemDropdown');
+        if (dd && !dd.contains(e.target) && e.target.id !== 'adjItemSearch') {
+            dd.style.display = 'none';
+        }
+        if (e.target.id === 'modalAdjustStock') closeModal();
+    });
+
+    document.getElementById('btnSubmitAdjust').addEventListener('click', function () {
+        var itemId = parseInt(document.getElementById('adjItemId').value) || 0;
+        var qty = parseInt(document.getElementById('adjQty').value);
+        var note = document.getElementById('adjNote').value.trim();
+        var rack = document.getElementById('adjRack').value.trim().toUpperCase();
+        var noRack = parseInt(document.getElementById('adjNoRack').value) || null;
+        var msgEl = document.getElementById('adjResultMsg');
+
+        if (itemId <= 0) { showMsg(msgEl, 'error', 'Pilih item terlebih dahulu.'); return; }
+        if (isNaN(qty) || qty === 0) { showMsg(msgEl, 'error', 'Qty tidak boleh 0.'); return; }
+
+        var btn = document.getElementById('btnSubmitAdjust');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Menyimpan...';
+
+        fetch('/Pulling/ManualAdjust', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ itemId: itemId, qty: qty, note: note, rack: rack, noRack: noRack })
+        })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2-circle"></i> Simpan';
+            if (data.success) {
+                showMsg(msgEl, 'success', data.message + ' Stok sekarang: ' + data.newStock + ' pcs.');
+                // Reset form tanpa close modal, supaya bisa langsung adjust item lain
+                setTimeout(() => {
+                    resetForm();
+                    allItems = []; // force reload items untuk dapat data terbaru
+                    loadItems();
+                }, 1500);
+            } else {
+                showMsg(msgEl, 'error', data.message || 'Gagal.');
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2-circle"></i> Simpan';
+            showMsg(msgEl, 'error', 'Terjadi kesalahan koneksi.');
+        });
+    });
+
+    function showMsg(el, type, msg) {
+        el.style.display = 'block';
+        if (type === 'success') {
+            el.style.background = '#064e3b';
+            el.style.color = '#6ee7b7';
+            el.style.border = '1px solid #059669';
+        } else {
+            el.style.background = '#450a0a';
+            el.style.color = '#fca5a5';
+            el.style.border = '1px solid #dc2626';
+        }
+        el.innerHTML = (type === 'success' ? '<i class="bi bi-check-circle"></i> ' : '<i class="bi bi-x-circle"></i> ') + msg;
+    }
+})();
+</script>
+
+<partial name="_ClearDataModal" />

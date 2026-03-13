@@ -7,6 +7,7 @@ using DeliveryControl.Helpers;
 
 namespace DeliveryControl.Controllers
 {
+    [DeliveryControl.Filters.AuthorizeRoles("Admin", "Pulling", "User")]
     public class PullingController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -24,6 +25,11 @@ namespace DeliveryControl.Controllers
 
         public IActionResult Index()
         {
+            var role = HttpContext.Session.GetString("Role");
+            var isAdmin = role == "Admin";
+            var isUser = role == "User";
+            ViewData["IsAdmin"] = isAdmin;
+            ViewData["IsUser"]  = isUser;
             return View();
         }
 
@@ -86,6 +92,7 @@ namespace DeliveryControl.Controllers
         }
 
         [HttpPost]
+        [DeliveryControl.Filters.AuthorizeRoles("Admin", "Pulling")]
         public async Task<IActionResult> Save([FromBody] PullingRecord record)
         {
             if (ModelState.IsValid)
@@ -106,10 +113,7 @@ namespace DeliveryControl.Controllers
                 var normalizedSaveTag = VinHelper.Normalize(record.Tag);
                 var normalizedLabel = VinHelper.Normalize(record.Label);
 
-                if (!normalizedLabel.Contains(normalizedSaveTag))
-                {
-                    return Json(new { success = false, message = $"KODE LABEL SALAH: Label harus mengandung kode {normalizedSaveTag}" });
-                }
+                bool labelMismatch = !normalizedLabel.Contains(normalizedSaveTag);
 
                 var itemSaveCandidates = await _context.Items
                     .Where(i => i.VIN.Contains(normalizedSaveTag))
@@ -134,8 +138,27 @@ namespace DeliveryControl.Controllers
 
                 record.CreatedDate = DateTime.Now;
                 record.CreatedBy = HttpContext.Session.GetString("FullName") ?? "Operator";
-                
+                if (labelMismatch)
+                {
+                    var ngLog = new ScanNGLog
+                    {
+                        Module = "Pulling",
+                        Tag = record.Tag ?? "",
+                        Label = record.Label ?? "",
+                        Kanban = "",
+                        Reason = $"Label tidak mengandung VIN: {VinHelper.Normalize(record.Tag)} (Server-Side Validation)",
+                        CreatedBy = record.CreatedBy,
+                        CreatedDate = DateTime.Now
+                    };
+                    _context.ScanNGLogs.Add(ngLog);
+                    await _context.SaveChangesAsync();
+                    await _hubContext.Clients.All.SendAsync("updateStock");
+                    return Json(new { success = false, message = $"❌ LABEL TIDAK VALID! Label harus mengandung kode VIN: \"{VinHelper.Normalize(record.Tag)}\"." });
+                }
+
+                record.Remark = "Match";
                 _context.PullingRecords.Add(record);
+
                 await _context.SaveChangesAsync();
 
                 // Log Activity per Plant as requested
@@ -151,13 +174,226 @@ namespace DeliveryControl.Controllers
                 // Notify all clients via SignalR
                 await _hubContext.Clients.All.SendAsync("updateStock");
                 
-                // Get updated stock for feedback
+                // Get updated stock for feedback (only count Match records)
                 var updatedStockCount = await _context.PullingRecords
-                    .CountAsync(r => r.ItemId == item.ItemId && !_context.PreparationRecords.Any(p => p.Tag == r.Tag && p.Label == r.Label));
+                    .CountAsync(r => r.ItemId == item.ItemId && r.Remark == "Match" && !_context.PreparationRecords.Any(p => p.Tag == r.Tag && p.Label == r.Label && p.Remark == "Match"));
 
-                return Json(new { success = true, message = $"Data {item.ItemName} berhasil disimpan!", newStock = updatedStockCount });
+                return Json(new { success = true, message = $"Data {item.ItemName} berhasil disimpan!", newStock = updatedStockCount, remark = record.Remark });
             }
             return Json(new { success = false, message = "Data tidak valid." });
         }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAllItemsForAdjust()
+        {
+            var role = HttpContext.Session.GetString("Role");
+            if (role != "Admin")
+                return Json(new { success = false });
+
+            var items = await _context.Items
+                .OrderBy(i => i.ItemName)
+                .Select(i => new {
+                    i.ItemId,
+                    i.ItemCode,
+                    i.ItemName,
+                    i.VIN,
+                    i.Plant,
+                    i.Category,
+                    i.Rack,
+                    i.NoRack
+                })
+                .ToListAsync();
+
+            return Json(new { success = true, items });
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> ManualAdjust([FromBody] ManualAdjustRequest request)
+        {
+            // Admin only
+            var role = HttpContext.Session.GetString("Role");
+            if (role != "Admin")
+                return Json(new { success = false, message = "Hanya Admin yang dapat melakukan Manual Adjust." });
+
+            // Validate inputs
+            if (request.ItemId <= 0)
+                return Json(new { success = false, message = "Item tidak valid." });
+            if (request.Qty == 0)
+                return Json(new { success = false, message = "Qty tidak boleh 0." });
+
+            // Default note jika kosong
+            if (string.IsNullOrWhiteSpace(request.Note))
+                request.Note = "Manual Stock Adjustment";
+
+            var item = await _context.Items.FindAsync(request.ItemId);
+            if (item == null)
+                return Json(new { success = false, message = "Item tidak ditemukan." });
+
+            // Update Item master jika Rack berubah
+            bool rackChanged = false;
+            if (!string.IsNullOrWhiteSpace(request.Rack) && request.Rack != item.Rack)
+            {
+                item.Rack = request.Rack.Trim().ToUpper();
+                rackChanged = true;
+            }
+            if (request.NoRack.HasValue && request.NoRack.Value != item.NoRack)
+            {
+                item.NoRack = request.NoRack.Value;
+                rackChanged = true;
+            }
+            if (rackChanged)
+            {
+                _context.Items.Update(item);
+                await _activityLogService.LogActivity(
+                    module: "ManualAdjust",
+                    action: "UpdateRack",
+                    entityName: $"{item.ItemName} ({item.VIN})",
+                    entityId: item.ItemId,
+                    description: $"Lokasi RAK diubah ke: {item.Rack}.{item.NoRack}",
+                    performedBy: HttpContext.Session.GetString("FullName") ?? "Admin"
+                );
+            }
+
+            var createdBy = HttpContext.Session.GetString("FullName") ?? "Admin";
+            var now = DateTime.Now;
+
+            if (request.Qty > 0)
+            {
+                // ADD: insert PullingRecords — all records in one batch share the same label
+                // so they appear as a single grouped row in the dashboard (grouped by label)
+                var tag = item.VIN ?? item.ItemCode;
+                var batchLabel = (item.VIN ?? "") + "LB"; // Label = VIN + LB (e.g. NA1560LB)
+
+                for (int i = 0; i < request.Qty; i++)
+                {
+                    var pulling = new PullingRecord
+                    {
+                        ItemId = item.ItemId,
+                        Plant = item.Plant ?? "Unknown",
+                        Rack = item.Rack ?? "-",
+                        Column = item.NoRack ?? 0,
+                        Tag = tag,
+                        Label = batchLabel,
+                        IsManualAdjust = true,
+                        AdjustNote = request.Note.Trim(),
+                        CreatedBy = createdBy,
+                        CreatedDate = now
+                    };
+                    _context.PullingRecords.Add(pulling);
+                }
+
+                await _context.SaveChangesAsync();
+
+                await _activityLogService.LogActivity(
+                    module: "ManualAdjust",
+                    action: "Adjust",
+                    entityName: $"{item.ItemName} ({item.VIN})",
+                    entityId: item.ItemId,
+                    description: $"TAMBAH +{request.Qty} pcs. Catatan: {request.Note}",
+                    performedBy: createdBy
+                );
+            }
+            else
+            {
+                // REDUCE: consume existing PullingRecords via PreparationRecords
+                int reduceQty = Math.Abs(request.Qty);
+
+                // Find available pulling records (not yet consumed)
+                var available = await _context.PullingRecords
+                    .Where(r => r.ItemId == item.ItemId &&
+                                !_context.PreparationRecords.Any(p => p.Tag == r.Tag && p.Label == r.Label))
+                    .OrderBy(r => r.CreatedDate)
+                    .Take(reduceQty)
+                    .ToListAsync();
+
+                if (available.Count < reduceQty)
+                    return Json(new { success = false, message = $"Stok tidak cukup. Tersedia: {available.Count} pcs." });
+
+                foreach (var pr in available)
+                {
+                    var prep = new PreparationRecord
+                    {
+                        Plant = "MADJUST",
+                        Tag = pr.Tag,
+                        Label = pr.Label,
+                        Kanban = request.Note.Trim(),
+                        ScheduleId = null,
+                        CreatedBy = createdBy,
+                        CreatedDate = now
+                    };
+                    _context.PreparationRecords.Add(prep);
+                }
+
+                await _context.SaveChangesAsync();
+
+                await _activityLogService.LogActivity(
+                    module: "ManualAdjust",
+                    action: "Adjust",
+                    entityName: $"{item.ItemName} ({item.VIN})",
+                    entityId: item.ItemId,
+                    description: $"KURANGI -{reduceQty} pcs. Catatan: {request.Note}",
+                    performedBy: createdBy
+                );
+            }
+
+            // Broadcast SignalR
+            await _hubContext.Clients.All.SendAsync("updateStock");
+
+            // Return updated stock
+            var newStock = await _context.PullingRecords
+                .CountAsync(r => r.ItemId == item.ItemId &&
+                                 !_context.PreparationRecords.Any(p => p.Tag == r.Tag && p.Label == r.Label));
+
+            string direction = request.Qty > 0 ? $"+{request.Qty}" : $"{request.Qty}";
+            return Json(new { success = true, message = $"Manual Adjust berhasil: {direction} pcs untuk {item.ItemName}.", newStock });
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> LogNG([FromBody] PullingNGLogRequest req)
+        {
+            try
+            {
+                var createdBy = HttpContext.Session.GetString("FullName") 
+                             ?? HttpContext.Session.GetString("Username") 
+                             ?? "Operator";
+                var rec = new DeliveryControl.Models.ScanNGLog
+                {
+                    Module = "Pulling",
+                    Tag = req?.Tag?.Trim() ?? "",
+                    Label = req?.Label?.Trim() ?? "",
+                    Kanban = "",
+                    Reason = req?.Reason?.Trim() ?? "Unknown Error",
+                    CreatedBy = createdBy,
+                    CreatedDate = DateTime.Now
+                };
+                _context.ScanNGLogs.Add(rec);
+                await _context.SaveChangesAsync();
+
+                // Broadcast ke dashboard Log Scan NG
+                await _hubContext.Clients.All.SendAsync("updateStock");
+
+                return Json(new { ok = true });
+            }
+            catch { return Json(new { ok = false }); }
+        }
+    }
+
+    public class ManualAdjustRequest
+    {
+        public int ItemId { get; set; }
+        public int Qty { get; set; }
+        public string Note { get; set; } = string.Empty;
+        public string? Rack { get; set; }
+        public int? NoRack { get; set; }
+    }
+
+    public class PullingNGLogRequest
+    {
+        public string Module { get; set; } = "Pulling";
+        public string? Tag { get; set; }
+        public string? Label { get; set; }
+        public string? Kanban { get; set; }
+        public string? Reason { get; set; }
     }
 }

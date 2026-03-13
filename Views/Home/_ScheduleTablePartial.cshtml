@@ -167,8 +167,17 @@
     var isDelayPrepare = false;
     var delayPrepDiff = 0;
     
-    var stdPMinutes = item.StdPrepareTime > 0 ? item.StdPrepareTime : (item.Customer?.StdPrepareTime ?? 0);
-    var planEndTime = item.ScheduledDate.Date.AddMinutes(stdPMinutes);
+    var stdPMinutes   = item.StdPrepareTime > 0   ? item.StdPrepareTime   : (item.Customer?.StdPrepareTime ?? 0);
+    var startPMinutes = item.StartPrepareTime > 0 ? item.StartPrepareTime : (item.Customer?.StartPrepareTime ?? 0);
+    var planEndTime   = item.ScheduledDate.Date.AddMinutes(stdPMinutes);
+
+    // Koreksi lintas tengah malam: jika End Prep lebih kecil dari Start Prep,
+    // berarti End Prep ada di hari berikutnya (misal Start=23:00, End=02:00 → +1 hari)
+    if (stdPMinutes > 0 && startPMinutes > stdPMinutes)
+    {
+        planEndTime = planEndTime.AddDays(1);
+    }
+
     var dockInTimeTarget = item.EnterDockTime;
 
     if (!isCompleted && !isPrepared)
@@ -462,11 +471,14 @@
                         </span>
                         <div class="text-danger blink-text small fw-bold mb-1">+@delayPickupMinutes m</div>
                     }
-                    <form asp-controller="Preparation" asp-action="ConfirmPickup" asp-route-id="@item.ScheduleId" method="post">
-                        <button type="submit" class="btn btn-sm btn-neon-success py-1 px-2 text-white" style="font-size: 0.7rem;" onclick="return confirm('Konfirmasi Truk Berangkat (Pickup)?')">
-                            <i class="bi bi-truck"></i> PICKUP
-                        </button>
-                    </form>
+                    @if (Context.Session.GetString("Role") == "Admin" || Context.Session.GetString("Role") == "User")
+                    {
+                        <form asp-controller="Preparation" asp-action="ConfirmPickup" asp-route-id="@item.ScheduleId" method="post">
+                            <button type="submit" class="btn btn-sm btn-neon-success py-1 px-2 text-white" style="font-size: 0.7rem;" onclick="return confirm('Konfirmasi Truk Berangkat (Pickup)?')">
+                                <i class="bi bi-truck"></i> PICKUP
+                            </button>
+                        </form>
+                    }
                 </div>
             }
             else

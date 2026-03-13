@@ -127,6 +127,24 @@ namespace DeliveryControl.Models
 
         public string? UpdatedBy { get; set; }
 
+        // ─── LEADER VERIFICATION ─────────────────────────────────────────────
+        [Display(Name = "Leader Verified")]
+        public bool IsLeaderVerified { get; set; } = false;
+
+        [Display(Name = "Leader Verified At")]
+        public DateTime? LeaderVerifiedAt { get; set; }
+
+        [StringLength(100)]
+        [Display(Name = "Leader Verified By")]
+        public string? LeaderVerifiedBy { get; set; }
+
+        /// <summary>
+        /// Jumlah kanban yang sudah di-scan oleh Leader untuk verifikasi manifest ini.
+        /// Manifest dianggap terverifikasi ketika count ini >= kanbanTarget.
+        /// </summary>
+        [Display(Name = "Leader Verified Kanban Count")]
+        public int LeaderVerifiedKanbanCount { get; set; } = 0;
+
         // Calculated property untuk status keterlambatan
         [NotMapped]
         public string DelayStatus
@@ -155,6 +173,14 @@ namespace DeliveryControl.Models
                 return null;
             }
         }
+
+        [NotMapped]
+        public double CalculatedKanbanTarget
+            => DeliveryItems?.Sum(i => i.CalculatedKanbanTarget) ?? 0;
+
+        [NotMapped]
+        public double CalculatedKanbanActual
+            => DeliveryItems?.Sum(i => i.CalculatedKanbanActual) ?? 0;
 
         // Navigation properties
         [ForeignKey("CustomerId")]

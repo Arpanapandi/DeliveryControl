@@ -83,14 +83,25 @@
                 <a asp-controller="DeliverySchedules" asp-action="DelayPickupTrend" class="btn btn-outline-light px-3">
                     <i class="bi bi-graph-up-arrow"></i> Tren Delay Pickup
                 </a>
-                <a asp-controller="System" asp-action="ConsolidateSchedules" class="btn btn-warning px-3" 
-                   onclick="return confirm('APAKAH ANDA YAKIN? Semua kartu persiapan (schedule) aktif yang memiliki Manifest, Customer, dan Rute yang sama akan DIGABUNGKAN menjadi satu kartu.')">
-                    <i class="bi bi-stack"></i> Rapikan Data (Merge)
-                </a>
-                <a asp-controller="System" asp-action="ClearTransactions" class="btn btn-danger px-3" 
-                   onclick="return confirm('APAKAH ANDA YAKIN? Semua data transaksi (Schedule, Pulling, Prep, Log) akan DIHAPUS PERMANEN. Data Master TIDAK akan dihapus.')">
-                    <i class="bi bi-trash"></i> Clear Data
-                </a>
+                @if (Context.Session.GetString("Role") == "Admin")
+                {
+                    <a asp-controller="System" asp-action="ConsolidateSchedules" class="btn btn-warning px-3" 
+                       onclick="return confirm('APAKAH ANDA YAKIN? Semua kartu persiapan (schedule) aktif yang memiliki Manifest, Customer, dan Rute yang sama akan DIGABUNGKAN menjadi satu kartu.')">
+                        <i class="bi bi-stack"></i> Rapikan Data (Merge)
+                    </a>
+                    <a asp-controller="System" asp-action="ClearTransactions" class="btn btn-danger px-3" 
+                       onclick="return confirm('APAKAH ANDA YAKIN?\n\nIni akan menghapus:\n- Semua Jadwal Delivery (DeliverySchedules)\n- Semua Item dalam Jadwal (DeliveryItems)\n- Activity Log\n\nData Preparation dan Pulling TIDAK akan dihapus.\nTindakan ini TIDAK BISA dibatalkan!')">
+                        <i class="bi bi-trash"></i> Clear Data
+                    </a>
+                }
+                <!-- Filter Tanggal Compact -->
+                <div class="d-flex align-items-center gap-1" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); border-radius:8px; padding:4px 10px;">
+                    <i class="bi bi-calendar-event text-white-50" style="font-size:0.85rem;"></i>
+                    <input type="date" id="dashboardDateFilter" 
+                           value="@(ViewBag.SelectedDate ?? DateTime.Today.ToString("yyyy-MM-dd"))"
+                           style="background:transparent; border:none; color:#fff; font-size:0.85rem; outline:none; width:130px; cursor:pointer;"
+                           title="Filter tanggal dashboard">
+                </div>
             </div>
         </div>
     </div>
@@ -1216,6 +1227,12 @@
 
     // Toast notification function
     function showToast(message, type = 'info') {
+        if (window.showUpdateNotification) {
+            const notifType = type === 'success' ? 'delivery' : type === 'danger' ? 'danger' : 'info';
+            window.showUpdateNotification(message, notifType, 5000);
+            return;
+        }
+        // Fallback: Bootstrap toast
         const toastHtml = `
             <div class="position-fixed top-0 end-0 p-3" style="z-index: 9999;">
                 <div class="toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'danger' ? 'danger' : 'info'} border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
@@ -1345,6 +1362,9 @@
     // Listen for Stock updates (often related to preparation)
     connection.on("updateStock", function() {
         console.log("Stock update received! Refreshing dashboard...");
+        if (window.showUpdateNotification) {
+            window.showUpdateNotification('Stock diperbarui — data baru masuk.', 'pulling', 4000);
+        }
         Promise.all([updateStatistics(), updateTableData()]);
     });
 
@@ -1415,6 +1435,7 @@
             reconnectAttempts = 0;
             usePollingFallback = false;
             stopPollingFallback(); // Stop polling if SignalR is working
+            updateStatusBadge('live', 'Live'); // Update badge langsung saat connect berhasil
         } catch (err) {
             console.error("❌ SignalR connection failed:", err);
             isConnected = false;
@@ -1498,6 +1519,16 @@
 
     // Initialize connection on page load
     startConnection();
+
+    // ============================================
+    // FILTER TANGGAL DASHBOARD SHIPPING
+    // ============================================
+    document.getElementById('dashboardDateFilter').addEventListener('change', function() {
+        const selectedDate = this.value;
+        if (selectedDate) {
+            window.location.href = '/Home/Index?date=' + selectedDate;
+        }
+    });
     
     // Fallback: Jika SignalR tidak connect dalam 10 detik, gunakan polling
     safeSetTimeout(function() {

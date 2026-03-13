@@ -56,9 +56,9 @@
                     <i class="bi bi-cpu"></i>
                     <span>Transaction RVI</span>
                 </a>
-                <a asp-controller="Stock" asp-action="Trend" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "Trend" ? "active" : "")">
-                    <i class="bi bi-graph-up"></i>
-                    <span>Trend Stock</span>
+                <a asp-controller="Stock" asp-action="LogScanNG" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "LogScanNG" ? "active" : "")" style="color: #ef4444;">
+                    <i class="bi bi-bug-fill"></i>
+                    <span>Log Scan NG</span>
                 </a>
                 <a asp-controller="Stock" asp-action="TrendCriticalStock" class="nav-link-item @(ViewContext.RouteData.Values["action"]?.ToString() == "TrendCriticalStock" ? "active" : "")" style="color: #f59e0b;">
                     <i class="bi bi-exclamation-triangle-fill"></i>
@@ -155,7 +155,7 @@
                         }
                         @if (!Model.RecentPulling.Any())
                         {
-                            <tr><td colspan="6" class="text-center py-4 text-muted small">Tidak ada data pulling pada tanggal ini.</td></tr>
+                            <tr><td colspan="7" class="text-center py-4 text-muted small">Tidak ada data pulling pada tanggal ini.</td></tr>
                         }
                     </tbody>
                 </table>
@@ -196,7 +196,7 @@
                         }
                         @if (!Model.RecentPreparation.Any())
                         {
-                            <tr><td colspan="5" class="text-center py-4 text-muted small">Tidak ada data preparation pada tanggal ini.</td></tr>
+                            <tr><td colspan="6" class="text-center py-4 text-muted small">Tidak ada data preparation pada tanggal ini.</td></tr>
                         }
                     </tbody>
                 </table>
@@ -222,6 +222,9 @@
                 .build();
 
             connection.on("updateStock", function () {
+                if (window.showUpdateNotification) {
+                    window.showUpdateNotification('Data stock baru masuk — memperbarui...', 'pulling', 4000);
+                }
                 refreshLogs();
             });
 
@@ -237,10 +240,8 @@
                     type: 'GET',
                     success: function (html) {
                         const newContent = $(html).find('#transactionLogsContent').html();
-                        $('#transactionLogsContent').fadeOut(200, function() {
-                            $(this).html(newContent).fadeIn(200);
-                            bindFilterEvents();
-                        });
+                        $('#transactionLogsContent').html(newContent);
+                        bindFilterEvents();
                     }
                 });
             }
